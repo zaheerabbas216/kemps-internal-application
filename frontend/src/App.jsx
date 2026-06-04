@@ -4,6 +4,7 @@ import Layout from './components/layout/Layout';
 import Customer from './pages/Customer';
 import CompanyDetails from './pages/CompanyDetails';
 import ProductMaster from './pages/ProductMaster';
+import BankDeposit from './pages/BankDeposit';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="/customer" element={<Customer />} />
           <Route path="/company-details" element={<CompanyDetails />} />
           <Route path="/product-master" element={<ProductMaster />} />
+          <Route path="/bank-deposit" element={<BankDeposit />} />
           <Route path="*" element={<div className="p-8">Page under construction...</div>} />
         </Route>
       </Routes>

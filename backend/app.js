@@ -4,6 +4,7 @@ import customerRoutes from './routes/customer.js';
 import companyDetailsRoutes from './routes/companyDetails.js';
 import rawMaterialsRoutes from './routes/rawMaterials.js';
 import finishedProductsRoutes from './routes/finishedProducts.js';
+import bankDepositRoutes from './routes/bankDeposit.js';
 
 const app = express();
 
@@ -15,6 +16,7 @@ app.use('/api/customers', customerRoutes);
 app.use('/api/company-details', companyDetailsRoutes);
 app.use('/api/raw-materials', rawMaterialsRoutes);
 app.use('/api/finished-products', finishedProductsRoutes);
+app.use('/api/bank-deposits', bankDepositRoutes);
 
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {

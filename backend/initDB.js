@@ -86,6 +86,31 @@ async function initDB() {
       )
     `);
 
+    console.log('Creating bank_accounts table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_accounts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bank_name VARCHAR(200) NOT NULL,
+        account_number VARCHAR(50) UNIQUE NOT NULL,
+        ifsc_code VARCHAR(20),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('Creating bank_deposits table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS bank_deposits (
+        id VARCHAR(20) PRIMARY KEY,
+        deposit_date DATE NOT NULL,
+        bank_name VARCHAR(200) NOT NULL,
+        account_number VARCHAR(50) NOT NULL,
+        amount DECIMAL(15, 2) NOT NULL,
+        notes TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
     // Seed default categories if they do not exist
     const [existingCategories] = await connection.query('SELECT COUNT(*) as count FROM raw_material_categories');
     if (existingCategories[0].count === 0) {
@@ -102,6 +127,27 @@ async function initDB() {
       const defaultFPCategories = ['Water Bottles', 'Mango Juice', 'Soft Drinks', 'Others'];
       for (const cat of defaultFPCategories) {
         await connection.query('INSERT IGNORE INTO finished_product_categories (name) VALUES (?)', [cat]);
+      }
+    }
+
+    const [existingBankAccounts] = await connection.query('SELECT COUNT(*) as count FROM bank_accounts');
+    if (existingBankAccounts[0].count === 0) {
+      console.log('Seeding default bank accounts...');
+      const defaultBankAccounts = [
+        { bankName: 'State Bank of India', accountNumber: '30948576123', ifscCode: 'SBIN0000301' },
+        { bankName: 'State Bank of India', accountNumber: '39847512093', ifscCode: 'SBIN0000301' },
+        { bankName: 'HDFC Bank', accountNumber: '50100239485712', ifscCode: 'HDFC0000104' },
+        { bankName: 'HDFC Bank', accountNumber: '50200039485723', ifscCode: 'HDFC0000104' },
+        { bankName: 'ICICI Bank', accountNumber: '000405001234', ifscCode: 'ICIC0000004' },
+        { bankName: 'ICICI Bank', accountNumber: '000405005678', ifscCode: 'ICIC0000004' },
+        { bankName: 'Axis Bank', accountNumber: '918020038475621', ifscCode: 'UTIB0000010' },
+        { bankName: 'Axis Bank', accountNumber: '919010048375920', ifscCode: 'UTIB0000010' }
+      ];
+      for (const acc of defaultBankAccounts) {
+        await connection.query(
+          'INSERT IGNORE INTO bank_accounts (bank_name, account_number, ifsc_code) VALUES (?, ?, ?)',
+          [acc.bankName, acc.accountNumber, acc.ifscCode]
+        );
       }
     }
     
