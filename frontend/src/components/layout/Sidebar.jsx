@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 
 const navGroups = [
   {
@@ -26,8 +26,9 @@ const navGroups = [
     items: [
       { name: 'Billing', path: '/billing' },
       { name: 'Credit Balance', path: '/credit-balance' },
+      { name: 'Order Management', path: '/orders' },
       { name: 'Total Sales', path: '/total-sales' },
-      { name: 'Return Goods', path: '/return-goods' },
+      { name: 'Sales Return / Credit Note', path: '/sales-return' },
     ]
   },
   {
@@ -58,8 +59,8 @@ const navGroups = [
   },
   {
     type: 'button',
-    name: 'Raw Material Stock',
-    path: '/raw-material-stock',
+    name: 'Raw Material Ledger',
+    path: '/raw-material-ledger',
     icon: '🪨'
   },
   {
@@ -251,6 +252,15 @@ const SidebarItem = ({ item }) => {
 };
 
 const Sidebar = () => {
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('kemps_logged_in');
+    localStorage.removeItem('kemps_username');
+    localStorage.removeItem('kemps_auth_token');
+    navigate('/login');
+  };
+
   return (
     <aside className="w-72 bg-white border-r border-slate-200/60 h-screen flex flex-col shrink-0 sticky top-0 overflow-hidden">
       <div className="p-8 shrink-0">
@@ -274,18 +284,28 @@ const Sidebar = () => {
       </nav>
       
       <div className="p-6 border-t border-slate-100 shrink-0">
-        <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center gap-3 border border-slate-100">
-          <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white">
-            ZA
+        <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
+              ZA
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-slate-800 truncate">Zaheer Abbas</p>
+              <p className="text-[10px] text-slate-500 font-medium">Administrator</p>
+            </div>
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-bold text-slate-800 truncate">Zaheer Abbas</p>
-            <p className="text-[10px] text-slate-500 font-medium">Administrator</p>
-          </div>
+          <button 
+            onClick={handleLogout}
+            title="Log Out"
+            className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-450 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0 ml-1"
+          >
+            ➔
+          </button>
         </div>
       </div>
     </aside>
   );
 };
+
 
 export default Sidebar;

@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
+import bcrypt from 'bcryptjs';
 dotenv.config();
 
 async function initDB() {
@@ -12,6 +13,29 @@ async function initDB() {
     console.log('Connected to MySQL. Creating kemps_inventory database if not exists...');
     await connection.query('CREATE DATABASE IF NOT EXISTS kemps_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     await connection.query('USE kemps_inventory');
+
+    console.log('Creating admins table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        name VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed default admin if none exists
+    const [existingAdmins] = await connection.query('SELECT COUNT(*) as count FROM admins');
+    if (existingAdmins[0].count === 0) {
+      console.log('Seeding default admin...');
+      const hashedPassword = await bcrypt.hash('username', 10);
+      await connection.query(
+        'INSERT INTO admins (username, password, name) VALUES (?, ?, ?)',
+        ['admin', hashedPassword, 'Zaheer Abbas']
+      );
+    }
     
     console.log('Creating customers table...');
     await connection.query(`
@@ -85,6 +109,78 @@ async function initDB() {
         FOREIGN KEY (category_id) REFERENCES finished_product_categories(id) ON DELETE SET NULL
       )
     `);
+    console.log('Creating expenses table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS expenses (
+        id VARCHAR(20) PRIMARY KEY,
+        expense_date DATE NOT NULL,
+        particulars VARCHAR(255) NOT NULL,
+        amount DECIMAL(10, 2) NOT NULL,
+        entered_by VARCHAR(100) NOT NULL,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      )
+    `);
+
+    console.log('Creating inventory_bills table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS inventory_bills (
+        id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+        bill_date DATE NOT NULL,
+        supplier_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        billed_to VARCHAR(100) NOT NULL,
+        bill_number VARCHAR(50),
+        payment_method VARCHAR(20) NOT NULL,
+        sub_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_tax DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        additional_expenses DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        grand_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES company_details(id) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating inventory_bill_items table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS inventory_bill_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bill_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        raw_material_id INT NOT NULL,
+        unit VARCHAR(20) NOT NULL,
+        bags_box DECIMAL(10, 2) DEFAULT 0.00,
+        total_quantity DECIMAL(12, 2) NOT NULL,
+        rate_per_unit DECIMAL(12, 2) NOT NULL,
+        qty_in_pcs DECIMAL(12, 2) DEFAULT 0.00,
+        per_pc_rate DECIMAL(12, 2) DEFAULT 0.00,
+        amount DECIMAL(12, 2) NOT NULL,
+        tax_percent DECIMAL(5, 2) DEFAULT 0.00,
+        tax_amount DECIMAL(12, 2) DEFAULT 0.00,
+        expenses DECIMAL(12, 2) DEFAULT 0.00,
+        final_total DECIMAL(12, 2) NOT NULL,
+        remarks TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (bill_id) REFERENCES inventory_bills(id) ON DELETE CASCADE,
+        FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating stock_register table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS stock_register (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_type VARCHAR(20) NOT NULL, -- 'RAW_MATERIAL' or 'FINISHED_PRODUCT'
+        item_id INT NOT NULL,
+        transaction_type VARCHAR(20) NOT NULL, -- 'PURCHASE', 'PRODUCTION', 'CORRECTION', 'SALE'
+        reference_id VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        quantity DECIMAL(12, 2) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+
 
     // Seed default categories if they do not exist
     const [existingCategories] = await connection.query('SELECT COUNT(*) as count FROM raw_material_categories');
@@ -103,6 +199,209 @@ async function initDB() {
       for (const cat of defaultFPCategories) {
         await connection.query('INSERT IGNORE INTO finished_product_categories (name) VALUES (?)', [cat]);
       }
+    }
+
+    // Seed default finished products if they do not exist
+    const [existingProducts] = await connection.query('SELECT COUNT(*) as count FROM finished_products');
+    if (existingProducts[0].count === 0) {
+      console.log('Seeding default finished products...');
+      const [waterCat] = await connection.query('SELECT id FROM finished_product_categories WHERE name = ?', ['Water Bottles']);
+      const categoryId = waterCat.length > 0 ? waterCat[0].id : null;
+      if (categoryId) {
+        const defaultProducts = [
+          '2L Kemps Shrink',
+          '2L BOPP Kemps',
+          '2L BOPP Signature',
+          '1L Kemps Shrink',
+          '1L BOPP Kemps',
+          '1L BOPP Signature',
+          '1L Pink',
+          '1L Malligi (Sqr)',
+          '1L Malligi Premium',
+          '1L Goan Corner (Sqr)',
+          '1L Kemps Transparent',
+          '1L Naivedyam Premium',
+          '1L Maitri Premium',
+          '500ml Kemps Shrink',
+          '500ml BOPP Kemps',
+          '500ml BOPP Signature',
+          '500ml Pink',
+          '500ml Priyadarshini',
+          '500ml Mallige',
+          '500ml Kemps Transparent',
+          '300ml Pink',
+          '300ml Designer (TY)',
+          '250ml Pink',
+          '500ml 8+ Transparent',
+          '1L 8+ Transparent',
+          'Jeera 200ml',
+          'Jeera 300ml',
+          'Jeera 600ml',
+          'Club Soda 300ml',
+          'Club Soda 600ml',
+          'Lemon 200ml',
+          'Lemon 300ml',
+          '1L Savji',
+          '1ltr Distilled Water',
+          '2ltr Distilled Water',
+          'Battery Acid',
+          'Cleaning Acid',
+          '20ltr Can',
+          '2L BOPP Kemps (9pcs)',
+          'Jeera Green 200ml',
+          '2L BOPP Signature 9PC',
+          '500ML Maitri',
+          '500ML THANK U DESIGNER',
+          '1L Premium (Pink)'
+        ];
+        for (const prod of defaultProducts) {
+          await connection.query(
+            'INSERT INTO finished_products (name, category_id, status) VALUES (?, ?, 1)',
+            [prod.trim(), categoryId]
+          );
+        }
+        console.log(`Seeded ${defaultProducts.length} default finished products.`);
+      }
+    }
+
+    // Seed default raw materials if none exist
+    const [existingRawMaterials] = await connection.query('SELECT COUNT(*) as count FROM raw_materials');
+    if (existingRawMaterials[0].count === 0) {
+      console.log('Seeding default raw materials...');
+      const defaultRawMaterials = [
+        // Preforms - Unit: BAGS
+        { category: 'Preforms', subProduct: '19.8', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '32', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '10', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '12.8', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '25.5', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '13', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '16.5', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '24.7', unit: 'BAGS' },
+        { category: 'Preforms', subProduct: '52.7', unit: 'BAGS' },
+
+        // Labels - Unit: PCS
+        { category: 'Labels', subProduct: '2L Kemps Shrink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '2L BOPP Kemps', unit: 'PCS' },
+        { category: 'Labels', subProduct: '2L BOPP Signature', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Kemps Shrink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L BOPP Kemps', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L BOPP Signature', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Pink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Malligi (Sqr)', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Malligi Premium', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Goan Corner (Sqr)', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Kemps Transparent', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Naivedyam Premium', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L Maitri Premium', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml Kemps Shrink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml BOPP Kemps', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml BOPP Signature', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml Pink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml Priyadarshini', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml Mallige', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml Kemps Transparent', unit: 'PCS' },
+        { category: 'Labels', subProduct: '300ml Pink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '300ml Designer (TY)', unit: 'PCS' },
+        { category: 'Labels', subProduct: '250ml Pink', unit: 'PCS' },
+        { category: 'Labels', subProduct: '20L Can Label', unit: 'PCS' },
+        { category: 'Labels', subProduct: '500ml 8+ Transparent', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L 8+ Transparent', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Jeera 200ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Jeera 300ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Jeera 600ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Jeera 2L', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Club Soda 300ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Club Soda 600ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Lemon 200ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Lemon 300ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'Orange 200ml', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'CUSTOMISE 1', unit: 'PCS' },
+        { category: 'Labels', subProduct: 'CUSTOMISE 2', unit: 'PCS' },
+        { category: 'Labels', subProduct: '1L savji', unit: 'PCS' },
+
+        // Box - Unit: PCS
+        { category: 'Box', subProduct: '1L Kemps', unit: 'PCS' },
+        { category: 'Box', subProduct: '2L Kemps', unit: 'PCS' },
+        { category: 'Box', subProduct: '500ml Kemps', unit: 'PCS' },
+        { category: 'Box', subProduct: '300ml Pink', unit: 'PCS' },
+        { category: 'Box', subProduct: '1L Pink', unit: 'PCS' },
+        { category: 'Box', subProduct: '500ml Pink', unit: 'PCS' },
+        { category: 'Box', subProduct: '250ml Pink', unit: 'PCS' },
+        { category: 'Box', subProduct: '1L Blu', unit: 'PCS' },
+        { category: 'Box', subProduct: '2L Blu', unit: 'PCS' },
+        { category: 'Box', subProduct: '500ml Blu', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Jeera 200ml', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Jeera 300ml', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Jeera 600ml', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Jeera 2L', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Club Soda 300ml', unit: 'PCS' },
+        { category: 'Box', subProduct: 'Club Soda 600ml', unit: 'PCS' },
+        { category: 'Box', subProduct: '1L Plain', unit: 'PCS' },
+
+        // Shrink Rolls - Unit: ROLLS
+        { category: 'Shrink Rolls', subProduct: '500mm', unit: 'ROLLS' },
+        { category: 'Shrink Rolls', subProduct: '550mm', unit: 'ROLLS' },
+        { category: 'Shrink Rolls', subProduct: '600mm', unit: 'ROLLS' },
+        { category: 'Shrink Rolls', subProduct: '530mm', unit: 'ROLLS' },
+        { category: 'Shrink Rolls', subProduct: '490mm', unit: 'ROLLS' },
+
+        // Handles - Unit: PCS
+        { category: 'Handles', subProduct: 'White', unit: 'PCS' },
+        { category: 'Handles', subProduct: 'Blue', unit: 'PCS' },
+        { category: 'Handles', subProduct: 'Red', unit: 'PCS' },
+        { category: 'Handles', subProduct: 'Green', unit: 'PCS' },
+
+        // Caps - Unit: PCS
+        { category: 'Caps', subProduct: 'kemps white Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'plain white Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Green Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Pink Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Red Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Black Cap', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Light Green', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Yellow', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Mango White', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Green (Omkar)', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Blue (Omkar)', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Sky Blue', unit: 'PCS' },
+        { category: 'Caps', subProduct: 'Orange', unit: 'PCS' },
+
+        // Others - Unit: KG
+        { category: 'Others', subProduct: 'Sugar', unit: 'KG' },
+        { category: 'Others', subProduct: 'Ink', unit: 'KG' },
+        { category: 'Others', subProduct: 'Solvent', unit: 'KG' },
+        { category: 'Others', subProduct: 'Jeera Masala Maharaja', unit: 'KG' },
+        { category: 'Others', subProduct: 'Jeera Masala Apollo', unit: 'KG' }
+      ];
+
+      // Get all categories to map names to IDs
+      const [categories] = await connection.query('SELECT id, name FROM raw_material_categories');
+      const categoryMap = {};
+      categories.forEach(cat => {
+        categoryMap[cat.name.toLowerCase()] = cat.id;
+      });
+
+      for (const item of defaultRawMaterials) {
+        const categoryNameLower = item.category.toLowerCase();
+        let categoryId = categoryMap[categoryNameLower];
+
+        // If category doesn't exist, insert it
+        if (!categoryId) {
+          const [catResult] = await connection.query(
+            'INSERT INTO raw_material_categories (name) VALUES (?)',
+            [item.category]
+          );
+          categoryId = catResult.insertId;
+          categoryMap[categoryNameLower] = categoryId;
+        }
+
+        await connection.query(
+          'INSERT INTO raw_materials (category_id, sub_product_name, unit, status) VALUES (?, ?, ?, 1)',
+          [categoryId, item.subProduct.trim(), item.unit]
+        );
+      }
+      console.log(`Seeded ${defaultRawMaterials.length} default raw materials.`);
     }
     
     console.log('Database initialization complete!');

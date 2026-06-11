@@ -60,7 +60,10 @@ router.get('/', async (req, res) => {
             name: r.name,
             phone: r.phone,
             gst: r.gstin || '',
-            address: r.address || ''
+            address: r.address || '',
+            creditBalance: parseFloat(r.credit_balance || 0),
+            alternatePhone: r.alternate_phone || '',
+            customerType: r.customer_type || 'General Customer'
           }
         });
       } else {
@@ -69,7 +72,7 @@ router.get('/', async (req, res) => {
     }
     
     // Get all customers (if needed)
-    const [rows] = await pool.query(`SELECT id, name, phone, gstin as gst, address, created_at FROM customers ORDER BY created_at DESC`);
+    const [rows] = await pool.query(`SELECT id, name, phone, gstin as gst, address, credit_balance as creditBalance, alternate_phone as alternatePhone, customer_type as customerType, created_at FROM customers ORDER BY created_at DESC`);
     res.json({ customers: rows });
   } catch (error) {
     res.status(400).json({ ok: false, exists: false, error: error.message });
@@ -79,7 +82,7 @@ router.get('/', async (req, res) => {
 // POST /api/customers
 router.post('/', async (req, res) => {
   try {
-    const { name, phone: rawPhone, gst, address } = req.body;
+    const { name, phone: rawPhone, gst, address, alternatePhone, customerType } = req.body;
     const nameTrimmed = String(name || '').trim();
     if (!nameTrimmed) throw new Error("Name is required.");
     
@@ -90,8 +93,16 @@ router.post('/', async (req, res) => {
     const id = await generateId('CUST', 'customers', 'id');
     
     await pool.query(
-      `INSERT INTO customers (id, name, phone, gstin, address, created_at) VALUES (?, ?, ?, ?, ?, NOW())`,
-      [id, nameTrimmed, phone, String(gst || '').trim(), String(address || '').trim()]
+      `INSERT INTO customers (id, name, phone, gstin, address, alternate_phone, customer_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        id, 
+        nameTrimmed, 
+        phone, 
+        String(gst || '').trim(), 
+        String(address || '').trim(),
+        alternatePhone ? String(alternatePhone).trim() : null,
+        customerType || 'General Customer'
+      ]
     );
     
     res.json({ ok: true, id });
@@ -106,7 +117,7 @@ router.put('/:id', async (req, res) => {
     const id = req.params.id;
     if (!id) throw new Error("Missing customer ID.");
     
-    const { name, phone: rawPhone, gst, address } = req.body;
+    const { name, phone: rawPhone, gst, address, alternatePhone, customerType } = req.body;
     
     // Check if customer exists
     const [existing] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
@@ -136,6 +147,16 @@ router.put('/:id', async (req, res) => {
     if (address !== undefined) {
       updates.push('address = ?');
       values.push(String(address).trim());
+    }
+    
+    if (alternatePhone !== undefined) {
+      updates.push('alternate_phone = ?');
+      values.push(alternatePhone ? String(alternatePhone).trim() : null);
+    }
+    
+    if (customerType !== undefined) {
+      updates.push('customer_type = ?');
+      values.push(customerType || 'General Customer');
     }
     
     if (updates.length > 0) {
