@@ -521,7 +521,7 @@ const BankDeposit = () => {
       {/* RECORD DEPOSIT MODAL (MATCHING SCREENSHOT) */}
       {isDepositModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] h-[670px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] max-h-[90vh] h-[670px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Form Header */}
             <div className="p-7 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 relative">
               <div>
@@ -712,7 +712,7 @@ const BankDeposit = () => {
       {/* ADD BANK ACCOUNT MODAL */}
       {isAccountModalOpen && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.25)] border border-slate-200 w-[500px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.25)] border border-slate-200 w-[500px] max-h-[90vh] overflow-y-auto flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Header */}
             <div className="bg-primary p-6 text-white shrink-0 relative">
               <h3 className="text-xl font-black uppercase tracking-tight">
@@ -836,7 +836,7 @@ const BankDeposit = () => {
       {/* VIEW DEPOSIT DETAILS MODAL */}
       {isViewModalOpen && viewingDeposit && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-150">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>📋</span> Deposit Details
@@ -906,7 +906,7 @@ const BankDeposit = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

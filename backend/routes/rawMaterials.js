@@ -49,26 +49,36 @@ router.post('/categories', async (req, res) => {
 });
 
 // GET /api/raw-materials
-// Fetch all raw materials with pagination and search
+// Fetch raw materials with pagination and search.
+// Pass ?activeOnly=true to return only active (status=1) materials (used by all operational modules).
+// Without activeOnly, all materials are returned (used by Product Master admin view).
 router.get('/', async (req, res) => {
   try {
-    let { page = 1, limit = 10, search = '' } = req.query;
+    let { page = 1, limit = 10, search = '', activeOnly = '' } = req.query;
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     if (isNaN(page) || page < 1) page = 1;
     if (isNaN(limit) || limit < 1) limit = 10;
+
+    // Default to activeOnly = true, unless activeOnly is explicitly 'false' or '0'
+    const filterActive = activeOnly !== 'false' && activeOnly !== '0';
     
     const offset = (page - 1) * limit;
     let queryParams = [];
     let countParams = [];
     
-    let baseWhere = '';
-    if (search.trim()) {
-      baseWhere = ' WHERE rm.sub_product_name LIKE ? OR rmc.name LIKE ?';
-      const wildSearch = `%${search.trim()}%`;
-      queryParams = [wildSearch, wildSearch];
-      countParams = [wildSearch, wildSearch];
+    // Build WHERE clauses
+    const whereParts = [];
+    if (filterActive) {
+      whereParts.push('rm.status = 1');
     }
+    if (search.trim()) {
+      whereParts.push('(rm.sub_product_name LIKE ? OR rmc.name LIKE ?)');
+      const wildSearch = `%${search.trim()}%`;
+      queryParams.push(wildSearch, wildSearch);
+      countParams.push(wildSearch, wildSearch);
+    }
+    const baseWhere = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
     
     // Get total count
     const [countRows] = await pool.query(

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -455,17 +456,32 @@ const CreditBalance = () => {
                         ₹ {parseFloat(b.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="py-3.5 px-5 text-right text-rose-500 font-black text-sm">
-                        ₹ {parseFloat(b.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        <div>₹ {parseFloat(b.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
+                        {b.has_pending_payment ? (
+                          <div className="text-[9px] text-amber-600 font-black bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-1 w-max ml-auto uppercase tracking-wider">
+                            Verification Pending
+                          </div>
+                        ) : null}
                       </td>
                       <td className="py-3.5 px-5 text-center">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button 
-                            onClick={() => handleOpenPay(b)}
-                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
-                            title="Collect Outstanding Payment"
-                          >
-                            <span>💵</span> Receive Payment
-                          </button>
+                          {b.has_pending_payment ? (
+                            <button 
+                              disabled
+                              className="px-3.5 py-1.5 rounded-xl bg-slate-100 text-slate-400 font-extrabold text-[11px] cursor-not-allowed border border-slate-200"
+                              title="A payment collection is currently awaiting admin verification."
+                            >
+                              <span>⏳</span> Pending Verify
+                            </button>
+                          ) : (
+                            <button 
+                              onClick={() => handleOpenPay(b)}
+                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
+                              title="Collect Outstanding Payment"
+                            >
+                              <span>💵</span> Receive Payment
+                            </button>
+                          )}
                           <button 
                             onClick={() => handleOpenTimeline(b)}
                             className="px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 hover:text-slate-800 font-bold transition-all text-[11px]"
@@ -518,9 +534,9 @@ const CreditBalance = () => {
       </div>
 
       {/* RECEIVE PAYMENT MODAL */}
-      {isPayModalOpen && selectedBill && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-lg shadow-2xl relative">
+      {isPayModalOpen && selectedBill && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-lg shadow-2xl relative max-h-[90vh] overflow-y-auto z-10">
             <button 
               onClick={() => setIsPayModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 hover:text-slate-805 flex items-center justify-center font-bold transition-all"
@@ -651,13 +667,15 @@ const CreditBalance = () => {
             </form>
 
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsPayModalOpen(false)}></div>
+        </div>,
+        document.body
       )}
 
       {/* VIEW DETAILS & PAYMENT TIMELINE MODAL */}
-      {isTimelineModalOpen && selectedBill && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box max-w-5xl bg-white border border-slate-200/80 rounded-3xl p-8 shadow-2xl relative flex flex-col md:flex-row gap-6 max-h-[85vh] overflow-y-auto">
+      {isTimelineModalOpen && selectedBill && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box max-w-5xl bg-white border border-slate-200/80 rounded-3xl p-8 shadow-2xl relative flex flex-col md:flex-row gap-6 max-h-[85vh] overflow-y-auto z-10">
             <button 
               onClick={() => setIsTimelineModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
@@ -831,7 +849,9 @@ const CreditBalance = () => {
             )}
 
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsTimelineModalOpen(false)}></div>
+        </div>,
+        document.body
       )}
 
     </div>

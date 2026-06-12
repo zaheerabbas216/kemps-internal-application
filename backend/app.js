@@ -22,6 +22,8 @@ import canDepositRoutes from './routes/canDeposit.js';
 import bankDepositRoutes from './routes/bankDeposit.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import taskRoutes from './routes/tasks.js';
+import salesReportRoutes from './routes/salesReport.js';
+import paymentApprovalRoutes from './routes/paymentApproval.js';
 import authMiddleware from './middleware/auth.js';
 
 const app = express();
@@ -52,6 +54,8 @@ app.use('/api/can-deposit', authMiddleware, canDepositRoutes);
 app.use('/api/bank-deposits', authMiddleware, bankDepositRoutes);
 app.use('/api/maintenance', authMiddleware, maintenanceRoutes);
 app.use('/api/tasks', authMiddleware, taskRoutes);
+app.use('/api/sales-report', authMiddleware, salesReportRoutes);
+app.use('/api/payment-approval', authMiddleware, paymentApprovalRoutes);
 
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {

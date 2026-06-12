@@ -55,6 +55,19 @@ router.post('/', async (req, res) => {
     if (!paymentMethod) throw new Error('Payment method is required.');
     if (!items || items.length === 0) throw new Error('At least one product line item is required.');
 
+    // Validate raw materials are active
+    const rmIds = items.map(it => parseInt(it.rawMaterialId, 10)).filter(id => !isNaN(id));
+    if (rmIds.length > 0) {
+      const [inactiveRms] = await connection.query(
+        `SELECT sub_product_name FROM raw_materials WHERE id IN (?) AND status = 0`,
+        [rmIds]
+      );
+      if (inactiveRms.length > 0) {
+        const names = inactiveRms.map(r => r.sub_product_name).join(', ');
+        throw new Error(`The following raw materials are disabled in Product Master: ${names}. You cannot purchase them.`);
+      }
+    }
+
     // Generate Bill ID
     const billId = await generateId('BILL', 'inventory_bills', 'id');
 
@@ -485,6 +498,19 @@ router.put('/:id', async (req, res) => {
     if (!billedTo) throw new Error('Billed To Company is required.');
     if (!paymentMethod) throw new Error('Payment method is required.');
     if (!items || items.length === 0) throw new Error('At least one product line item is required.');
+
+    // Validate raw materials are active
+    const rmIds = items.map(it => parseInt(it.rawMaterialId, 10)).filter(id => !isNaN(id));
+    if (rmIds.length > 0) {
+      const [inactiveRms] = await connection.query(
+        `SELECT sub_product_name FROM raw_materials WHERE id IN (?) AND status = 0`,
+        [rmIds]
+      );
+      if (inactiveRms.length > 0) {
+        const names = inactiveRms.map(r => r.sub_product_name).join(', ');
+        throw new Error(`The following raw materials are disabled in Product Master: ${names}. You cannot purchase them.`);
+      }
+    }
 
     // 1. Update bill header
     await connection.query(

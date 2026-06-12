@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -386,14 +387,68 @@ router.post('/', async (req, res) => {
       finalPaymentMode = 'Credit';
     }
 
+    // Validate finished products are active
+    const prodIds = items.map(it => parseInt(it.finishedProductId, 10)).filter(id => !isNaN(id));
+    if (prodIds.length > 0) {
+      const [inactiveProds] = await connection.query(
+        `SELECT name FROM finished_products WHERE id IN (?) AND status = 0`,
+        [prodIds]
+      );
+      if (inactiveProds.length > 0) {
+        const names = inactiveProds.map(p => p.name).join(', ');
+        throw new Error(`The following products are disabled in Product Master: ${names}. You cannot place new transactions for them.`);
+      }
+    }
+
     // 2. Generate Bill ID
     const billId = await generateId('BILL', 'customer_bills', 'id', connection);
 
-    // 3. Insert Invoice Header
+    // Auto-create Payment Approval entry for cash portions BEFORE inserting the bill
+    const enteredByName = req.admin?.name || req.admin?.username || 'Admin';
+    const payModes = [];
+    if (finalCashPaid > 0) payModes.push('Cash');
+    if (finalUpiPaid > 0) payModes.push('UPI');
+    if (finalBankPaid > 0) payModes.push('Bank');
+    const combinedMode = payModes.join(' + ') || finalPaymentMode;
+
+    const payAmount = finalCashPaid + finalUpiPaid + finalBankPaid;
+    let paymentStatus = 'Unpaid';
+    let pendingAmount = 0.00;
+    let approvalId = null;
+
+    if (payAmount > 0) {
+      paymentStatus = 'Pending Approval';
+      pendingAmount = payAmount;
+
+      approvalId = await createPaymentApprovalEntry({
+        transactionId: billId,
+        sourceModule: 'Billing',
+        transactionType: 'Cash In',
+        referenceNo: billId,
+        partyName: `[${customerId}] ${cleanName}`,
+        description: `Invoice ${billId} — [${customerId}] ${cleanName} (${customerType})`,
+        paymentMethod: combinedMode,
+        cashAmount: finalCashPaid,
+        upiAmount: finalUpiPaid,
+        bankAmount: finalBankPaid,
+        amount: payAmount,
+        transactionDate: billingDate,
+        enteredBy: enteredByName,
+        remarks: `Grand Total: ₹${parseFloat(grandTotal) || 0}`
+      }, connection);
+    } else {
+      if (parseFloat(grandTotal) - appliedCredit <= 0) {
+        paymentStatus = 'Approved';
+      }
+    }
+
+    // 3. Insert Invoice Header (using unapproved amounts & payment_status/approval_id)
     await connection.query(
       `INSERT INTO customer_bills 
-       (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
+        grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 0.00, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -406,11 +461,14 @@ router.post('/', async (req, res) => {
         cleanAddress,
         parseFloat(grandTotal) || 0.00,
         finalPaymentMode,
-        finalAmountPaid,
-        finalDueAmount,
+        appliedCredit, // amount_paid is initially only the applied credit amount
+        parseFloat(grandTotal) - appliedCredit, // due_amount is initially grand_total minus applied credit
         finalCashPaid,
         finalUpiPaid,
-        finalBankPaid
+        finalBankPaid,
+        paymentStatus,
+        pendingAmount,
+        approvalId || null
       ]
     );
 
@@ -579,6 +637,19 @@ router.put('/:id', async (req, res) => {
     const cleanGst = String(customerGstin).trim();
     const cleanAddress = String(customerAddress).trim();
 
+    // Validate finished products are active
+    const prodIds = items.map(it => parseInt(it.finishedProductId, 10)).filter(id => !isNaN(id));
+    if (prodIds.length > 0) {
+      const [inactiveProds] = await connection.query(
+        `SELECT name FROM finished_products WHERE id IN (?) AND status = 0`,
+        [prodIds]
+      );
+      if (inactiveProds.length > 0) {
+        const names = inactiveProds.map(p => p.name).join(', ');
+        throw new Error(`The following products are disabled in Product Master: ${names}. You cannot place new transactions for them.`);
+      }
+    }
+
     // Resolve or Update Customer
     let customerId = null;
     const [existingCust] = await connection.query(
@@ -737,6 +808,11 @@ router.delete('/:id', async (req, res) => {
     );
 
     if (result.affectedRows === 0) throw new Error('Invoice not found.');
+
+    await connection.query(
+      `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'Billing'`,
+      [id]
+    );
 
     await connection.query(
       `UPDATE loading_sessions SET status = 'ACTIVE', bill_id = NULL WHERE bill_id = ?`,

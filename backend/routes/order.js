@@ -116,6 +116,19 @@ router.post('/', async (req, res) => {
       ]
     );
 
+    // Validate finished products are active
+    const prodIds = items.map(it => parseInt(it.finishedProductId, 10)).filter(id => !isNaN(id));
+    if (prodIds.length > 0) {
+      const [inactiveProds] = await connection.query(
+        `SELECT name FROM finished_products WHERE id IN (?) AND status = 0`,
+        [prodIds]
+      );
+      if (inactiveProds.length > 0) {
+        const names = inactiveProds.map(p => p.name).join(', ');
+        throw new Error(`The following products are disabled in Product Master: ${names}. You cannot place an order for them.`);
+      }
+    }
+
     // 4. Insert Order Items
     for (const item of items) {
       const { finishedProductId, quantity, rate } = item;
@@ -471,6 +484,19 @@ router.put('/:id', async (req, res) => {
 
     // 2. Clear existing items
     await connection.query(`DELETE FROM customer_order_items WHERE order_id = ?`, [id]);
+
+    // Validate finished products are active
+    const prodIds = items.map(it => parseInt(it.finishedProductId, 10)).filter(id => !isNaN(id));
+    if (prodIds.length > 0) {
+      const [inactiveProds] = await connection.query(
+        `SELECT name FROM finished_products WHERE id IN (?) AND status = 0`,
+        [prodIds]
+      );
+      if (inactiveProds.length > 0) {
+        const names = inactiveProds.map(p => p.name).join(', ');
+        throw new Error(`The following products are disabled in Product Master: ${names}. You cannot place an order for them.`);
+      }
+    }
 
     // 3. Re-insert items
     for (const item of items) {

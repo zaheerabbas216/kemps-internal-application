@@ -1396,7 +1396,7 @@ const Loading = () => {
       {/* RENDER MODALS USING PORTALS */}
       {isSessionModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10">
+          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -1651,7 +1651,7 @@ const Loading = () => {
       {/* POS RECEIPT PRINT MODAL USING PORTAL */}
       {isPrintModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-[60]">
-          <div className="modal-box bg-white p-6 flex flex-col items-center justify-center max-w-sm rounded-3xl shadow-2xl relative z-10">
+          <div className="modal-box bg-white p-6 flex flex-col items-center justify-center max-w-sm rounded-3xl shadow-2xl relative z-10 max-h-[90vh] overflow-y-auto">
             
             {/* Visual POS Receipt Wrapper Container */}
             <div 
@@ -1772,7 +1772,7 @@ const Loading = () => {
       {/* RETURN GOODS MODAL USING PORTAL */}
       {isReturnModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-[60]">
-          <div className="modal-box max-w-md bg-white border border-slate-200/80 rounded-3xl p-6 relative shadow-2xl z-10">
+          <div className="modal-box max-w-md bg-white border border-slate-200/80 rounded-3xl p-6 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setIsReturnModalOpen(false); setReturnSession(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"

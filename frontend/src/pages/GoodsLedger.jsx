@@ -652,7 +652,7 @@ const GoodsLedger = () => {
       {/* DRILL DOWN AUDIT TRAIL MODAL */}
       {isDrillOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] h-[520px] p-8 flex flex-col overflow-hidden animate-fade-in pointer-events-auto relative">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] max-h-[90vh] h-[520px] p-8 flex flex-col overflow-hidden animate-fade-in pointer-events-auto relative">
             <button
               onClick={() => setIsDrillOpen(false)}
               className="absolute right-6 top-6 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-sm text-slate-500 transition-colors"

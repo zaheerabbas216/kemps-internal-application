@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -139,7 +140,8 @@ router.get('/outstanding', async (req, res) => {
          cb.payment_mode,
          cb.amount_paid,
          cb.due_amount,
-         cb.created_at
+         cb.created_at,
+         (SELECT COUNT(*) FROM customer_payments cp WHERE cp.bill_id = cb.id AND cp.payment_status = 'Pending Approval') > 0 AS has_pending_payment
        FROM customer_bills cb
        ${whereStr}
        ORDER BY cb.billing_date DESC, cb.created_at DESC
@@ -223,7 +225,8 @@ router.get('/history', async (req, res) => {
          cp.amount_received,
          cp.payment_method,
          cb.due_amount,
-         cb.amount_paid as total_paid
+         cb.amount_paid as total_paid,
+         cp.payment_status
        FROM customer_payments cp
        JOIN customer_bills cb ON cp.bill_id = cb.id
        ${whereStr}
@@ -337,7 +340,7 @@ router.post('/receive', async (req, res) => {
 
     // 1. Fetch current bill outstanding
     const [billRows] = await connection.query(
-      `SELECT grand_total, amount_paid, due_amount FROM customer_bills WHERE id = ? FOR UPDATE`,
+      `SELECT grand_total, amount_paid, due_amount, customer_id, customer_name FROM customer_bills WHERE id = ? FOR UPDATE`,
       [billId]
     );
 
@@ -356,42 +359,64 @@ router.post('/receive', async (req, res) => {
       throw new Error(`Amount received (${amt}) cannot exceed outstanding balance (${currentDue}).`);
     }
 
+    const [pendingRows] = await connection.query(
+      `SELECT COALESCE(SUM(pending_amount), 0) AS pending_total 
+       FROM customer_payments 
+       WHERE bill_id = ? AND payment_status = 'Pending Approval'`,
+      [billId]
+    );
+    const pendingTotal = parseFloat(pendingRows[0].pending_total) || 0;
+    const remainingDue = currentDue - pendingTotal;
+
+    if (amt > remainingDue) {
+      throw new Error(`Amount received (${amt}) cannot exceed remaining outstanding balance (₹${remainingDue.toFixed(2)}) considering pending approvals.`);
+    }
+
     // 2. Generate Payment ID
     const paymentId = await generateId('PAY', 'customer_payments', 'id', connection);
 
-    // 3. Insert payment record
+    // 3. Auto-create Payment Approval entry for credit collection
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: paymentId,
+      sourceModule: 'CreditBalance',
+      transactionType: 'Cash In',
+      referenceNo: billId,
+      partyName: bill.customer_id ? `[${bill.customer_id}] ${bill.customer_name}` : (bill.customer_name || ''),
+      description: `Credit collection for Invoice ${billId} — ${bill.customer_name || ''}`,
+      paymentMethod: paymentMethod,
+      cashAmount: paymentMethod === 'Cash' ? amt : 0,
+      upiAmount: paymentMethod === 'UPI' ? amt : 0,
+      bankAmount: (paymentMethod === 'Bank' || paymentMethod === 'Bank Transfer') ? amt : 0,
+      amount: amt,
+      transactionDate: paymentDate,
+      enteredBy: req.admin?.name || req.admin?.username || 'Admin',
+      remarks: remarks
+    }, connection);
+
+    // 4. Insert payment record
     await connection.query(
       `INSERT INTO customer_payments 
-       (id, bill_id, payment_date, payment_method, amount_received, remarks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+       (id, bill_id, payment_date, payment_method, amount_received, remarks, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
+       VALUES (?, ?, ?, ?, 0.00, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
       [
         paymentId,
         billId,
         paymentDate,
         paymentMethod,
+        remarks,
         amt,
-        remarks
+        approvalId || null
       ]
     );
 
-    // 4. Update parent bill totals
-    const newPaid = parseFloat(bill.amount_paid) + amt;
-    const newDue = currentDue - amt;
-
-    await connection.query(
-      `UPDATE customer_bills SET 
-         amount_paid = ?, 
-         due_amount = ? 
-       WHERE id = ?`,
-      [newPaid, newDue, billId]
-    );
-
     await connection.commit();
+
     res.json({ 
       ok: true, 
       paymentId, 
-      newDue,
-      message: newDue === 0 ? 'Invoice fully cleared and settled!' : 'Partial payment recorded successfully.' 
+      newDue: remainingDue - amt,
+      message: 'Payment collection queued for verification.' 
     });
   } catch (error) {
     await connection.rollback();

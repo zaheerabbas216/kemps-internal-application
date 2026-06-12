@@ -137,6 +137,19 @@ router.post('/', async (req, res) => {
       [tripId, sessionId, tripNumber, godown, remarks]
     );
 
+    // Validate finished products are active
+    const prodIds = items.map(it => parseInt(it.finishedProductId, 10)).filter(id => !isNaN(id));
+    if (prodIds.length > 0) {
+      const [inactiveProds] = await connection.query(
+        `SELECT name FROM finished_products WHERE id IN (?) AND status = 0`,
+        [prodIds]
+      );
+      if (inactiveProds.length > 0) {
+        const names = inactiveProds.map(p => p.name).join(', ');
+        throw new Error(`The following products are disabled in Product Master: ${names}. You cannot load them.`);
+      }
+    }
+
     // 4. Insert Trip Items
     for (const item of items) {
       const { finishedProductId, quantity, returnQty } = item;

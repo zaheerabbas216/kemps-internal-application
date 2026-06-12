@@ -217,6 +217,15 @@ router.post('/', async (req, res) => {
     const [custExists] = await connection.query('SELECT 1 FROM customers WHERE id = ?', [customerId]);
     if (custExists.length === 0) throw new Error('Customer not found.');
 
+    // Verify product is active in Product Master
+    const [prodCheck] = await connection.query(
+      'SELECT status FROM finished_products WHERE name = ?',
+      [product]
+    );
+    if (prodCheck.length > 0 && prodCheck[0].status === 0) {
+      throw new Error(`The product '${product}' is disabled in Product Master. You cannot log a new supply transaction for it.`);
+    }
+
     const insertQuery = `
       INSERT INTO can_supply_transactions (
         customer_id, transaction_date, type, supply_type, product, quantity, rate, amount, notes,

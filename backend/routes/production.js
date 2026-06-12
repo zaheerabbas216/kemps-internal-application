@@ -263,6 +263,28 @@ router.post('/', async (req, res) => {
     // Validation
     if (!productionDate) throw new Error('Production Date is required.');
     if (!productId) throw new Error('Finished Product is required.');
+
+    // Validate finished product is active
+    const [prodCheck] = await connection.query(
+      `SELECT name, status FROM finished_products WHERE id = ?`,
+      [parseInt(productId, 10)]
+    );
+    if (prodCheck.length > 0 && prodCheck[0].status === 0) {
+      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+    }
+
+    // Validate raw materials are active
+    const rmIds = materialsUsed.map(m => parseInt(m.rawMaterialId, 10)).filter(id => !isNaN(id));
+    if (rmIds.length > 0) {
+      const [inactiveRms] = await connection.query(
+        `SELECT sub_product_name FROM raw_materials WHERE id IN (?) AND status = 0`,
+        [rmIds]
+      );
+      if (inactiveRms.length > 0) {
+        const names = inactiveRms.map(r => r.sub_product_name).join(', ');
+        throw new Error(`The following raw materials are disabled in Product Master: ${names}. You cannot consume them.`);
+      }
+    }
     
     const boxes = parseInt(productionBoxes, 10);
     const perBox = parseInt(bottlesPerBox, 10);
@@ -394,6 +416,28 @@ router.put('/:id', async (req, res) => {
       throw new Error('Production Date must be set to today.');
     }
     if (!productId) throw new Error('Finished Product is required.');
+
+    // Validate finished product is active
+    const [prodCheck] = await connection.query(
+      `SELECT name, status FROM finished_products WHERE id = ?`,
+      [parseInt(productId, 10)]
+    );
+    if (prodCheck.length > 0 && prodCheck[0].status === 0) {
+      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+    }
+
+    // Validate raw materials are active
+    const rmIds = materialsUsed.map(m => parseInt(m.rawMaterialId, 10)).filter(id => !isNaN(id));
+    if (rmIds.length > 0) {
+      const [inactiveRms] = await connection.query(
+        `SELECT sub_product_name FROM raw_materials WHERE id IN (?) AND status = 0`,
+        [rmIds]
+      );
+      if (inactiveRms.length > 0) {
+        const names = inactiveRms.map(r => r.sub_product_name).join(', ');
+        throw new Error(`The following raw materials are disabled in Product Master: ${names}. You cannot consume them.`);
+      }
+    }
     
     const boxes = parseInt(productionBoxes, 10);
     const perBox = parseInt(bottlesPerBox, 10);

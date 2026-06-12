@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -158,10 +159,29 @@ router.post('/', async (req, res) => {
 
     const id = await generateId('EXP', 'expenses', 'id');
 
+    // Auto-create Payment Approval entry
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: id,
+      sourceModule: 'Expense',
+      transactionType: 'Cash Out',
+      referenceNo: id,
+      partyName: enteredByTrimmed,
+      description: `Expense: ${particularsTrimmed}`,
+      paymentMethod: 'Cash',
+      cashAmount: amountVal,
+      upiAmount: 0,
+      bankAmount: 0,
+      amount: amountVal,
+      transactionDate: expenseDate,
+      enteredBy: enteredByTrimmed,
+      remarks: String(remarks || '').trim()
+    });
+
     await pool.query(
-      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [id, expenseDate, particularsTrimmed, amountVal, enteredByTrimmed, String(remarks || '').trim()]
+      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
+      [id, expenseDate, particularsTrimmed, amountVal, enteredByTrimmed, String(remarks || '').trim(), amountVal, approvalId || null]
     );
 
     res.json({ ok: true, id, message: 'Expense saved successfully!' });
@@ -226,6 +246,13 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    
+    // Clean up associated payment approval if pending
+    await pool.query(
+      `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'Expense'`,
+      [id]
+    );
+
     const [result] = await pool.query('DELETE FROM expenses WHERE id = ?', [id]);
     if (result.affectedRows === 0) throw new Error('Expense record not found.');
     

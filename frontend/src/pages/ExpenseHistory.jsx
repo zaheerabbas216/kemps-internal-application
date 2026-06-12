@@ -229,6 +229,7 @@ const ExpenseHistory = () => {
                 <th>Particulars</th>
                 <th>Amount (₹)</th>
                 <th>Entered By</th>
+                <th>Status</th>
                 <th>Remarks</th>
               </tr>
             </thead>
@@ -240,6 +241,11 @@ const ExpenseHistory = () => {
                   <td style="font-weight: 600;">${e.particulars}</td>
                   <td class="amount">₹ ${parseFloat(e.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td>${e.entered_by}</td>
+                  <td style="font-weight: bold; text-transform: uppercase; font-size: 10px; color: ${
+                    e.payment_status === 'Approved' ? '#10b981' :
+                    e.payment_status === 'Pending Approval' ? '#f59e0b' :
+                    e.payment_status === 'Rejected' ? '#ef4444' : '#6b7280'
+                  };">${(e.payment_status || 'Pending Approval').toUpperCase()}</td>
                   <td style="color: #64748b; font-style: italic;">${e.remarks || '—'}</td>
                 </tr>
               `).join('')}
@@ -351,13 +357,14 @@ const ExpenseHistory = () => {
                 <th className="py-4 px-6 text-left">Amount (₹)</th>
                 <th className="py-4 px-6 text-left">Entered By</th>
                 <th className="py-4 px-6 text-left">Remarks</th>
+                <th className="py-4 px-6 text-center">Status</th>
                 <th className="py-4 px-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="py-20 text-center">
+                  <td colSpan="8" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                        <span className="loading loading-spinner text-primary"></span>
                        <span className="text-slate-400 text-sm font-medium">Fetching history ledger...</span>
@@ -366,47 +373,64 @@ const ExpenseHistory = () => {
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="8" className="py-20 text-center text-slate-400 font-medium italic">
                     No expense records matching the criteria.
                   </td>
                 </tr>
               ) : (
-                expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{exp.id}</td>
-                    <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(exp.expense_date)}</td>
-                    <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[200px] truncate" title={exp.particulars}>{exp.particulars}</td>
-                    <td className="py-4 px-6 text-[14px] font-black text-slate-800">
-                      ₹ {parseFloat(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-6 text-[14px] font-semibold text-slate-650">{exp.entered_by}</td>
-                    <td className="py-4 px-6 text-[13px] text-slate-400 max-w-[150px] truncate" title={exp.remarks || ''}>
-                      {exp.remarks || '—'}
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={() => handleOpenView(exp)}
-                          className="btn btn-ghost btn-xs text-slate-505 hover:bg-slate-100 rounded-lg px-2"
-                        >
-                          View
-                        </button>
-                        <button 
-                          onClick={() => handleOpenForm(exp)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => confirmDelete(exp)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                expenses.map((exp) => {
+                  const editable = exp.payment_status === 'Pending Approval';
+                  return (
+                    <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{exp.id}</td>
+                      <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(exp.expense_date)}</td>
+                      <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[200px] truncate" title={exp.particulars}>{exp.particulars}</td>
+                      <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                        ₹ {parseFloat(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-4 px-6 text-[14px] font-semibold text-slate-650">{exp.entered_by}</td>
+                      <td className="py-4 px-6 text-[13px] text-slate-400 max-w-[150px] truncate" title={exp.remarks || ''}>
+                        {exp.remarks || '—'}
+                      </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                          exp.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                          exp.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                          exp.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                          'bg-slate-50 text-slate-500'
+                        }`}>
+                          {(exp.payment_status || 'Pending Approval').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handleOpenView(exp)}
+                            className="btn btn-ghost btn-xs text-slate-505 hover:bg-slate-100 rounded-lg px-2"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => handleOpenForm(exp)}
+                            disabled={!editable}
+                            className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!editable ? "Approved or Rejected records are locked" : "Edit record"}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => confirmDelete(exp)}
+                            disabled={!editable}
+                            className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!editable ? "Approved or Rejected records are locked" : "Delete record"}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -441,7 +465,7 @@ const ExpenseHistory = () => {
       {/* EDIT MODAL DIALOG */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] h-[580px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] max-h-[90vh] h-[580px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Header */}
             <div className="bg-[#0b1324] p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight uppercase">
@@ -607,7 +631,7 @@ const ExpenseHistory = () => {
       {/* VIEW DETAILS MODAL */}
       {isViewModalOpen && viewingExpense && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-150">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>📋</span> Expense Details
@@ -643,19 +667,32 @@ const ExpenseHistory = () => {
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Entered By</span>
                 <span className="col-span-2 text-slate-700">{viewingExpense.entered_by}</span>
               </div>
-              <div className="grid grid-cols-3 gap-2 py-2">
+              <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Remarks</span>
                 <span className="col-span-2 text-slate-500 italic whitespace-pre-wrap">{viewingExpense.remarks || '—'}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2">
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Status</span>
+                <span className={`col-span-2 px-2 py-0.5 rounded text-[9px] font-extrabold w-fit ${
+                  viewingExpense.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                  viewingExpense.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                  viewingExpense.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                  'bg-slate-50 text-slate-500'
+                }`}>
+                  {(viewingExpense.payment_status || 'Pending Approval').toUpperCase()}
+                </span>
               </div>
             </div>
 
             <div className="pt-2 border-t border-slate-100 flex gap-2">
               <button 
+                disabled={viewingExpense.payment_status !== 'Pending Approval'}
                 onClick={() => {
                   setIsViewModalOpen(false);
                   handleOpenForm(viewingExpense);
                 }}
-                className="btn-premium btn-primary-premium flex-1 h-11 text-xs uppercase"
+                className="btn-premium btn-primary-premium flex-1 h-11 text-xs uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                title={viewingExpense.payment_status !== 'Pending Approval' ? "Approved or Rejected records are locked" : "Edit record"}
               >
                 Edit Record
               </button>
@@ -673,7 +710,7 @@ const ExpenseHistory = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

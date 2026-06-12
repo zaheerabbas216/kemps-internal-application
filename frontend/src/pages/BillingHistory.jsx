@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
@@ -540,12 +541,13 @@ const BillingHistory = () => {
                     <th className="py-4 px-5 text-center">Payment Mode</th>
                     <th className="py-4 px-5 text-right">Amt Paid</th>
                     <th className="py-4 px-5 text-right">Amt Due</th>
+                    <th className="py-4 px-5 text-center">Payment Status</th>
                     <th className="py-4 px-5 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-750 text-xs font-semibold">
                   {bills.map(b => {
-                    const editable = isToday(b.billing_date);
+                    const editable = isToday(b.billing_date) && (b.payment_status === 'Pending Approval' || b.payment_status === 'Unpaid');
 
                     return (
                       <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
@@ -582,6 +584,16 @@ const BillingHistory = () => {
                           )}
                         </td>
                         <td className="py-3.5 px-5 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                            b.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                            b.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                            b.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                            'bg-slate-50 text-slate-500'
+                          }`}>
+                            {(b.payment_status || 'Unpaid').toUpperCase()}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-center">
                           <div className="flex items-center justify-center gap-1.5">
                             <button 
                               onClick={() => handleOpenView(b)}
@@ -612,14 +624,14 @@ const BillingHistory = () => {
                                 <button 
                                   disabled
                                   className="px-2 py-1 rounded bg-slate-100 border border-slate-100 text-slate-400 font-bold cursor-not-allowed"
-                                  title="Cannot edit past records"
+                                  title="Cannot edit locked/processed records"
                                 >
                                   ✎ Edit
                                 </button>
                                 <button 
                                   disabled
                                   className="px-2 py-1 rounded bg-slate-100 border border-slate-100 text-slate-400 font-bold cursor-not-allowed"
-                                  title="Cannot delete past records"
+                                  title="Cannot delete locked/processed records"
                                 >
                                   ✕ Delete
                                 </button>
@@ -671,9 +683,9 @@ const BillingHistory = () => {
       </div>
 
       {/* VIEW MODAL (WITH POS PRINT TRIGGER) */}
-      {isViewModalOpen && viewingBill && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box max-w-3xl bg-white border border-slate-200 rounded-3xl p-8 relative shadow-2xl">
+      {isViewModalOpen && viewingBill && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box max-w-3xl bg-white border border-slate-200 rounded-3xl p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto z-10">
             <button 
               onClick={() => setIsViewModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
@@ -786,13 +798,15 @@ const BillingHistory = () => {
               </button>
             </div>
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsViewModalOpen(false)}></div>
+        </div>,
+        document.body
       )}
 
       {/* DELETE CONFIRMATION MODAL */}
-      {isDeleteModalOpen && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl">
+      {isDeleteModalOpen && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl max-h-[90vh] overflow-y-auto z-10">
             <h3 className="text-lg font-black text-slate-850 uppercase">Delete Invoice?</h3>
             <p className="text-slate-500 text-xs font-semibold mt-2">
               Are you sure you want to delete invoice <span className="font-mono text-rose-500 font-bold">{deletingBillId}</span>? This will revert finished product stock levels in the stock registry.
@@ -815,7 +829,9 @@ const BillingHistory = () => {
               </button>
             </div>
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsDeleteModalOpen(false); setDeletingBillId(null); }}></div>
+        </div>,
+        document.body
       )}
 
     </div>

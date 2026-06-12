@@ -717,9 +717,210 @@ export async function runMigration(shouldExit = false) {
         `INSERT INTO finished_products (name, category_id, status) VALUES ('Can Deposit', ?, 1)`,
         [catId]
       );
-      console.log('Seeded Can Deposit finished product.');
     } else {
       console.log('Can Deposit finished product verified.');
+    }
+
+    // 29. Rename '20ltr Can' to '20 Ltr Can' and seed 'Dispenser' if not exists
+    console.log('Renaming 20ltr Can and verifying Dispenser product...');
+    await connection.query(
+      `UPDATE finished_products SET name = '20 Ltr Can' WHERE name = '20ltr Can'`
+    );
+    const [dispenserProd] = await connection.query(
+      `SELECT id FROM finished_products WHERE name = 'Dispenser'`
+    );
+    if (dispenserProd.length === 0) {
+      await connection.query(
+        `INSERT INTO finished_products (name, category_id, status) VALUES ('Dispenser', ?, 1)`,
+        [catId]
+      );
+      console.log('Seeded Dispenser finished product.');
+    } else {
+      console.log('Dispenser finished product verified.');
+    }
+
+    // 30. Create payment_approvals table if not exists
+    console.log('Creating payment_approvals table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS payment_approvals (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        approval_id VARCHAR(25) UNIQUE NOT NULL,
+        transaction_id VARCHAR(50) NOT NULL,
+        source_module ENUM('Billing', 'Expense', 'CanDeposit', 'CreditBalance', 'SupplierPayment') NOT NULL,
+        transaction_type ENUM('Cash In', 'Cash Out') NOT NULL,
+        reference_no VARCHAR(100) NOT NULL DEFAULT '',
+        party_name VARCHAR(200) NOT NULL DEFAULT '',
+        description TEXT,
+        payment_method VARCHAR(100) NOT NULL DEFAULT 'Cash',
+        cash_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        upi_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        bank_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        transaction_date DATE NOT NULL,
+        entered_by VARCHAR(100) NOT NULL DEFAULT '',
+        remarks TEXT,
+        status ENUM('Pending', 'Approved', 'Rejected') NOT NULL DEFAULT 'Pending',
+        approved_by VARCHAR(100) NULL,
+        approved_at TIMESTAMP NULL,
+        rejected_by VARCHAR(100) NULL,
+        rejected_at TIMESTAMP NULL,
+        rejection_reason TEXT NULL,
+        cash_ledger_updated TINYINT(1) NOT NULL DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_pa_status (status),
+        INDEX idx_pa_source (source_module),
+        INDEX idx_pa_type (transaction_type),
+        INDEX idx_pa_date (transaction_date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('payment_approvals table verified.');
+
+    // 31. Create cash_ledger table if not exists
+    console.log('Creating cash_ledger table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cash_ledger (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        approval_id VARCHAR(25) NOT NULL,
+        transaction_id VARCHAR(50) NOT NULL,
+        reference_no VARCHAR(100) NOT NULL DEFAULT '',
+        type ENUM('Cash In', 'Cash Out') NOT NULL,
+        source_module VARCHAR(100) NOT NULL DEFAULT '',
+        description TEXT,
+        amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        opening_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        closing_balance DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        approved_by VARCHAR(100) NOT NULL DEFAULT '',
+        approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_cl_approval_id (approval_id),
+        INDEX idx_cl_date (approved_at)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('cash_ledger table verified.');
+
+    // 32. Add payment approval and reversal holding fields to financial tables
+    console.log('Checking and adding holding/reversal columns to financial tables...');
+    const [billStatusCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_bills' AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+
+    if (billStatusCols.length === 0) {
+      console.log('Adding holding/reversal columns to customer_bills...');
+      await connection.query(`
+        ALTER TABLE customer_bills
+        ADD COLUMN payment_status ENUM('Pending Approval', 'Approved', 'Rejected', 'Unpaid') DEFAULT 'Unpaid',
+        ADD COLUMN pending_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approved_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN rejected_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approval_id VARCHAR(25) NULL,
+        ADD COLUMN last_status_update TIMESTAMP NULL
+      `);
+      await connection.query(`
+        UPDATE customer_bills
+        SET payment_status = 'Approved', approved_amount = amount_paid
+        WHERE amount_paid > 0
+      `);
+      await connection.query(`
+        UPDATE customer_bills
+        SET payment_status = 'Unpaid'
+        WHERE amount_paid = 0
+      `);
+      console.log('customer_bills holding/reversal columns added and initialized.');
+    }
+
+    const [custPayCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_payments' AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+    if (custPayCols.length === 0) {
+      console.log('Adding holding/reversal columns to customer_payments...');
+      await connection.query(`
+        ALTER TABLE customer_payments
+        ADD COLUMN payment_status ENUM('Pending Approval', 'Approved', 'Rejected', 'Unpaid') DEFAULT 'Pending Approval',
+        ADD COLUMN pending_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approved_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN rejected_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approval_id VARCHAR(25) NULL,
+        ADD COLUMN last_status_update TIMESTAMP NULL
+      `);
+      await connection.query(`
+        UPDATE customer_payments
+        SET payment_status = 'Approved', approved_amount = amount_received
+      `);
+      console.log('customer_payments holding/reversal columns added and initialized.');
+    }
+
+    const [expCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+    if (expCols.length === 0) {
+      console.log('Adding holding/reversal columns to expenses...');
+      await connection.query(`
+        ALTER TABLE expenses
+        ADD COLUMN payment_status ENUM('Pending Approval', 'Approved', 'Rejected', 'Unpaid') DEFAULT 'Pending Approval',
+        ADD COLUMN pending_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approved_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN rejected_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approval_id VARCHAR(25) NULL,
+        ADD COLUMN last_status_update TIMESTAMP NULL
+      `);
+      await connection.query(`
+        UPDATE expenses
+        SET payment_status = 'Approved', approved_amount = amount
+      `);
+      console.log('expenses holding/reversal columns added and initialized.');
+    }
+
+    const [supPayCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'supplier_payments' AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+    if (supPayCols.length === 0) {
+      console.log('Adding holding/reversal columns to supplier_payments...');
+      await connection.query(`
+        ALTER TABLE supplier_payments
+        ADD COLUMN payment_status ENUM('Pending Approval', 'Approved', 'Rejected', 'Unpaid') DEFAULT 'Pending Approval',
+        ADD COLUMN pending_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approved_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN rejected_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approval_id VARCHAR(25) NULL,
+        ADD COLUMN last_status_update TIMESTAMP NULL
+      `);
+      await connection.query(`
+        UPDATE supplier_payments
+        SET payment_status = 'Approved', approved_amount = amount
+      `);
+      console.log('supplier_payments holding/reversal columns added and initialized.');
+    }
+
+    const [canDepCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'can_deposit_ledger' AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+    if (canDepCols.length === 0) {
+      console.log('Adding holding/reversal columns to can_deposit_ledger...');
+      await connection.query(`
+        ALTER TABLE can_deposit_ledger
+        ADD COLUMN payment_status ENUM('Pending Approval', 'Approved', 'Rejected', 'Unpaid') DEFAULT 'Pending Approval',
+        ADD COLUMN pending_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approved_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN rejected_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN approval_id VARCHAR(25) NULL,
+        ADD COLUMN last_status_update TIMESTAMP NULL
+      `);
+      await connection.query(`
+        UPDATE can_deposit_ledger
+        SET payment_status = 'Approved', approved_amount = amount
+      `);
+      console.log('can_deposit_ledger holding/reversal columns added and initialized.');
     }
 
     console.log('Migration complete!');

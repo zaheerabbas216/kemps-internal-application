@@ -1060,7 +1060,7 @@ const DistributionOrder = () => {
       {/* ORDER DETAILS MODAL */}
       {isDetailModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10">
+          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setIsDetailModalOpen(false); setOrderDetail(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 flex items-center justify-center font-bold transition-all"
@@ -1242,7 +1242,7 @@ const DistributionOrder = () => {
       {/* CANCELLATION DIALOG */}
       {isCancelModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-[60]">
-          <div className="modal-box max-w-sm bg-white border border-slate-200/80 rounded-2xl p-6 relative shadow-2xl z-10">
+          <div className="modal-box max-w-sm bg-white border border-slate-200/80 rounded-2xl p-6 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setIsCancelModalOpen(false)}
               className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 flex items-center justify-center font-bold transition-all"

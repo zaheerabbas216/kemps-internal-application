@@ -91,7 +91,7 @@ const Inventory = () => {
   const fetchProductsAndCategories = async () => {
     try {
       const catRes = await api.get('/raw-materials/categories');
-      const matRes = await api.get('/raw-materials', { params: { limit: 200 } });
+      const matRes = await api.get('/raw-materials', { params: { limit: 200, activeOnly: true } });
       
       if (catRes.data.ok) setCategories(catRes.data.categories || []);
       if (matRes.data.ok) setAllMaterials(matRes.data.materials || []);
@@ -279,9 +279,8 @@ const Inventory = () => {
         // Auto-calculate amount: totalQuantity * ratePerUnit
         row.amount = (qty * rate).toFixed(2);
       } else {
-        // Non-preforms: perPcRate is disabled (N/A)
-        row.perPcRate = 'N/A';
-        // Note: For non-preforms, totalQuantity, ratePerUnit, qtyInPcs, amount, etc. are entered manually.
+        // Non-preforms: perPcRate is entered manually — do not overwrite it.
+        // totalQuantity, ratePerUnit, qtyInPcs, amount, etc. are also entered manually.
       }
 
       const amt = parseFloat(row.amount) || 0;
@@ -849,15 +848,33 @@ const Inventory = () => {
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                           Per PC Rate
                         </label>
-                        <input
-                          type="text"
-                          value={isPreforms ? (item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${item.perPcRate}` : '₹ 0.00') : 'Disabled'}
-                          readOnly
-                          className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 outline-none text-sm font-bold cursor-not-allowed"
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                          {isPreforms ? 'Calculated automatically from Preform weight.' : 'Applicable only for Preforms.'}
-                        </span>
+                        {isPreforms ? (
+                          <>
+                            <input
+                              type="text"
+                              value={item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${item.perPcRate}` : '₹ 0.00'}
+                              readOnly
+                              className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 outline-none text-sm font-bold cursor-not-allowed"
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 mt-1 block">
+                              Calculated automatically from Preform weight.
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="number"
+                              step="any"
+                              value={item.perPcRate === 'N/A' || item.perPcRate === undefined ? '' : item.perPcRate}
+                              onChange={(e) => handleItemChange(index, 'perPcRate', e.target.value)}
+                              className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                              placeholder="Enter rate per pc"
+                            />
+                            <span className="text-[10px] font-bold text-slate-400 mt-1 block">
+                              Enter manually.
+                            </span>
+                          </>
+                        )}
                       </div>
 
                       {/* Amount (Manual) */}
@@ -1313,7 +1330,7 @@ const Inventory = () => {
       {/* DELETE DIALOG MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

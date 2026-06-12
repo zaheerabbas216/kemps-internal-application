@@ -43,7 +43,6 @@ const navGroups = [
     items: [
       { name: 'Inventory', path: '/inventory' },
       { name: 'Pet Bottle', path: '/pet-bottle' },
-      { name: 'Stock Correction', path: '/stock-correction' },
     ]
   },
   {
@@ -53,7 +52,6 @@ const navGroups = [
     icon: '🏭',
     items: [
       { name: 'Production Form', path: '/production-form' },
-      { name: 'Present Stock', path: '/present-stock' },
       { name: 'Goods Ledger', path: '/goods-ledger' },
     ]
   },
@@ -69,32 +67,11 @@ const navGroups = [
   },
   {
     type: 'group',
-    title: 'Function Order',
-    id: 'grpFO',
-    icon: '🎯',
-    items: [
-      { name: 'Function Order', path: '/function-order' },
-      { name: 'FO Order View', path: '/fo-order-view' },
-    ]
-  },
-  {
-    type: 'group',
     title: 'Distribution',
     id: 'grpDO',
     icon: '🚚',
     items: [
       { name: 'Distribution Order', path: '/distribution-order' },
-      { name: 'DO Order View', path: '/do-order-view' },
-    ]
-  },
-  {
-    type: 'group',
-    title: 'Local Orders',
-    id: 'grpLO',
-    icon: '📍',
-    items: [
-      { name: 'Local Orders', path: '/local-order' },
-      { name: 'LO Order View', path: '/lo-order-view' },
     ]
   },
   {
@@ -103,13 +80,11 @@ const navGroups = [
   },
   {
     type: 'group',
-    title: 'Loading / Return',
+    title: 'Loading',
     id: 'grpWH',
     icon: '🏪',
     items: [
       { name: 'Loading', path: '/loading' },
-      { name: 'Return Stock', path: '/return-stock' },
-      { name: 'Godown Transfer', path: '/godown-transfer' },
     ]
   },
   {
@@ -123,18 +98,6 @@ const navGroups = [
     ]
   },
   {
-    type: 'button',
-    name: 'Function Can Supply',
-    path: '/function-can-supply',
-    icon: '🚚'
-  },
-  {
-    type: 'button',
-    name: 'Function Return Stock',
-    path: '/function-return-stock',
-    icon: '↩'
-  },
-  {
     type: 'section',
     title: 'Office'
   },
@@ -144,8 +107,6 @@ const navGroups = [
     id: 'grpOff',
     icon: '🗂️',
     items: [
-      { name: 'Courier Parcel', path: '/courier-parcel' },
-      { name: 'Warranty Details', path: '/warranty-details' },
       { name: 'Maintenance Form', path: '/maintenance-form' },
     ]
   },

@@ -280,7 +280,7 @@ const Customer = () => {
       {/* FORM MODAL */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-0 bg-transparent pointer-events-none">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] h-[550px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] max-h-[90vh] h-[550px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Header - Fixed at top */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight">
@@ -368,7 +368,7 @@ const Customer = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

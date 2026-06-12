@@ -7,6 +7,7 @@ const CanDepositLedger = () => {
   const isAdmin = currentUser === 'admin';
 
   // Filters & Pagination
+  const [isCanDepositActive, setIsCanDepositActive] = useState(true);
   const [transactions, setTransactions] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -95,6 +96,26 @@ const CanDepositLedger = () => {
   useEffect(() => {
     fetchTransactions();
   }, [page, searchQuery, startDate, endDate, filterType, filterPaymentMode]);
+
+  useEffect(() => {
+    checkCanDepositStatus();
+  }, []);
+
+  const checkCanDepositStatus = async () => {
+    try {
+      const res = await api.get('/finished-products', {
+        params: { search: 'Can Deposit', activeOnly: false }
+      });
+      if (res.data.ok && res.data.products) {
+        const canDep = res.data.products.find(p => p.name === 'Can Deposit');
+        if (canDep) {
+          setIsCanDepositActive(canDep.status === 1);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to check Can Deposit status:', err);
+    }
+  };
 
   // Click outside to close suggestion boxes
   useEffect(() => {
@@ -476,13 +497,23 @@ const CanDepositLedger = () => {
         <div className="flex flex-wrap items-center gap-3">
           <button 
             onClick={openNewDepositModal}
-            className="btn-premium btn-primary-premium h-12"
+            disabled={!isCanDepositActive}
+            className={`btn-premium h-12 ${
+              isCanDepositActive 
+                ? 'btn-primary-premium' 
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed border-slate-300 shadow-none'
+            }`}
           >
             <span className="text-xl">+</span> New Deposit
           </button>
           <button 
             onClick={openReturnModal}
-            className="btn-premium bg-amber-500 hover:bg-amber-600 text-white h-12 flex items-center gap-1.5 shadow-md shadow-amber-200"
+            disabled={!isCanDepositActive}
+            className={`btn-premium h-12 flex items-center gap-1.5 ${
+              isCanDepositActive 
+                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-md shadow-amber-200' 
+                : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+            }`}
           >
             ↩ Return Deposit
           </button>
@@ -494,6 +525,15 @@ const CanDepositLedger = () => {
           </button>
         </div>
       </div>
+
+      {!isCanDepositActive && (
+        <div className="bg-red-50 border-2 border-red-200 text-red-800 p-4 rounded-2xl flex items-center gap-3 font-semibold text-sm">
+          <span>⚠️</span>
+          <span>
+            <b>"Can Deposit" is currently disabled in the Product Master.</b> New deposit registrations and refunds are locked. Re-enable it in the Product Master to restore deposit functions.
+          </span>
+        </div>
+      )}
 
       {/* FILTER PANEL */}
       <div className="border border-slate-200/80 bg-white rounded-2xl p-5 shadow-sm space-y-4">
@@ -588,6 +628,7 @@ const CanDepositLedger = () => {
                     <th className="py-4 px-5 text-right">Rate</th>
                     <th className="py-4 px-5 text-right">Amount</th>
                     <th className="py-4 px-5 text-center">Mode</th>
+                    <th className="py-4 px-5 text-center">Status</th>
                     <th className="py-4 px-5 text-right">Balance After</th>
                     <th className="py-4 px-5">Remarks</th>
                     <th className="py-4 px-5 text-center">Created By</th>
@@ -620,6 +661,16 @@ const CanDepositLedger = () => {
                           {tx.payment_mode}
                         </span>
                       </td>
+                      <td className="py-3.5 px-5 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                          tx.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                          tx.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                          tx.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                          'bg-slate-50 text-slate-500'
+                        }`}>
+                          {(tx.payment_status || 'Pending Approval').toUpperCase()}
+                        </span>
+                      </td>
                       <td className="py-3.5 px-5 text-right font-black text-slate-800 bg-slate-50/50">
                         ₹ {parseFloat(tx.balance_after_transaction).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
@@ -642,7 +693,9 @@ const CanDepositLedger = () => {
                           {isAdmin ? (
                             <button 
                               onClick={() => confirmDeleteTx(tx.id)}
-                              className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all text-[11px]"
+                              disabled={tx.payment_status !== 'Pending Approval'}
+                              className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={tx.payment_status !== 'Pending Approval' ? "Processed records are locked to preserve audit trail" : "Delete transaction"}
                             >
                               ✕ Delete
                             </button>
@@ -662,7 +715,7 @@ const CanDepositLedger = () => {
 
                   {transactions.length === 0 && (
                     <tr>
-                      <td colSpan="13" className="py-16 text-center text-slate-400 font-semibold text-xs bg-slate-50/20">
+                      <td colSpan="14" className="py-16 text-center text-slate-400 font-semibold text-xs bg-slate-50/20">
                         No transactions found in can deposit history ledger matching queries.
                       </td>
                     </tr>
@@ -1092,7 +1145,7 @@ const CanDepositLedger = () => {
       {/* VIEW DETAIL TRANSACTION MODAL */}
       {isViewModalOpen && selectedTx && (
         <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-8 relative shadow-2xl max-w-lg">
+          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-8 relative shadow-2xl max-w-lg max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setIsViewModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-505 hover:bg-slate-100 flex items-center justify-center font-bold"
@@ -1139,8 +1192,21 @@ const CanDepositLedger = () => {
                   <span className="col-span-2 uppercase text-[10px]">{selectedTx.payment_mode}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
+                  <span className="text-slate-400 font-bold text-[10px] uppercase">Payment Status</span>
+                  <span className="col-span-2">
+                    <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                      selectedTx.payment_status === 'Approved' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
+                      selectedTx.payment_status === 'Pending Approval' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                      selectedTx.payment_status === 'Rejected' ? 'bg-rose-50 border-rose-100 text-rose-600' :
+                      'bg-slate-50 border-slate-100 text-slate-500'
+                    }`}>
+                      {(selectedTx.payment_status || 'Pending Approval').toUpperCase()}
+                    </span>
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
                   <span className="text-slate-400 font-bold text-[10px] uppercase">Running Balance</span>
-                  <span className="col-span-2 font-black text-slate-850">₹ {parseFloat(selectedTx.balance_after_transaction).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                  <span className="col-span-2 font-black text-slate-855">₹ {parseFloat(selectedTx.balance_after_transaction).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   <span className="text-slate-400 font-bold text-[10px] uppercase">Date Recorded</span>
@@ -1178,7 +1244,7 @@ const CanDepositLedger = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl max-w-sm">
+          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl max-w-sm max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-black text-slate-850 uppercase">Delete Transaction?</h3>
             <p className="text-slate-500 text-xs font-semibold mt-2">
               Are you sure you want to delete deposit ledger entry <span className="font-mono text-rose-500 font-bold">#{deletingTxId}</span>? This will revert customer deposit balance calculations and delete the programmatically generated invoice or expense record.

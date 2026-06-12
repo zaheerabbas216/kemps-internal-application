@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import api from '../api/axios';
 
 const SalesReturn = () => {
@@ -940,9 +941,9 @@ const SalesReturn = () => {
       )}
 
       {/* NEW SALES RETURN FORM MODAL */}
-      {isReturnModalOpen && selectedInvoice && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-4xl shadow-2xl relative">
+      {isReturnModalOpen && selectedInvoice && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-4xl shadow-2xl relative max-h-[90vh] overflow-y-auto z-10">
             <button
               onClick={() => setIsReturnModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
@@ -1103,13 +1104,15 @@ const SalesReturn = () => {
 
             </form>
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsReturnModalOpen(false)}></div>
+        </div>,
+        document.body
       )}
 
       {/* VIEW DETAILS MODAL */}
-      {isDetailModalOpen && detailInvoice && (
-        <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-xl shadow-2xl relative">
+      {isDetailModalOpen && detailInvoice && createPortal(
+        <div className="modal modal-open animate-fade-in z-50">
+          <div className="modal-box bg-white border border-slate-200/80 rounded-3xl p-7 max-w-xl shadow-2xl relative max-h-[90vh] overflow-y-auto z-10">
             <button
               onClick={() => setIsDetailModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
@@ -1163,7 +1166,9 @@ const SalesReturn = () => {
               </button>
             </div>
           </div>
-        </div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsDetailModalOpen(false)}></div>
+        </div>,
+        document.body
       )}
 
     </div>

@@ -129,6 +129,24 @@ router.post('/', async (req, res) => {
     if (!batchDate) throw new Error('Batch Date is required.');
     if (!productId) throw new Error('Product is required.');
     if (!rawMaterialId) throw new Error('Preform is required.');
+
+    // Validate finished product is active
+    const [prodCheck] = await connection.query(
+      `SELECT name, status FROM finished_products WHERE id = ?`,
+      [parseInt(productId, 10)]
+    );
+    if (prodCheck.length > 0 && prodCheck[0].status === 0) {
+      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+    }
+
+    // Validate raw material (preform) is active
+    const [rmCheck] = await connection.query(
+      `SELECT sub_product_name, status FROM raw_materials WHERE id = ?`,
+      [parseInt(rawMaterialId, 10)]
+    );
+    if (rmCheck.length > 0 && rmCheck[0].status === 0) {
+      throw new Error(`The preform raw material '${rmCheck[0].sub_product_name}' is disabled in Product Master. You cannot consume it.`);
+    }
     
     const parsedBagsUsed = parseFloat(bagsUsed);
     if (isNaN(parsedBagsUsed) || parsedBagsUsed <= 0) {
@@ -398,6 +416,24 @@ router.put('/:id', async (req, res) => {
     }
     if (!productId) throw new Error('Product is required.');
     if (!rawMaterialId) throw new Error('Preform is required.');
+
+    // Validate finished product is active
+    const [prodCheck] = await connection.query(
+      `SELECT name, status FROM finished_products WHERE id = ?`,
+      [parseInt(productId, 10)]
+    );
+    if (prodCheck.length > 0 && prodCheck[0].status === 0) {
+      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+    }
+
+    // Validate raw material (preform) is active
+    const [rmCheck] = await connection.query(
+      `SELECT sub_product_name, status FROM raw_materials WHERE id = ?`,
+      [parseInt(rawMaterialId, 10)]
+    );
+    if (rmCheck.length > 0 && rmCheck[0].status === 0) {
+      throw new Error(`The preform raw material '${rmCheck[0].sub_product_name}' is disabled in Product Master. You cannot consume it.`);
+    }
     
     const parsedBagsUsed = parseFloat(bagsUsed);
     if (isNaN(parsedBagsUsed) || parsedBagsUsed <= 0) {

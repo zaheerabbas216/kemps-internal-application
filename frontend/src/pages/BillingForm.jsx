@@ -250,7 +250,7 @@ const BillingForm = () => {
   const fetchDropdownMasters = async () => {
     try {
       const [fpRes, custRes] = await Promise.all([
-        api.get('/finished-products', { params: { limit: 200 } }),
+        api.get('/finished-products', { params: { limit: 200, activeOnly: true } }),
         api.get('/customers')
       ]);
       if (fpRes.data.ok) {

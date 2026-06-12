@@ -291,7 +291,7 @@ const Billing = () => {
       {/* VIEW MODAL */}
       {isViewModalOpen && viewingBill && (
         <div className="modal modal-open animate-fade-in">
-          <div className="modal-box max-w-3xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl">
+          <div className="modal-box max-w-3xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => setIsViewModalOpen(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -410,7 +410,7 @@ const Billing = () => {
       {/* DELETE MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open animate-fade-in">
-          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl">
+          <div className="modal-box bg-white border border-slate-200 rounded-3xl p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-black text-slate-850 uppercase">Delete Invoice?</h3>
             <p className="text-slate-500 text-xs font-semibold mt-2">
               Are you sure you want to delete invoice <span className="font-mono text-rose-500 font-bold">{deletingBillId}</span>? This will revert finished product stock levels in the stock registry.

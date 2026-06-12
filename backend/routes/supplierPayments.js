@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -70,12 +71,14 @@ router.get('/bills', async (req, res) => {
         b.is_manual,
         b.remarks,
         COALESCE(p_sum.total_paid, 0) AS total_paid,
-        (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0)) AS balance_due
+        (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0)) AS balance_due,
+        (SELECT COUNT(*) FROM supplier_payments sp WHERE sp.bill_id = b.id AND sp.payment_status = 'Pending Approval') > 0 AS has_pending_payment
       FROM inventory_bills b
       JOIN company_details c ON b.supplier_id = c.id
       LEFT JOIN (
         SELECT bill_id, SUM(amount) AS total_paid 
         FROM supplier_payments 
+        WHERE payment_status = 'Approved'
         GROUP BY bill_id
       ) p_sum ON b.id = p_sum.bill_id
       ${whereStr}
@@ -242,7 +245,10 @@ router.post('/pay', async (req, res) => {
 
     // 1. Fetch current bill values
     const [billRows] = await connection.query(
-      `SELECT grand_total, advance_paid, credit_note, status FROM inventory_bills WHERE id = ?`,
+      `SELECT b.grand_total, b.advance_paid, b.credit_note, b.status, b.supplier_id, c.company_name AS supplier_name 
+       FROM inventory_bills b
+       JOIN company_details c ON b.supplier_id = c.id
+       WHERE b.id = ? FOR UPDATE`,
       [billId]
     );
 
@@ -251,41 +257,58 @@ router.post('/pay', async (req, res) => {
 
     if (bill.status === 'CANCELLED') throw new Error('Cannot pay against a cancelled bill.');
 
-    // 2. Fetch sum of already paid instalments
+    // 2. Fetch sum of already approved/pending instalments
     const [payRows] = await connection.query(
-      `SELECT COALESCE(SUM(amount), 0) AS paid FROM supplier_payments WHERE bill_id = ?`,
+      `SELECT 
+         COALESCE(SUM(CASE WHEN payment_status = 'Approved' THEN amount ELSE 0 END), 0) AS approved_paid,
+         COALESCE(SUM(CASE WHEN payment_status = 'Pending Approval' THEN pending_amount ELSE 0 END), 0) AS pending_paid
+       FROM supplier_payments 
+       WHERE bill_id = ?`,
       [billId]
     );
-    const totalPaid = parseFloat(payRows[0].paid) || 0;
+    const approvedPaid = parseFloat(payRows[0].approved_paid) || 0;
+    const pendingPaid = parseFloat(payRows[0].pending_paid) || 0;
+    const totalPaid = approvedPaid; // only approved affects outstanding dues
 
     const remainingBalance = parseFloat(bill.grand_total) - parseFloat(bill.advance_paid) - parseFloat(bill.credit_note) - totalPaid;
+    const allowedPayment = remainingBalance - pendingPaid;
 
-    if (parseFloat(amount) > remainingBalance) {
-      throw new Error(`Payment amount (₹${amount}) exceeds the remaining balance due (₹${remainingBalance.toFixed(2)}).`);
+    if (parseFloat(amount) > allowedPayment) {
+      throw new Error(`Payment amount (₹${amount}) exceeds the remaining balance due (₹${allowedPayment.toFixed(2)}) considering pending approvals.`);
     }
 
     // 3. Generate Payment ID
     const payId = await generateId('PAY', 'supplier_payments', 'id');
 
-    // 4. Insert instalment payment record
-    await connection.query(
-      `INSERT INTO supplier_payments (id, bill_id, payment_date, amount, payment_mode, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [payId, billId, paymentDate, parseFloat(amount), paymentMode, notes || '']
-    );
+    // 4. Auto-create Payment Approval entry for supplier payment
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: payId,
+      sourceModule: 'SupplierPayment',
+      transactionType: 'Cash Out',
+      referenceNo: billId,
+      partyName: `[${bill.supplier_id}] ${bill.supplier_name}`,
+      description: `Supplier Payment for Bill ${billId} — ${bill.supplier_name}`,
+      paymentMethod: paymentMode,
+      cashAmount: paymentMode === 'Cash' ? parseFloat(amount) : 0,
+      upiAmount: paymentMode === 'UPI' ? parseFloat(amount) : 0,
+      bankAmount: (paymentMode === 'Bank' || paymentMode === 'Bank Transfer') ? parseFloat(amount) : 0,
+      amount: parseFloat(amount),
+      transactionDate: paymentDate,
+      enteredBy: req.admin?.name || req.admin?.username || 'Admin',
+      remarks: notes || ''
+    }, connection);
 
-    // 5. Recalculate and update bill status
-    const newTotalPaid = totalPaid + parseFloat(amount);
-    const newBalance = parseFloat(bill.grand_total) - parseFloat(bill.advance_paid) - parseFloat(bill.credit_note) - newTotalPaid;
-    const newStatus = newBalance <= 0 ? 'SETTLED' : 'PENDING';
-
+    // 5. Insert instalment payment record
     await connection.query(
-      `UPDATE inventory_bills SET status = ? WHERE id = ?`,
-      [newStatus, billId]
+      `INSERT INTO supplier_payments (id, bill_id, payment_date, amount, payment_mode, notes, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
+      [payId, billId, paymentDate, parseFloat(amount), paymentMode, notes || '', parseFloat(amount), approvalId || null]
     );
 
     await connection.commit();
-    res.json({ ok: true, id: payId, message: 'Payment successfully recorded!' });
+
+    res.json({ ok: true, id: payId, message: 'Payment recorded and queued for verification.' });
   } catch (error) {
     await connection.rollback();
     console.error('Make payment error:', error);
@@ -326,7 +349,8 @@ router.get('/payments', async (req, res) => {
         p.notes,
         b.bill_number,
         b.billed_to,
-        c.company_name AS supplier_name
+        c.company_name AS supplier_name,
+        p.payment_status
       FROM supplier_payments p
       JOIN inventory_bills b ON p.bill_id = b.id
       JOIN company_details c ON b.supplier_id = c.id

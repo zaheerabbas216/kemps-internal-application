@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -128,6 +129,7 @@ router.get('/history', async (req, res) => {
         payment_mode,
         remarks,
         balance_after_transaction,
+        payment_status,
         created_by,
         DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at
        FROM can_deposit_ledger
@@ -177,6 +179,7 @@ router.get('/customer/:customerId/ledger', async (req, res) => {
         payment_mode,
         remarks,
         balance_after_transaction,
+        payment_status,
         created_by,
         DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') as created_at
        FROM can_deposit_ledger
@@ -238,16 +241,39 @@ router.post('/', async (req, res) => {
     const customer = custRows[0];
 
     const currentBalance = parseFloat(customer.deposit_balance || 0.00);
-    const newBalance = currentBalance + amountVal;
 
     // 2. Generate transaction ID (DEP-YYYY-XXXXX)
     const transactionId = await generateId('DEP', 'can_deposit_ledger', 'transaction_id', connection);
 
-    // 3. Insert transaction into can_deposit_ledger
+    // 3. Generate billing date and approval ID BEFORE database updates
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const istDate = new Date(now.getTime() + (330 + offset) * 60000);
+    const billingDate = istDate.toISOString().split('T')[0];
+
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: transactionId,
+      sourceModule: 'CanDeposit',
+      transactionType: 'Cash In',
+      referenceNo: transactionId,
+      partyName: `[${customer.id}] ${customer.name}`,
+      description: `Can Deposit Received — [${customer.id}] ${customer.name} (Qty: ${qtyVal} @ ₹${rateVal})`,
+      paymentMethod: paymentMode,
+      cashAmount: paymentMode === 'Cash' ? amountVal : 0,
+      upiAmount: paymentMode === 'UPI' ? amountVal : 0,
+      bankAmount: (paymentMode === 'Bank' || paymentMode === 'Bank Transfer') ? amountVal : 0,
+      amount: amountVal,
+      transactionDate: billingDate,
+      enteredBy: createdBy,
+      remarks: remarks || ''
+    }, connection);
+
+    // 4. Insert transaction into can_deposit_ledger
     await connection.query(
       `INSERT INTO can_deposit_ledger 
-        (transaction_id, transaction_type, customer_id, customer_name, mobile_number, qty, rate, amount, payment_mode, remarks, balance_after_transaction, created_by, created_at)
-       VALUES (?, 'Deposit Received', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        (transaction_id, transaction_type, customer_id, customer_name, mobile_number, qty, rate, amount, payment_mode, remarks, 
+         balance_after_transaction, payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_by, created_at)
+       VALUES (?, 'Deposit Received', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, ?, NOW())`,
       [
         transactionId,
         customerId,
@@ -258,33 +284,26 @@ router.post('/', async (req, res) => {
         amountVal,
         paymentMode,
         remarks || '',
-        newBalance,
+        currentBalance, // balance after transaction doesn't include pending amount yet
+        amountVal,
+        approvalId || null,
         createdBy
       ]
     );
 
-    // 4. Update customer deposit balance
-    await connection.query(
-      `UPDATE customers SET deposit_balance = ? WHERE id = ?`,
-      [newBalance, customerId]
-    );
-
     // 5. Lookup 'Can Deposit' finished product
     const [prodRows] = await connection.query(
-      `SELECT id FROM finished_products WHERE name = 'Can Deposit'`
+      `SELECT id, status FROM finished_products WHERE name = 'Can Deposit'`
     );
     if (prodRows.length === 0) throw new Error("Product 'Can Deposit' not found. Please verify migrations.");
+    if (prodRows[0].status === 0) {
+      throw new Error("Product 'Can Deposit' is disabled in Product Master. You cannot accept new deposits for it.");
+    }
     const canDepositProductId = prodRows[0].id;
 
     // 6. Programmatically insert sales invoice
     const billId = await generateId('BILL', 'customer_bills', 'id', connection);
     
-    // Format today as YYYY-MM-DD
-    const now = new Date();
-    const offset = now.getTimezoneOffset();
-    const istDate = new Date(now.getTime() + (330 + offset) * 60000);
-    const billingDate = istDate.toISOString().split('T')[0];
-
     let cashPaid = 0.00;
     let upiPaid = 0.00;
     let bankPaid = 0.00;
@@ -295,8 +314,10 @@ router.post('/', async (req, res) => {
 
     await connection.query(
       `INSERT INTO customer_bills 
-       (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, created_at)
-       VALUES (?, ?, 'Kempannavar Industries', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, ?, ?, NOW())`,
+       (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
+        grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
+       VALUES (?, ?, 'Kempannavar Industries', ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -311,7 +332,9 @@ router.post('/', async (req, res) => {
         amountVal,
         cashPaid,
         upiPaid,
-        bankPaid
+        bankPaid,
+        amountVal,
+        approvalId || null
       ]
     );
 
@@ -331,6 +354,7 @@ router.post('/', async (req, res) => {
     );
 
     await connection.commit();
+
     res.json({ ok: true, transactionId, message: 'Can deposit saved and recorded as Sales successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -368,20 +392,52 @@ router.post('/return', async (req, res) => {
 
     const currentBalance = parseFloat(customer.deposit_balance || 0.00);
     
-    if (amountVal > currentBalance) {
-      throw new Error('Return amount exceeds available deposit balance.');
+    // Check pending refunds to avoid double refunding
+    const [pendingRows] = await connection.query(
+      `SELECT COALESCE(SUM(pending_amount), 0) AS pending_total 
+       FROM can_deposit_ledger 
+       WHERE customer_id = ? AND transaction_type = 'Deposit Returned' AND payment_status = 'Pending Approval'`,
+      [customerId]
+    );
+    const pendingTotal = parseFloat(pendingRows[0].pending_total) || 0;
+    const remainingBalance = currentBalance - pendingTotal;
+    
+    if (amountVal > remainingBalance) {
+      throw new Error(`Return amount exceeds available deposit balance (₹${remainingBalance.toFixed(2)}) considering pending refunds.`);
     }
-
-    const newBalance = currentBalance - amountVal;
 
     // 2. Generate refund transaction ID (REF-YYYY-XXXXX)
     const transactionId = await generateId('REF', 'can_deposit_ledger', 'transaction_id', connection);
 
-    // 3. Insert transaction into can_deposit_ledger
+    // 3. Generate date and approval ID BEFORE database updates
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const istDate = new Date(now.getTime() + (330 + offset) * 60000);
+    const expenseDate = istDate.toISOString().split('T')[0];
+
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: transactionId,
+      sourceModule: 'CanDeposit',
+      transactionType: 'Cash Out',
+      referenceNo: transactionId,
+      partyName: `[${customer.id}] ${customer.name}`,
+      description: `Can Deposit Returned — [${customer.id}] ${customer.name} (Refund)`,
+      paymentMethod: paymentMode,
+      cashAmount: paymentMode === 'Cash' ? amountVal : 0,
+      upiAmount: paymentMode === 'UPI' ? amountVal : 0,
+      bankAmount: (paymentMode === 'Bank' || paymentMode === 'Bank Transfer') ? amountVal : 0,
+      amount: amountVal,
+      transactionDate: expenseDate,
+      enteredBy: createdBy,
+      remarks: remarks || ''
+    }, connection);
+
+    // 4. Insert transaction into can_deposit_ledger
     await connection.query(
       `INSERT INTO can_deposit_ledger 
-        (transaction_id, transaction_type, customer_id, customer_name, mobile_number, qty, rate, amount, payment_mode, remarks, balance_after_transaction, created_by, created_at)
-       VALUES (?, 'Deposit Returned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        (transaction_id, transaction_type, customer_id, customer_name, mobile_number, qty, rate, amount, payment_mode, remarks, 
+         balance_after_transaction, payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_by, created_at)
+       VALUES (?, 'Deposit Returned', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, ?, NOW())`,
       [
         transactionId,
         customerId,
@@ -392,40 +448,35 @@ router.post('/return', async (req, res) => {
         amountVal,
         paymentMode,
         remarks || '',
-        newBalance,
+        currentBalance,
+        amountVal,
+        approvalId || null,
         createdBy
       ]
     );
 
-    // 4. Update customer deposit balance
-    await connection.query(
-      `UPDATE customers SET deposit_balance = ? WHERE id = ?`,
-      [newBalance, customerId]
-    );
-
-    // 5. Programmatically create expense record
+    // 5. Programmatically create expense record in pending state
     const expenseId = await generateId('EXP', 'expenses', 'id', connection);
 
-    const now = new Date();
-    const offset = now.getTimezoneOffset();
-    const istDate = new Date(now.getTime() + (330 + offset) * 60000);
-    const expenseDate = istDate.toISOString().split('T')[0];
-
     await connection.query(
-      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
       [
         expenseId,
         expenseDate,
         `Deposit Returned: ${transactionId}`,
         amountVal,
         createdBy,
-        remarks || ''
+        remarks || '',
+        amountVal,
+        approvalId || null
       ]
     );
 
     await connection.commit();
-    res.json({ ok: true, transactionId, message: 'Can deposit returned and recorded as Expense successfully!' });
+
+    res.json({ ok: true, transactionId, message: 'Can deposit returned and queued for verification.' });
   } catch (error) {
     await connection.rollback();
     res.status(400).json({ ok: false, error: error.message });
@@ -495,6 +546,12 @@ router.delete('/:id', async (req, res) => {
         [`Deposit Returned: ${transaction.transaction_id}`]
       );
     }
+
+    // Clean up associated payment approval
+    await connection.query(
+      `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'CanDeposit'`,
+      [transaction.transaction_id]
+    );
 
     // 3. Delete from can_deposit_ledger
     await connection.query(

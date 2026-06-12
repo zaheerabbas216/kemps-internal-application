@@ -132,7 +132,7 @@ const InventoryHistory = () => {
   const fetchProductsAndCategories = async () => {
     try {
       const catRes = await api.get('/raw-materials/categories');
-      const matRes = await api.get('/raw-materials', { params: { limit: 200 } });
+      const matRes = await api.get('/raw-materials', { params: { limit: 200, activeOnly: true } });
       
       if (catRes.data.ok) setCategories(catRes.data.categories || []);
       if (matRes.data.ok) setAllMaterials(matRes.data.materials || []);
@@ -1506,7 +1506,7 @@ const InventoryHistory = () => {
       {/* DELETE DIALOG MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

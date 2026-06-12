@@ -32,6 +32,8 @@ import BankDepositHistory from './pages/BankDepositHistory';
 import MaintenanceForm from './pages/MaintenanceForm';
 import MaintenanceHistory from './pages/MaintenanceHistory';
 import Dashboard from './pages/Dashboard';
+import TotalSales from './pages/TotalSales';
+import PaymentApproval from './pages/PaymentApproval';
 
 // Route guard for authenticated pages
 const ProtectedRoute = () => {
@@ -87,6 +89,8 @@ function App() {
             <Route path="/maintenance-form" element={<MaintenanceForm />} />
             <Route path="/maintenance-history" element={<MaintenanceHistory />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/total-sales" element={<TotalSales />} />
+            <Route path="/payment-approval" element={<PaymentApproval />} />
             <Route path="*" element={<div className="p-8">Page under construction...</div>} />
           </Route>
         </Route>

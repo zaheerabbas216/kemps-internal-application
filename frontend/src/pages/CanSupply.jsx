@@ -36,10 +36,13 @@ const CanSupply = () => {
   // Workspace views: 'supply' | 'return' | 'ledger'
   const [workspaceSubTab, setWorkspaceSubTab] = useState('supply');
 
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+
   // Form states
   const [supplyForm, setSupplyForm] = useState({
     supplyType: 'Company Can',
-    product: '20 Ltr Can',
+    product: '',
     quantity: '',
     rate: '0',
     notes: '',
@@ -76,7 +79,7 @@ const CanSupply = () => {
   const [modalSelectedCustomer, setModalSelectedCustomer] = useState(null);
   const [modalSupplyForm, setModalSupplyForm] = useState({
     supplyType: 'Company Can',
-    product: '20 Ltr Can',
+    product: '',
     quantity: '',
     rate: '0',
     notes: '',
@@ -95,7 +98,30 @@ const CanSupply = () => {
   useEffect(() => {
     fetchDashboardStats();
     fetchActiveBalances();
+    fetchActiveProducts();
   }, []);
+
+  const fetchActiveProducts = async () => {
+    try {
+      setLoadingProducts(true);
+      const res = await api.get('/finished-products', { params: { limit: 100 } });
+      if (res.data.ok) {
+        const products = (res.data.products || []).filter(
+          p => p.name === '20 Ltr Can' || p.name === 'Dispenser'
+        );
+        setAvailableProducts(products);
+        if (products.length > 0) {
+          const firstProduct = products[0].name;
+          setSupplyForm(prev => ({ ...prev, product: firstProduct }));
+          setModalSupplyForm(prev => ({ ...prev, product: firstProduct }));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch finished products:', err);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
 
   // Suggestions click outside listener
   useEffect(() => {
@@ -255,7 +281,7 @@ const CanSupply = () => {
         setSupplySuccess('Supply logged successfully!');
         setSupplyForm({
           supplyType: 'Company Can',
-          product: '20 Ltr Can',
+          product: availableProducts.length > 0 ? availableProducts[0].name : '',
           quantity: '',
           rate: '0',
           notes: '',
@@ -468,7 +494,7 @@ const CanSupply = () => {
     setModalSelectedCustomer(null);
     setModalSupplyForm({
       supplyType: 'Company Can',
-      product: '20 Ltr Can',
+      product: availableProducts.length > 0 ? availableProducts[0].name : '',
       quantity: '',
       rate: '0',
       notes: '',
@@ -564,7 +590,7 @@ const CanSupply = () => {
         setModalSupplySuccess('Supply logged successfully!');
         setModalSupplyForm({
           supplyType: 'Company Can',
-          product: '20 Ltr Can',
+          product: availableProducts.length > 0 ? availableProducts[0].name : '',
           quantity: '',
           rate: '0',
           notes: '',
@@ -1041,9 +1067,15 @@ const CanSupply = () => {
                           value={supplyForm.product}
                           onChange={(e) => setSupplyForm(prev => ({ ...prev, product: e.target.value }))}
                           className="w-full bg-white border border-slate-200 rounded-xl px-3.5 h-11 text-sm font-semibold outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                          disabled={availableProducts.length === 0}
                         >
-                          <option value="20 Ltr Can">20 Ltr Can</option>
-                          <option value="Dispenser">Dispenser</option>
+                          {availableProducts.length === 0 ? (
+                            <option value="">No Active Cans/Dispensers</option>
+                          ) : (
+                            availableProducts.map(p => (
+                              <option key={p.id} value={p.name}>{p.name}</option>
+                            ))
+                          )}
                         </select>
                       </div>
 
@@ -1653,7 +1685,7 @@ const CanSupply = () => {
       {/* NEW CAN SUPPLY / BILLING ENTRY MODAL */}
       {isNewSupplyModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-3xl max-w-xl p-0 border border-slate-200 shadow-2xl bg-white overflow-hidden flex flex-col h-[600px] pointer-events-auto">
+          <div className="modal-box rounded-3xl max-w-xl p-0 border border-slate-200 shadow-2xl bg-white overflow-hidden flex flex-col max-h-[90vh] h-[600px] pointer-events-auto">
             {/* Modal Header */}
             <div className="bg-emerald-600 p-6 text-white relative shrink-0">
               <h3 className="text-xl font-black italic tracking-tight">CAN SUPPLY / BILLING ENTRY</h3>
@@ -1755,9 +1787,15 @@ const CanSupply = () => {
                         value={modalSupplyForm.product}
                         onChange={(e) => setModalSupplyForm(prev => ({ ...prev, product: e.target.value }))}
                         className="w-full bg-white border border-slate-200 rounded-xl px-3.5 h-11 text-xs font-semibold outline-none focus:border-primary transition-all"
+                        disabled={availableProducts.length === 0}
                       >
-                        <option value="20 Ltr Can">20 Ltr Can</option>
-                        <option value="Dispenser">Dispenser</option>
+                        {availableProducts.length === 0 ? (
+                          <option value="">No Active Cans/Dispensers</option>
+                        ) : (
+                          availableProducts.map(p => (
+                            <option key={p.id} value={p.name}>{p.name}</option>
+                          ))
+                        )}
                       </select>
                     </div>
 

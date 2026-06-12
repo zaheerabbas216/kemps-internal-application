@@ -822,17 +822,23 @@ const SupplierPayments = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(bill)}
-                          className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-650 border border-slate-200 rounded-xl text-xs font-bold transition-all"
+                          className="px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-655 border border-slate-200 rounded-xl text-xs font-bold transition-all"
                         >
                           ✏️ Edit
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenPayment(bill)}
-                          className="px-4 py-2 bg-white hover:bg-blue-50/50 text-blue-650 border-2 border-blue-550 rounded-xl text-xs font-black transition-all flex items-center gap-1.5"
-                        >
-                          💳 Make Payment
-                        </button>
+                        {bill.has_pending_payment ? (
+                          <span className="px-4 py-2 bg-amber-50 text-amber-600 border border-amber-200 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-not-allowed">
+                            ⏳ Pending Verification
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenPayment(bill)}
+                            className="px-4 py-2 bg-white hover:bg-blue-50/50 text-blue-655 border-2 border-blue-550 rounded-xl text-xs font-black transition-all flex items-center gap-1.5"
+                          >
+                            💳 Make Payment
+                          </button>
+                        )}
                       </>
                     )}
                   </div>
@@ -853,20 +859,21 @@ const SupplierPayments = () => {
                   <th className="py-4 px-6 text-left">Bill No</th>
                   <th className="py-4 px-6 text-left">Amount (₹)</th>
                   <th className="py-4 px-6 text-left">Mode</th>
+                  <th className="py-4 px-6 text-center">Status</th>
                   <th className="py-4 px-6 text-left">Notes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {loading ? (
                   <tr>
-                    <td colSpan="6" className="py-20 text-center">
+                    <td colSpan="7" className="py-20 text-center">
                       <span className="loading loading-spinner text-primary block mx-auto mb-2"></span>
                       Loading payment history...
                     </td>
                   </tr>
                 ) : payments.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="py-20 text-center text-slate-400 font-medium italic">
+                    <td colSpan="7" className="py-20 text-center text-slate-400 font-medium italic">
                       No payments found.
                     </td>
                   </tr>
@@ -889,6 +896,16 @@ const SupplierPayments = () => {
                           {p.payment_mode}
                         </span>
                       </td>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                          p.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                          p.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                          p.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                          'bg-slate-50 text-slate-500'
+                        }`}>
+                          {(p.payment_status || 'Pending Approval').toUpperCase()}
+                        </span>
+                      </td>
                       <td className="py-4 px-6 text-[13px] text-slate-400 max-w-[200px] truncate" title={p.notes || ''}>
                         {p.notes || '—'}
                       </td>
@@ -904,7 +921,7 @@ const SupplierPayments = () => {
       {/* EDIT CREDIT BILL MODAL */}
       {isEditModalOpen && editingBill && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[550px] flex flex-col overflow-hidden animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[550px] max-h-[90vh] overflow-y-auto flex flex-col overflow-hidden animate-fade-in">
             {/* Modal Header */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight uppercase">
@@ -1029,7 +1046,7 @@ const SupplierPayments = () => {
       {/* MAKE PAYMENT MODAL */}
       {isPaymentModalOpen && payingBill && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[550px] flex flex-col overflow-hidden animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[550px] max-h-[90vh] overflow-y-auto flex flex-col overflow-hidden animate-fade-in">
             {/* Modal Header */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight uppercase">

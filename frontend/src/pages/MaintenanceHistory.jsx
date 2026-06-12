@@ -494,7 +494,7 @@ const MaintenanceHistory = () => {
       {/* EDIT MODAL DIALOG */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] h-[660px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[600px] max-h-[90vh] h-[660px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Header — blue like Expense */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight uppercase">
@@ -684,7 +684,7 @@ const MaintenanceHistory = () => {
       {/* VIEW SERVICE DETAILS MODAL */}
       {isViewModalOpen && viewingRecord && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-150">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>📋</span> Service Details
@@ -758,7 +758,7 @@ const MaintenanceHistory = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>
