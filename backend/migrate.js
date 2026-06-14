@@ -4,53 +4,234 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 dotenv.config();
 
+function quoteIdentifier(identifier) {
+  return `\`${String(identifier).replaceAll('`', '``')}\``;
+}
+
+async function ensureCoreTables(connection) {
+  console.log('Creating core tables if not exists...');
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(50) UNIQUE NOT NULL,
+      password VARCHAR(255) NOT NULL,
+      name VARCHAR(100),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+      name VARCHAR(200) NOT NULL,
+      phone VARCHAR(15) UNIQUE NOT NULL,
+      gstin VARCHAR(20),
+      address TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS company_details (
+      id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+      company_name VARCHAR(200) NOT NULL,
+      phone_number VARCHAR(15),
+      gst_number VARCHAR(20),
+      bank_name VARCHAR(200),
+      account_number VARCHAR(50),
+      ifsc_code VARCHAR(20),
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS raw_material_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS raw_materials (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      category_id INT NOT NULL,
+      sub_product_name VARCHAR(255) NOT NULL,
+      unit VARCHAR(20) NOT NULL,
+      status INT DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES raw_material_categories(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS finished_product_categories (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) UNIQUE NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS finished_products (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(255) NOT NULL,
+      category_id INT,
+      status INT DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (category_id) REFERENCES finished_product_categories(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS expenses (
+      id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+      expense_date DATE NOT NULL,
+      particulars VARCHAR(255) NOT NULL,
+      amount DECIMAL(10, 2) NOT NULL,
+      entered_by VARCHAR(100) NOT NULL,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS inventory_bills (
+      id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+      bill_date DATE NOT NULL,
+      supplier_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      billed_to VARCHAR(100) NOT NULL,
+      bill_number VARCHAR(50),
+      payment_method VARCHAR(20) NOT NULL,
+      sub_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      total_tax DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      additional_expenses DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      grand_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (supplier_id) REFERENCES company_details(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS inventory_bill_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      bill_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      raw_material_id INT NOT NULL,
+      unit VARCHAR(20) NOT NULL,
+      bags_box DECIMAL(10, 2) DEFAULT 0.00,
+      total_quantity DECIMAL(12, 2) NOT NULL,
+      rate_per_unit DECIMAL(12, 2) NOT NULL,
+      qty_in_pcs DECIMAL(12, 2) DEFAULT 0.00,
+      per_pc_rate DECIMAL(12, 2) DEFAULT 0.00,
+      amount DECIMAL(12, 2) NOT NULL,
+      tax_percent DECIMAL(5, 2) DEFAULT 0.00,
+      tax_amount DECIMAL(12, 2) DEFAULT 0.00,
+      expenses DECIMAL(12, 2) DEFAULT 0.00,
+      final_total DECIMAL(12, 2) NOT NULL,
+      remarks TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (bill_id) REFERENCES inventory_bills(id) ON DELETE CASCADE,
+      FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS stock_register (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      item_type VARCHAR(20) NOT NULL,
+      item_id INT NOT NULL,
+      transaction_type VARCHAR(20) NOT NULL,
+      reference_id VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  console.log('Core tables verified.');
+}
+
 export async function runMigration(shouldExit = false) {
   let connection;
   try {
+    const dbName = process.env.DB_NAME || 'kemps_inventory';
+
     connection = await mysql.createConnection({
       host: process.env.DB_HOST || 'localhost',
       user: process.env.DB_USER || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || 'kemps_inventory'
+      password: process.env.DB_PASSWORD || ''
     });
 
-    console.log('Running schema migrations...');
+    await connection.query(
+      `CREATE DATABASE IF NOT EXISTS ${quoteIdentifier(dbName)} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+    );
+    await connection.query(`USE ${quoteIdentifier(dbName)}`);
 
-    // 1. Check if column `is_manual` exists in `inventory_bills`
-    const dbName = process.env.DB_NAME || 'kemps_inventory';
-    const [cols] = await connection.query(
-      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'inventory_bills' AND COLUMN_NAME = 'is_manual'`,
+    console.log('Running schema migrations...');
+    await ensureCoreTables(connection);
+
+    // 1. Verify inventory_bills table exists before altering it
+    const [tableExists] = await connection.query(
+      `SELECT TABLE_NAME
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = ?
+      AND TABLE_NAME = 'inventory_bills'`,
       [dbName]
     );
 
-    if (cols.length === 0) {
-      console.log('Adding is_manual, advance_paid, credit_note, status columns to inventory_bills...');
-      await connection.query(`
-        ALTER TABLE inventory_bills
-        ADD COLUMN is_manual BOOLEAN DEFAULT FALSE,
-        ADD COLUMN advance_paid DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-        ADD COLUMN credit_note DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
-        ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
-      `);
-      console.log('Columns added successfully.');
-
-      // Update existing bills:
-      // If payment method is not 'Credit', set status to 'SETTLED'
-      console.log('Initializing bill statuses...');
-      await connection.query(`
-        UPDATE inventory_bills 
-        SET status = 'SETTLED' 
-        WHERE payment_method != 'Credit'
-      `);
-      await connection.query(`
-        UPDATE inventory_bills 
-        SET status = 'PENDING' 
-        WHERE payment_method = 'Credit'
-      `);
-      console.log('Existing statuses initialized.');
+    if (tableExists.length === 0) {
+      console.warn(
+        'inventory_bills table does not exist. Skipping inventory_bills migration.'
+      );
     } else {
-      console.log('inventory_bills table columns already up-to-date.');
+      const [cols] = await connection.query(
+        `SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = ?
+        AND TABLE_NAME = 'inventory_bills'
+        AND COLUMN_NAME = 'is_manual'`,
+        [dbName]
+      );
+
+      if (cols.length === 0) {
+        console.log(
+          'Adding is_manual, advance_paid, credit_note, status columns to inventory_bills...'
+        );
+
+        await connection.query(`
+          ALTER TABLE inventory_bills
+          ADD COLUMN is_manual BOOLEAN DEFAULT FALSE,
+          ADD COLUMN advance_paid DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          ADD COLUMN credit_note DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+          ADD COLUMN status VARCHAR(20) NOT NULL DEFAULT 'PENDING'
+        `);
+
+        console.log('Columns added successfully.');
+
+        await connection.query(`
+          UPDATE inventory_bills
+          SET status = 'SETTLED'
+          WHERE payment_method != 'Credit'
+        `);
+
+        await connection.query(`
+          UPDATE inventory_bills
+          SET status = 'PENDING'
+          WHERE payment_method = 'Credit'
+        `);
+
+        console.log('Existing statuses initialized.');
+      } else {
+        console.log('inventory_bills table columns already up-to-date.');
+      }
     }
 
     // 2. Create supplier_payments table if not exists
