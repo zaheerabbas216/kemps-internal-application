@@ -1,7 +1,22 @@
 import axios from 'axios';
 
+const cloudflareApiBaseUrl = 'https://kmps-bkend-fullstack-application.bitwizard.online/api';
+const localApiBaseUrl = 'http://localhost:8000/api';
+
+function getApiBaseUrl() {
+  if (import.meta.env.VITE_API_BASE_URL) {
+    return import.meta.env.VITE_API_BASE_URL;
+  }
+
+  if (window.location.hostname === 'kmps-fed-fullstack-application.bitwizard.online') {
+    return cloudflareApiBaseUrl;
+  }
+
+  return localApiBaseUrl;
+}
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api',
+  baseURL: getApiBaseUrl(),
 });
 
 // Request interceptor to attach JWT token to all API calls
