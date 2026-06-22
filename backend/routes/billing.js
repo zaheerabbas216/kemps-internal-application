@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
+import { addLedgerEntry, deleteLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -491,7 +492,7 @@ router.post('/', async (req, res) => {
        (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
         grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
         payment_status, pending_amount, approved_amount, rejected_amount, approval_id, cogs, profit, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 0.00, ?, ?, ?, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 0.00, ?, ?, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -548,6 +549,30 @@ router.post('/', async (req, res) => {
         `UPDATE customer_orders SET status = 'SUPPLIED', supplied_by = ?, supplied_at = NOW() WHERE id = ?`,
         [suppliedBy, orderId]
       );
+    }
+
+    // Customer Ledger Hook: SALE debit
+    await addLedgerEntry(connection, {
+      date: billingDate,
+      customerId: customerId,
+      entryType: 'SALE',
+      referenceNo: billId,
+      particular: `Sale Invoice ${billId}`,
+      debit: billGrandTotal,
+      credit: 0.00
+    });
+
+    // Customer Ledger Hook: PAYMENT credit if credit balance is applied
+    if (appliedCredit > 0) {
+      await addLedgerEntry(connection, {
+        date: billingDate,
+        customerId: customerId,
+        entryType: 'PAYMENT',
+        referenceNo: billId,
+        particular: `Credit Balance Applied for ${billId}`,
+        debit: 0.00,
+        credit: appliedCredit
+      });
     }
 
     await connection.commit();
@@ -782,6 +807,18 @@ router.put('/:id', async (req, res) => {
       );
     }
 
+    // Customer Ledger Hook: Clear old entries and insert updated SALE debit
+    await deleteLedgerEntriesForReference(connection, id);
+    await addLedgerEntry(connection, {
+      date: billingDate,
+      customerId: customerId,
+      entryType: 'SALE',
+      referenceNo: id,
+      particular: `Sale Invoice ${id}`,
+      debit: parseFloat(grandTotal) || 0.00,
+      credit: 0.00
+    });
+
     await connection.commit();
     res.json({ ok: true, message: 'Invoice updated successfully!' });
   } catch (error) {
@@ -852,6 +889,9 @@ router.delete('/:id', async (req, res) => {
       `UPDATE loading_sessions SET status = 'ACTIVE', bill_id = NULL WHERE bill_id = ?`,
       [id]
     );
+
+    // Customer Ledger Hook: delete bill ledger records
+    await deleteLedgerEntriesForReference(connection, id);
 
     await connection.commit();
     res.json({ ok: true, message: 'Invoice deleted successfully.' });

@@ -25,6 +25,9 @@ import taskRoutes from './routes/tasks.js';
 import salesReportRoutes from './routes/salesReport.js';
 import paymentApprovalRoutes from './routes/paymentApproval.js';
 import costingRoutes from './routes/costing.js';
+import stockCorrectionsRoutes from './routes/stockCorrections.js';
+import accountsLedgerRoutes from './routes/accountsLedger.js';
+import supplierLedgerRoutes from './routes/supplierLedger.js';
 import authMiddleware from './middleware/auth.js';
 
 const app = express();
@@ -58,6 +61,9 @@ app.use('/api/tasks', authMiddleware, taskRoutes);
 app.use('/api/sales-report', authMiddleware, salesReportRoutes);
 app.use('/api/payment-approval', authMiddleware, paymentApprovalRoutes);
 app.use('/api/costing', authMiddleware, costingRoutes);
+app.use('/api/stock-corrections', authMiddleware, stockCorrectionsRoutes);
+app.use('/api/accounts-ledger', authMiddleware, accountsLedgerRoutes);
+app.use('/api/supplier-ledger', authMiddleware, supplierLedgerRoutes);
 
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {

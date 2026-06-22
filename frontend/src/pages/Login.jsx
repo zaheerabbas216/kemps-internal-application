@@ -29,6 +29,7 @@ const Login = () => {
       if (response.data.ok) {
         localStorage.setItem('kemps_logged_in', 'true');
         localStorage.setItem('kemps_username', response.data.user.username);
+        localStorage.setItem('kemps_name', response.data.user.name || response.data.user.username);
         localStorage.setItem('kemps_auth_token', response.data.token);
         navigate('/customer');
       } else {

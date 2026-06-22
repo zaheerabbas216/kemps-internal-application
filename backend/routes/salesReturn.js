@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { addLedgerEntry } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -312,6 +313,17 @@ router.post('/', async (req, res) => {
         [creditBalanceAddition, customerId]
       );
     }
+
+    // Customer Ledger Hook: PAYMENT credit representing Sales Return / Credit Note
+    await addLedgerEntry(connection, {
+      date: returnDate,
+      customerId: customerId,
+      entryType: 'PAYMENT',
+      referenceNo: returnId,
+      particular: `Sales Return (Credit Note) — Bill ${billId}`,
+      debit: 0.00,
+      credit: totalReturnAmount
+    });
 
     await connection.commit();
     res.json({

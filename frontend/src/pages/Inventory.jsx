@@ -281,6 +281,37 @@ const Inventory = () => {
       } else {
         // Non-preforms: perPcRate is entered manually — do not overwrite it.
         // totalQuantity, ratePerUnit, qtyInPcs, amount, etc. are also entered manually.
+        const material = allMaterials.find(m => m.id === parseInt(row.rawMaterialId, 10));
+        const qtyPerKg = material ? parseFloat(material.qty_in_pc_per_kg) : 0;
+        
+        if (row.unit?.toLowerCase() === 'kg' && qtyPerKg > 0) {
+          const qty = parseFloat(row.totalQuantity) || 0;
+          if (name === 'totalQuantity' || name === 'rawMaterialId' || name === 'unit') {
+            if (row.totalQuantity !== '') {
+              row.qtyInPcs = Math.round(qty * qtyPerKg).toString();
+            } else {
+              row.qtyInPcs = '';
+            }
+          }
+          if (name === 'ratePerUnit' || name === 'rawMaterialId' || name === 'unit') {
+            if (row.ratePerUnit !== '') {
+              row.perPcRate = (rate / qtyPerKg).toFixed(4);
+            } else {
+              row.perPcRate = '';
+            }
+          }
+          if (name === 'totalQuantity' || name === 'ratePerUnit' || name === 'rawMaterialId' || name === 'unit') {
+            if (row.totalQuantity !== '' && row.ratePerUnit !== '') {
+              row.amount = (qty * rate).toFixed(2);
+            }
+          }
+        }
+      }
+
+      // PCS specific sync
+      if (row.unit?.toLowerCase() === 'pcs') {
+        row.qtyInPcs = row.totalQuantity;
+        row.perPcRate = row.ratePerUnit;
       }
 
       const amt = parseFloat(row.amount) || 0;
@@ -497,7 +528,7 @@ const Inventory = () => {
                 <th>Sub Product</th>
                 <th>Qty</th>
                 <th>Unit</th>
-                <th>Bags/Box</th>
+                <th>BAGS/BOX/ROLLS/CUTS</th>
                 <th>Rate (₹)</th>
                 <th>Amount (₹)</th>
                 <th>Tax (%)</th>
@@ -693,6 +724,10 @@ const Inventory = () => {
                 {billItems.map((item, index) => {
                   const category = categories.find(c => c.id === parseInt(item.categoryId, 10));
                   const isPreforms = category && category.name.toLowerCase() === 'preforms';
+                  const material = allMaterials.find(m => m.id === parseInt(item.rawMaterialId, 10));
+                  const isKgWithQtyPerKg = item.unit?.toLowerCase() === 'kg' && material && parseFloat(material.qty_in_pc_per_kg) > 0;
+                  const isReadOnlyQtyInPcs = isPreforms || item.unit?.toLowerCase() === 'pcs' || isKgWithQtyPerKg;
+                  const isReadOnlyAmount = isPreforms || isKgWithQtyPerKg;
                   return (
                     <div key={index} className="border-2 border-blue-500 rounded-3xl p-6 bg-white relative space-y-5 shadow-sm">
                     {/* Header of product item */}
@@ -753,6 +788,30 @@ const Inventory = () => {
                         </select>
                       </div>
 
+                      {/* Total Quantity */}
+                      <div className="space-y-1.5">
+                        <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                          Total Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={item.totalQuantity}
+                          readOnly={isPreforms}
+                          onChange={(e) => handleItemChange(index, 'totalQuantity', e.target.value)}
+                          className={`w-full h-11 px-4 rounded-xl border border-slate-200 outline-none text-sm font-medium transition-all ${
+                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
+                          }`}
+                          placeholder="0.00"
+                          required
+                        />
+                        {isPreforms && (
+                          <span className="text-[10px] font-bold text-slate-450 mt-1 block">
+                            Calculated automatically (BAGS/BOX/ROLLS/CUTS * 25).
+                          </span>
+                        )}
+                      </div>
+
                       {/* Unit */}
                       <div className="space-y-1.5">
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
@@ -773,7 +832,7 @@ const Inventory = () => {
                       {/* Bags / Box */}
                       <div className="space-y-1.5">
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Bags / Box
+                          BAGS/BOX/ROLLS/CUTS
                         </label>
                         <input
                           type="number"
@@ -784,28 +843,24 @@ const Inventory = () => {
                         />
                       </div>
 
-                      {/* Total Quantity */}
+                      {/* Qty in Pcs */}
                       <div className="space-y-1.5">
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Total Quantity *
+                          Qty in Pcs
                         </label>
                         <input
-                          type="number"
-                          step="any"
-                          value={item.totalQuantity}
-                          readOnly={isPreforms}
-                          onChange={(e) => handleItemChange(index, 'totalQuantity', e.target.value)}
-                          className={`w-full h-11 px-4 rounded-xl border border-slate-200 outline-none text-sm font-medium transition-all ${
-                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
+                          type={isReadOnlyQtyInPcs ? "text" : "number"}
+                          value={item.qtyInPcs}
+                          readOnly={isReadOnlyQtyInPcs}
+                          onChange={(e) => handleItemChange(index, 'qtyInPcs', e.target.value)}
+                          className={`w-full h-11 px-4 rounded-xl border border-slate-200 outline-none text-sm font-medium ${
+                            isReadOnlyQtyInPcs ? 'bg-slate-50 text-slate-550 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
                           }`}
-                          placeholder="0.00"
-                          required
+                          placeholder={isReadOnlyQtyInPcs ? "0" : "0.00"}
                         />
-                        {isPreforms && (
-                          <span className="text-[10px] font-bold text-slate-450 mt-1 block">
-                            Calculated automatically (Bags/Box * 25).
-                          </span>
-                        )}
+                        <span className="text-[10px] font-bold text-slate-400 mt-1 block">
+                          {isReadOnlyQtyInPcs ? 'Calculated automatically.' : 'Enter manually.'}
+                        </span>
                       </div>
 
                       {/* Rate per Unit */}
@@ -823,41 +878,21 @@ const Inventory = () => {
                         />
                       </div>
 
-                      {/* Qty in Pcs */}
-                      <div className="space-y-1.5">
-                        <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Qty in Pcs
-                        </label>
-                        <input
-                          type={isPreforms ? "text" : "number"}
-                          value={item.qtyInPcs}
-                          readOnly={isPreforms}
-                          onChange={(e) => handleItemChange(index, 'qtyInPcs', e.target.value)}
-                          className={`w-full h-11 px-4 rounded-xl border border-slate-200 outline-none text-sm font-medium ${
-                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
-                          }`}
-                          placeholder={isPreforms ? "0" : "0.00"}
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                          {isPreforms ? 'Calculated automatically from Preform weight.' : 'Enter manually.'}
-                        </span>
-                      </div>
-
                       {/* Per PC Rate */}
                       <div className="space-y-1.5">
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                           Per PC Rate
                         </label>
-                        {isPreforms ? (
+                        {isPreforms || item.unit?.toLowerCase() === 'pcs' || isKgWithQtyPerKg ? (
                           <>
                             <input
                               type="text"
-                              value={item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${item.perPcRate}` : '₹ 0.00'}
+                              value={item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${parseFloat(item.perPcRate).toFixed(4)}` : '₹ 0.00'}
                               readOnly
-                              className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 outline-none text-sm font-bold cursor-not-allowed"
+                              className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-550 outline-none text-sm font-bold cursor-not-allowed"
                             />
                             <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                              Calculated automatically from Preform weight.
+                              Calculated automatically.
                             </span>
                           </>
                         ) : (
@@ -880,21 +915,21 @@ const Inventory = () => {
                       {/* Amount (Manual) */}
                       <div className="space-y-1.5">
                         <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                          {isPreforms ? "Amount (Auto) *" : "Amount (Manual) *"}
+                          {isReadOnlyAmount ? "Amount (Auto) *" : "Amount (Manual) *"}
                         </label>
                         <input
                           type="number"
                           step="any"
                           value={item.amount}
-                          readOnly={isPreforms}
+                          readOnly={isReadOnlyAmount}
                           onChange={(e) => handleItemChange(index, 'amount', e.target.value)}
                           placeholder="Enter amount"
                           className={`w-full h-11 px-4 rounded-xl border border-slate-200 outline-none text-sm font-medium ${
-                            isPreforms ? 'bg-slate-50 text-slate-550 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
+                            isReadOnlyAmount ? 'bg-slate-50 text-slate-550 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
                           }`}
                           required
                         />
-                        {isPreforms && (
+                        {isReadOnlyAmount && (
                           <span className="text-[10px] font-bold text-slate-450 mt-1 block">
                             Calculated automatically (Qty * Rate).
                           </span>
@@ -1250,7 +1285,7 @@ const Inventory = () => {
                     <div key={item.id} className="border border-slate-100 rounded-xl p-4 text-xs font-semibold text-slate-650 bg-[#fafcff]/50 space-y-2">
                       <div className="flex justify-between border-b border-slate-100 pb-1 mb-2">
                         <span className="font-bold text-[11px] text-primary">ITEM #{idx + 1}: {item.category_name} &gt; {item.sub_product_name}</span>
-                        <span className="text-[10px] text-slate-400">Unit: {item.unit} | Bags/Box: {item.bags_box || 0}</span>
+                        <span className="text-[10px] text-slate-400">Unit: {item.unit} | BAGS/BOX/ROLLS/CUTS: {item.bags_box || 0}</span>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                         <div><span className="text-slate-400 block text-[9px] uppercase">Qty</span> {item.total_quantity}</div>

@@ -99,6 +99,7 @@ router.get('/raw-materials', async (req, res) => {
         rm.id, 
         rm.sub_product_name, 
         rm.unit, 
+        rm.qty_in_pc_per_kg,
         rmc.name AS category_name,
         COALESCE(rmc_rule.use_purchase_cost, 1) AS use_purchase_cost,
         COALESCE(rmc_rule.manual_cost, 0.0000) AS manual_cost,

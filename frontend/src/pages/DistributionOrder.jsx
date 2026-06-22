@@ -62,7 +62,7 @@ const DistributionOrder = () => {
     paymentMode: 'Credit',
     advanceAmount: '0',
     discount: '0',
-    tax: '18'
+    tax: '0'
   });
 
   const [formItems, setFormItems] = useState([
@@ -276,9 +276,7 @@ const DistributionOrder = () => {
   const discountVal = parseFloat(orderInfo.discount) || 0;
   const taxPercent = parseFloat(orderInfo.tax) || 0;
   
-  const totalAfterDiscount = Math.max(0, subTotal - discountVal);
-  const taxVal = totalAfterDiscount * (taxPercent / 100);
-  const grandTotal = totalAfterDiscount + taxVal;
+  const grandTotal = Math.max(0, subTotal - discountVal);
   
   const advanceVal = parseFloat(orderInfo.advanceAmount) || 0;
   const pendingAmount = Math.max(0, grandTotal - advanceVal);
@@ -300,7 +298,7 @@ const DistributionOrder = () => {
       paymentMode: 'Credit',
       advanceAmount: '0',
       discount: '0',
-      tax: '18'
+      tax: '0'
     });
     setFormItems([{ id: Math.random().toString(36).substring(2, 9), finishedProductId: '', quantity: '', rate: '', amount: 0 }]);
     setNameSearchText('');
@@ -337,7 +335,7 @@ const DistributionOrder = () => {
         deliveryInstructions: '',
         subTotal,
         discount: discountVal,
-        tax: taxPercent,
+        tax: 0,
         grandTotal,
         paymentMode: orderInfo.paymentMode,
         advanceAmount: advanceVal,

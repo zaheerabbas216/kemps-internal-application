@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { addLedgerEntry, addSupplierLedgerEntry } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -306,6 +307,24 @@ router.put('/:approvalId/approve', async (req, res) => {
          WHERE approval_id = ?`,
         [approvalId]
       );
+
+      // Customer Ledger Hook: PAYMENT credit for Billing downpayment
+      const [billRows] = await connection.query(
+        `SELECT customer_id FROM customer_bills WHERE approval_id = ?`,
+        [approvalId]
+      );
+      if (billRows.length > 0) {
+        const customerId = billRows[0].customer_id;
+        await addLedgerEntry(connection, {
+          date: entry.transaction_date,
+          customerId: customerId,
+          entryType: 'PAYMENT',
+          referenceNo: entry.transaction_id,
+          particular: `Payment Received (At Invoice Creation)`,
+          debit: 0.00,
+          credit: amount
+        });
+      }
     } else if (entry.source_module === 'CreditBalance') {
       // Fetch details from customer_payments
       const [cpRows] = await connection.query(
@@ -342,6 +361,27 @@ router.put('/:approvalId/approve', async (req, res) => {
            WHERE id = ?`,
           [bill_id]
         );
+
+        // Customer Ledger Hook: PAYMENT credit for additional payment
+        const [cpDetails] = await connection.query(
+          `SELECT cp.id AS payment_id, cb.customer_id 
+           FROM customer_payments cp
+           JOIN customer_bills cb ON cp.bill_id = cb.id
+           WHERE cp.approval_id = ?`,
+          [approvalId]
+        );
+        if (cpDetails.length > 0) {
+          const { payment_id, customer_id } = cpDetails[0];
+          await addLedgerEntry(connection, {
+            date: entry.transaction_date,
+            customerId: customer_id,
+            entryType: 'PAYMENT',
+            referenceNo: payment_id,
+            particular: `Payment Received — Invoice ${bill_id}`,
+            debit: 0.00,
+            credit: amount
+          });
+        }
       }
     } else if (entry.source_module === 'Expense') {
       await connection.query(
@@ -355,11 +395,11 @@ router.put('/:approvalId/approve', async (req, res) => {
       );
     } else if (entry.source_module === 'SupplierPayment') {
       const [spRows] = await connection.query(
-        `SELECT bill_id, pending_amount FROM supplier_payments WHERE approval_id = ? FOR UPDATE`,
+        `SELECT id, bill_id, pending_amount FROM supplier_payments WHERE approval_id = ? FOR UPDATE`,
         [approvalId]
       );
       if (spRows.length > 0) {
-        const { bill_id, pending_amount } = spRows[0];
+        const { id: payment_id, bill_id, pending_amount } = spRows[0];
 
         await connection.query(
           `UPDATE supplier_payments 
@@ -374,7 +414,7 @@ router.put('/:approvalId/approve', async (req, res) => {
 
         // Recalculate bill status
         const [billRows] = await connection.query(
-          `SELECT grand_total, advance_paid, credit_note FROM inventory_bills WHERE id = ? FOR UPDATE`,
+          `SELECT grand_total, advance_paid, credit_note, supplier_id FROM inventory_bills WHERE id = ? FOR UPDATE`,
           [bill_id]
         );
         if (billRows.length > 0) {
@@ -393,6 +433,17 @@ router.put('/:approvalId/approve', async (req, res) => {
             `UPDATE inventory_bills SET status = ? WHERE id = ?`,
             [newStatus, bill_id]
           );
+
+          // Supplier Ledger Hook: PAYMENT debit
+          await addSupplierLedgerEntry(connection, {
+            date: entry.transaction_date,
+            supplierId: bill.supplier_id,
+            entryType: 'PAYMENT',
+            referenceNo: payment_id,
+            particular: `Payment Made — Bill ${bill_id}`,
+            debit: amount,
+            credit: 0.00
+          });
         }
       }
     } else if (entry.source_module === 'CanDeposit') {

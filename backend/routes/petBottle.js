@@ -64,7 +64,7 @@ router.get('/today', async (req, res) => {
     let whereClause = 'WHERE pb.batch_date = ?';
 
     if (search.trim()) {
-      whereClause += ' AND (fp.name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)';
+      whereClause += ' AND (fp.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)';
       const wildSearch = `%${search.trim()}%`;
       queryParams.push(wildSearch, wildSearch, wildSearch);
     }
@@ -74,7 +74,7 @@ router.get('/today', async (req, res) => {
          pb.id,
          DATE_FORMAT(pb.batch_date, '%Y-%m-%d') as batch_date,
          pb.finished_product_id,
-         fp.name AS product_name,
+         fp.sub_product_name AS product_name,
          pb.raw_material_id,
          rm.sub_product_name AS preform_name,
          pb.bags_used,
@@ -88,7 +88,7 @@ router.get('/today', async (req, res) => {
          pb.notes,
          pb.created_at
        FROM pet_bottle_batches pb
-       JOIN finished_products fp ON pb.finished_product_id = fp.id
+       JOIN raw_materials fp ON pb.finished_product_id = fp.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
        ${whereClause} 
        ORDER BY pb.created_at DESC`,
@@ -130,13 +130,13 @@ router.post('/', async (req, res) => {
     if (!productId) throw new Error('Product is required.');
     if (!rawMaterialId) throw new Error('Preform is required.');
 
-    // Validate finished product is active
+    // Validate bottle (raw material) is active
     const [prodCheck] = await connection.query(
-      `SELECT name, status FROM finished_products WHERE id = ?`,
+      `SELECT sub_product_name AS name, status FROM raw_materials WHERE id = ?`,
       [parseInt(productId, 10)]
     );
     if (prodCheck.length > 0 && prodCheck[0].status === 0) {
-      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+      throw new Error(`The bottle '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
     }
 
     // Validate raw material (preform) is active
@@ -174,12 +174,27 @@ router.post('/', async (req, res) => {
       throw new Error(`Actual Reading (${parsedActual}) cannot exceed Expected Reading (${expectedReading}). Difference cannot be negative.`);
     }
 
-    // Fetch product unit cost from cost sheet
+    // Fetch product unit cost from cost sheet or latest purchase rate of raw material
+    let unitCost = 0.0000;
     const [costRows] = await connection.query(
       `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
       [parseInt(productId, 10)]
     );
-    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    if (costRows.length > 0) {
+      unitCost = parseFloat(costRows[0].total_cost);
+    } else {
+      const [rateRows] = await connection.query(
+        `SELECT bi.rate_per_unit 
+         FROM inventory_bill_items bi 
+         JOIN inventory_bills b ON bi.bill_id = b.id 
+         WHERE bi.raw_material_id = ? 
+         ORDER BY b.bill_date DESC, bi.created_at DESC LIMIT 1`,
+        [parseInt(productId, 10)]
+      );
+      if (rateRows.length > 0) {
+        unitCost = parseFloat(rateRows[0].rate_per_unit);
+      }
+    }
     const productionValue = parsedActual * unitCost;
 
     // Generate Batch ID
@@ -220,7 +235,7 @@ router.post('/', async (req, res) => {
     // 3. Log produced finished bottles to stock register (Positive addition)
     await connection.query(
       `INSERT INTO stock_register (item_type, item_id, transaction_type, reference_id, quantity, created_at)
-       VALUES ('FINISHED_PRODUCT', ?, 'PRODUCTION', ?, ?, NOW())`,
+       VALUES ('RAW_MATERIAL', ?, 'PRODUCTION', ?, ?, NOW())`,
       [productId, batchId, parsedActual]
     );
 
@@ -258,7 +273,7 @@ router.get('/', async (req, res) => {
     }
 
     if (search.trim()) {
-      whereClauses.push('(fp.name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)');
+      whereClauses.push('(fp.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)');
       const wild = `%${search.trim()}%`;
       queryParams.push(wild, wild, wild);
     }
@@ -269,7 +284,7 @@ router.get('/', async (req, res) => {
     const [countRows] = await pool.query(
       `SELECT COUNT(*) as count 
        FROM pet_bottle_batches pb
-       JOIN finished_products fp ON pb.finished_product_id = fp.id
+       JOIN raw_materials fp ON pb.finished_product_id = fp.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
        ${whereStr}`,
       queryParams
@@ -283,7 +298,7 @@ router.get('/', async (req, res) => {
         pb.id,
         DATE_FORMAT(pb.batch_date, '%Y-%m-%d') as batch_date,
         pb.finished_product_id,
-        fp.name AS product_name,
+        fp.sub_product_name AS product_name,
         pb.raw_material_id,
         rm.sub_product_name AS preform_name,
         pb.bags_used,
@@ -297,7 +312,7 @@ router.get('/', async (req, res) => {
         pb.notes,
         pb.created_at
        FROM pet_bottle_batches pb
-       JOIN finished_products fp ON pb.finished_product_id = fp.id
+       JOIN raw_materials fp ON pb.finished_product_id = fp.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
        ${whereStr}
        ORDER BY pb.batch_date DESC, pb.created_at DESC
@@ -427,13 +442,13 @@ router.put('/:id', async (req, res) => {
     if (!productId) throw new Error('Product is required.');
     if (!rawMaterialId) throw new Error('Preform is required.');
 
-    // Validate finished product is active
+    // Validate bottle (raw material) is active
     const [prodCheck] = await connection.query(
-      `SELECT name, status FROM finished_products WHERE id = ?`,
+      `SELECT sub_product_name AS name, status FROM raw_materials WHERE id = ?`,
       [parseInt(productId, 10)]
     );
     if (prodCheck.length > 0 && prodCheck[0].status === 0) {
-      throw new Error(`The finished product '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
+      throw new Error(`The bottle '${prodCheck[0].name}' is disabled in Product Master. You cannot place new production entries for it.`);
     }
 
     // Validate raw material (preform) is active
@@ -471,12 +486,27 @@ router.put('/:id', async (req, res) => {
       throw new Error(`Actual Reading (${parsedActual}) cannot exceed Expected Reading (${expectedReading}). Difference cannot be negative.`);
     }
 
-    // Fetch product unit cost from cost sheet
+    // Fetch product unit cost from cost sheet or latest purchase rate of raw material
+    let unitCost = 0.0000;
     const [costRows] = await connection.query(
       `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
       [parseInt(productId, 10)]
     );
-    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    if (costRows.length > 0) {
+      unitCost = parseFloat(costRows[0].total_cost);
+    } else {
+      const [rateRows] = await connection.query(
+        `SELECT bi.rate_per_unit 
+         FROM inventory_bill_items bi 
+         JOIN inventory_bills b ON bi.bill_id = b.id 
+         WHERE bi.raw_material_id = ? 
+         ORDER BY b.bill_date DESC, bi.created_at DESC LIMIT 1`,
+        [parseInt(productId, 10)]
+      );
+      if (rateRows.length > 0) {
+        unitCost = parseFloat(rateRows[0].rate_per_unit);
+      }
+    }
     const productionValue = parsedActual * unitCost;
 
     // 2. Update pet_bottle_batches
@@ -531,7 +561,7 @@ router.put('/:id', async (req, res) => {
 
     await connection.query(
       `INSERT INTO stock_register (item_type, item_id, transaction_type, reference_id, quantity, created_at)
-       VALUES ('FINISHED_PRODUCT', ?, 'PRODUCTION', ?, ?, NOW())`,
+       VALUES ('RAW_MATERIAL', ?, 'PRODUCTION', ?, ?, NOW())`,
       [productId, id, parsedActual]
     );
 

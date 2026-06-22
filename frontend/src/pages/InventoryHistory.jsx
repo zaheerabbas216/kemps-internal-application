@@ -302,9 +302,17 @@ const InventoryHistory = () => {
         // Auto-calculate amount: totalQuantity * ratePerUnit
         row.amount = (qty * rate).toFixed(2);
       } else {
-        // Non-preforms: perPcRate is disabled (N/A)
-        row.perPcRate = 'N/A';
+        // Non-preforms: perPcRate is disabled (N/A) unless unit is PCS
+        if (row.unit?.toLowerCase() !== 'pcs') {
+          row.perPcRate = 'N/A';
+        }
         // Note: For non-preforms, totalQuantity, ratePerUnit, qtyInPcs, amount, etc. are entered manually.
+      }
+
+      // PCS specific sync
+      if (row.unit?.toLowerCase() === 'pcs') {
+        row.qtyInPcs = row.totalQuantity;
+        row.perPcRate = row.ratePerUnit;
       }
 
       const amt = parseFloat(row.amount) || 0;
@@ -495,7 +503,7 @@ const InventoryHistory = () => {
                 <th>Sub Product</th>
                 <th>Qty</th>
                 <th>Unit</th>
-                <th>Bags/Box</th>
+                <th>BAGS/BOX/ROLLS/CUTS</th>
                 <th>Rate (₹)</th>
                 <th>Amount (₹)</th>
                 <th>Tax (%)</th>
@@ -1120,6 +1128,30 @@ const InventoryHistory = () => {
                         </select>
                       </div>
 
+                      {/* Total Qty */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                          Total Quantity *
+                        </label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={item.totalQuantity}
+                          readOnly={isPreforms}
+                          onChange={(e) => handleItemChange(index, 'totalQuantity', e.target.value)}
+                          className={`w-full h-11 px-3 rounded-xl border border-slate-200 outline-none text-sm font-medium transition-all ${
+                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
+                          }`}
+                          placeholder="0.00"
+                          required
+                        />
+                        {isPreforms && (
+                          <span className="text-[10px] font-bold text-slate-450 mt-1 block">
+                            Calculated automatically (BAGS/BOX/ROLLS/CUTS * 25).
+                          </span>
+                        )}
+                      </div>
+
                       {/* Unit */}
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
@@ -1140,7 +1172,7 @@ const InventoryHistory = () => {
                       {/* Bags/Box */}
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Bags / Box
+                          BAGS/BOX/ROLLS/CUTS
                         </label>
                         <input
                           type="number"
@@ -1150,28 +1182,24 @@ const InventoryHistory = () => {
                         />
                       </div>
 
-                      {/* Total Qty */}
+                      {/* Qty in Pcs */}
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Total Quantity *
+                          Qty in Pcs
                         </label>
                         <input
-                          type="number"
-                          step="any"
-                          value={item.totalQuantity}
-                          readOnly={isPreforms}
-                          onChange={(e) => handleItemChange(index, 'totalQuantity', e.target.value)}
-                          className={`w-full h-11 px-3 rounded-xl border border-slate-200 outline-none text-sm font-medium transition-all ${
-                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
+                          type={(isPreforms || item.unit?.toLowerCase() === 'pcs') ? "text" : "number"}
+                          value={item.qtyInPcs}
+                          readOnly={isPreforms || item.unit?.toLowerCase() === 'pcs'}
+                          onChange={(e) => handleItemChange(index, 'qtyInPcs', e.target.value)}
+                          className={`w-full h-11 px-3 rounded-xl border border-slate-200 outline-none text-sm font-medium ${
+                            (isPreforms || item.unit?.toLowerCase() === 'pcs') ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
                           }`}
-                          placeholder="0.00"
-                          required
+                          placeholder={(isPreforms || item.unit?.toLowerCase() === 'pcs') ? "0" : "0.00"}
                         />
-                        {isPreforms && (
-                          <span className="text-[10px] font-bold text-slate-450 mt-1 block">
-                            Calculated automatically (Bags/Box * 25).
-                          </span>
-                        )}
+                        <span className="text-[10px] font-bold text-slate-400 mt-1 block">
+                          {(isPreforms || item.unit?.toLowerCase() === 'pcs') ? 'Calculated automatically.' : 'Enter manually.'}
+                        </span>
                       </div>
 
                       {/* Rate */}
@@ -1189,26 +1217,6 @@ const InventoryHistory = () => {
                         />
                       </div>
 
-                      {/* Qty in Pcs */}
-                      <div className="space-y-1.5">
-                        <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                          Qty in Pcs
-                        </label>
-                        <input
-                          type={isPreforms ? "text" : "number"}
-                          value={item.qtyInPcs}
-                          readOnly={isPreforms}
-                          onChange={(e) => handleItemChange(index, 'qtyInPcs', e.target.value)}
-                          className={`w-full h-11 px-3 rounded-xl border border-slate-200 outline-none text-sm font-medium ${
-                            isPreforms ? 'bg-slate-50 text-slate-500 cursor-not-allowed font-bold' : 'bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10'
-                          }`}
-                          placeholder={isPreforms ? "0" : "0.00"}
-                        />
-                        <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                          {isPreforms ? 'Calculated automatically from Preform weight.' : 'Enter manually.'}
-                        </span>
-                      </div>
-
                       {/* Per PC Rate */}
                       <div className="space-y-1.5">
                         <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
@@ -1216,12 +1224,12 @@ const InventoryHistory = () => {
                         </label>
                         <input
                           type="text"
-                          value={isPreforms ? (item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${item.perPcRate}` : '₹ 0.00') : 'Disabled'}
+                          value={isPreforms || item.unit?.toLowerCase() === 'pcs' ? (item.perPcRate && !isNaN(parseFloat(item.perPcRate)) ? `₹ ${item.perPcRate}` : '₹ 0.00') : 'Disabled'}
                           readOnly
                           className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 outline-none text-sm font-bold cursor-not-allowed"
                         />
                         <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                          {isPreforms ? 'Calculated automatically from Preform weight.' : 'Applicable only for Preforms.'}
+                          {isPreforms || item.unit?.toLowerCase() === 'pcs' ? 'Calculated automatically.' : 'Applicable only for Preforms.'}
                         </span>
                       </div>
 
@@ -1434,7 +1442,7 @@ const InventoryHistory = () => {
                     <div key={item.id} className="border border-slate-100 rounded-xl p-4 text-xs font-semibold text-slate-655 bg-[#fafcff]/50 space-y-2">
                       <div className="flex justify-between border-b border-slate-100 pb-1 mb-2">
                         <span className="font-bold text-[11px] text-primary">ITEM #{idx + 1}: {item.category_name} &gt; {item.sub_product_name}</span>
-                        <span className="text-[10px] text-slate-400">Unit: {item.unit} | Bags/Box: {item.bags_box || 0}</span>
+                        <span className="text-[10px] text-slate-400">Unit: {item.unit} | BAGS/BOX/ROLLS/CUTS: {item.bags_box || 0}</span>
                       </div>
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
                         <div><span className="text-slate-400 block text-[9px] uppercase">Qty</span> {item.total_quantity}</div>

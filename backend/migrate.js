@@ -87,7 +87,7 @@ export async function runMigration(shouldExit = false) {
         stop_time VARCHAR(50) NULL,
         notes TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (finished_product_id) REFERENCES finished_products(id) ON DELETE RESTRICT,
+        FOREIGN KEY (finished_product_id) REFERENCES raw_materials(id) ON DELETE RESTRICT,
         FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE RESTRICT
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
@@ -1101,6 +1101,339 @@ export async function runMigration(shouldExit = false) {
         ADD COLUMN category VARCHAR(100) NULL
       `);
       console.log('Column category added to payment_approvals.');
+    }
+
+    // 41. Add qty_in_pc_per_kg column to raw_materials if not exists
+    const [rmQtyCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'raw_materials' AND COLUMN_NAME = 'qty_in_pc_per_kg'`,
+      [dbName]
+    );
+    if (rmQtyCols.length === 0) {
+      console.log('Adding qty_in_pc_per_kg column to raw_materials...');
+      await connection.query(`
+        ALTER TABLE raw_materials
+        ADD COLUMN qty_in_pc_per_kg DECIMAL(10, 2) DEFAULT NULL
+      `);
+      console.log('Column qty_in_pc_per_kg added successfully.');
+    } else {
+      console.log('raw_materials.qty_in_pc_per_kg column verified.');
+    }
+
+    // 42. Add address column to company_details if not exists
+    const [companyAddressCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'company_details' AND COLUMN_NAME = 'address'`,
+      [dbName]
+    );
+    if (companyAddressCols.length === 0) {
+      console.log('Adding address column to company_details...');
+      await connection.query(`
+        ALTER TABLE company_details
+        ADD COLUMN address TEXT DEFAULT NULL
+      `);
+      console.log('Column address added to company_details successfully.');
+    } else {
+      console.log('company_details.address column verified.');
+    }
+
+    // 43. Update pet_bottle_batches foreign key for finished_product_id to point to raw_materials
+    const [fkRows] = await connection.query(
+      `SELECT CONSTRAINT_NAME 
+       FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE 
+       WHERE TABLE_SCHEMA = ? 
+         AND TABLE_NAME = 'pet_bottle_batches' 
+         AND COLUMN_NAME = 'finished_product_id' 
+         AND REFERENCED_TABLE_NAME = 'finished_products'`,
+      [dbName]
+    );
+
+    if (fkRows.length > 0) {
+      const constraintName = fkRows[0].CONSTRAINT_NAME;
+      console.log(`Dropping foreign key constraint ${constraintName} on pet_bottle_batches...`);
+      await connection.query(`ALTER TABLE pet_bottle_batches DROP FOREIGN KEY \`${constraintName}\``);
+      
+      // Update existing records in pet_bottle_batches: 
+      // We need to map old finished_product_id to the raw_materials category 'Bottles' ID that matches the name.
+      const [oldBatches] = await connection.query(`SELECT DISTINCT finished_product_id FROM pet_bottle_batches`);
+      for (const batch of oldBatches) {
+        const fpId = batch.finished_product_id;
+        const [fpNameRows] = await connection.query(`SELECT name FROM finished_products WHERE id = ?`, [fpId]);
+        if (fpNameRows.length > 0) {
+          const fpName = fpNameRows[0].name;
+          // Find matching raw material in category 'Bottles'
+          const [rmRows] = await connection.query(
+            `SELECT rm.id FROM raw_materials rm 
+             JOIN raw_material_categories rmc ON rm.category_id = rmc.id 
+             WHERE LOWER(rmc.name) = 'bottles' AND LOWER(rm.sub_product_name) = LOWER(?)`,
+            [fpName]
+          );
+          if (rmRows.length > 0) {
+            const newRmId = rmRows[0].id;
+            console.log(`Migrating pet_bottle_batches finished_product_id from FP ID ${fpId} (${fpName}) to RM ID ${newRmId}`);
+            await connection.query(
+              `UPDATE pet_bottle_batches SET finished_product_id = ? WHERE finished_product_id = ?`,
+              [newRmId, fpId]
+            );
+            await connection.query(
+              `UPDATE stock_register 
+               SET item_type = 'RAW_MATERIAL', item_id = ? 
+               WHERE transaction_type = 'PRODUCTION' AND item_type = 'FINISHED_PRODUCT' AND item_id = ?`,
+              [newRmId, fpId]
+            );
+          } else {
+            // Create it under "Bottles" category
+            const [bottlesCatRows] = await connection.query(`SELECT id FROM raw_material_categories WHERE LOWER(name) = 'bottles'`);
+            let bottlesCatId;
+            if (bottlesCatRows.length > 0) {
+              bottlesCatId = bottlesCatRows[0].id;
+            } else {
+              const [catRes] = await connection.query(`INSERT INTO raw_material_categories (name) VALUES ('Bottles')`);
+              bottlesCatId = catRes.insertId;
+            }
+            const [insertRes] = await connection.query(
+              `INSERT INTO raw_materials (category_id, sub_product_name, unit, status) VALUES (?, ?, 'PCS', 1)`,
+              [bottlesCatId, fpName]
+            );
+            const newRmId = insertRes.insertId;
+            console.log(`Created new raw material for bottle '${fpName}' with ID ${newRmId}`);
+            await connection.query(
+              `UPDATE pet_bottle_batches SET finished_product_id = ? WHERE finished_product_id = ?`,
+              [newRmId, fpId]
+            );
+            await connection.query(
+              `UPDATE stock_register 
+               SET item_type = 'RAW_MATERIAL', item_id = ? 
+               WHERE transaction_type = 'PRODUCTION' AND item_type = 'FINISHED_PRODUCT' AND item_id = ?`,
+              [newRmId, fpId]
+            );
+          }
+        }
+      }
+
+      console.log('Adding new foreign key constraint pointing to raw_materials...');
+      await connection.query(`
+        ALTER TABLE pet_bottle_batches 
+        ADD CONSTRAINT fk_pet_bottle_batches_product 
+        FOREIGN KEY (finished_product_id) REFERENCES raw_materials(id) ON DELETE RESTRICT
+      `);
+      console.log('Foreign key constraint updated successfully.');
+    } else {
+      console.log('Constraint for finished_product_id in pet_bottle_batches already updated or not present.');
+    }
+
+    // 44. Create stock_corrections table if not exists
+    console.log('Creating stock_corrections table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS stock_corrections (
+        id VARCHAR(20) PRIMARY KEY,
+        correction_date DATE NOT NULL,
+        raw_material_id INT NOT NULL,
+        opening_stock DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        opening_bags_box DECIMAL(10, 2) DEFAULT 0.00,
+        physical_stock DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        physical_bags_box DECIMAL(10, 2) DEFAULT 0.00,
+        difference_qty DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        adjustment_type VARCHAR(20) NOT NULL,
+        remarks TEXT NOT NULL,
+        created_by VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('stock_corrections table verified.');
+
+    // 45. Create customer_ledger table if not exists
+    console.log('Creating customer_ledger table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS customer_ledger (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        date DATE NOT NULL,
+        customer_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        entry_type VARCHAR(20) NOT NULL,
+        reference_no VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        particular TEXT NOT NULL,
+        debit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        credit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        balance DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
+        INDEX idx_ledger_customer (customer_id),
+        INDEX idx_ledger_date (date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('customer_ledger table verified.');
+
+    // Check if we need to seed historical data
+    const [ledgerCountRows] = await connection.query('SELECT COUNT(*) as count FROM customer_ledger');
+    if (ledgerCountRows[0].count === 0) {
+      console.log('Seeding customer_ledger with historical data...');
+
+      // A. Fetch existing bills
+      const [bills] = await connection.query(
+        `SELECT id, billing_date, customer_id, grand_total, amount_paid, payment_status 
+         FROM customer_bills 
+         WHERE customer_id IS NOT NULL`
+      );
+
+      for (const bill of bills) {
+        // 1. Insert SALE (debit)
+        await connection.query(
+          `INSERT INTO customer_ledger (date, customer_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+           VALUES (?, ?, 'SALE', ?, 'Sale Entry', ?, 0.00, 0.00, NOW())`,
+          [bill.billing_date, bill.customer_id, bill.id, bill.grand_total]
+        );
+
+        // 2. Insert downpayment/applied credit (credit) if it was paid/approved at creation
+        const amtPaid = parseFloat(bill.amount_paid) || 0;
+        if (amtPaid > 0 && bill.payment_status === 'Approved') {
+          await connection.query(
+            `INSERT INTO customer_ledger (date, customer_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+             VALUES (?, ?, 'PAYMENT', ?, 'Payment Received (At Invoice Creation)', 0.00, ?, 0.00, NOW())`,
+            [bill.billing_date, bill.customer_id, bill.id, amtPaid]
+          );
+        }
+      }
+
+      // B. Fetch approved additional payments
+      const [payments] = await connection.query(
+        `SELECT cp.id, cp.bill_id, cp.payment_date, cp.amount_received, cb.customer_id 
+         FROM customer_payments cp
+         JOIN customer_bills cb ON cp.bill_id = cb.id
+         WHERE cp.payment_status = 'Approved' AND cb.customer_id IS NOT NULL`
+      );
+
+      for (const pay of payments) {
+        await connection.query(
+          `INSERT INTO customer_ledger (date, customer_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+           VALUES (?, ?, 'PAYMENT', ?, ?, 0.00, ?, 0.00, NOW())`,
+          [pay.payment_date, pay.customer_id, pay.id, `Payment Received — Invoice ${pay.bill_id}`, pay.amount_received]
+        );
+      }
+
+      // C. Fetch sales returns
+      const [returns] = await connection.query(
+        `SELECT id, return_date, customer_id, bill_id, total_return_amount, reason 
+         FROM sales_returns 
+         WHERE customer_id IS NOT NULL`
+      );
+
+      for (const ret of returns) {
+        await connection.query(
+          `INSERT INTO customer_ledger (date, customer_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+           VALUES (?, ?, 'PAYMENT', ?, ?, 0.00, ?, 0.00, NOW())`,
+          [ret.return_date, ret.customer_id, ret.id, `Sales Return (Invoice ${ret.bill_id}): ${ret.reason}`, ret.total_return_amount]
+        );
+      }
+
+      // D. Recalculate chronological running balances for each customer
+      const [custIdsRows] = await connection.query(`SELECT id FROM customers`);
+      for (const cust of custIdsRows) {
+        const [ledgerRows] = await connection.query(
+          `SELECT id, debit, credit FROM customer_ledger WHERE customer_id = ? ORDER BY date ASC, id ASC`,
+          [cust.id]
+        );
+        let balance = 0.00;
+        for (const row of ledgerRows) {
+          balance = balance + parseFloat(row.debit) - parseFloat(row.credit);
+          await connection.query(`UPDATE customer_ledger SET balance = ? WHERE id = ?`, [balance, row.id]);
+        }
+      }
+
+      console.log('Historical accounts ledger seeding complete.');
+    }
+
+    // 46. Create supplier_ledger table if not exists
+    console.log('Creating supplier_ledger table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS supplier_ledger (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        date DATE NOT NULL,
+        supplier_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        entry_type VARCHAR(20) NOT NULL,
+        reference_no VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        particular TEXT NOT NULL,
+        debit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        credit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        balance DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (supplier_id) REFERENCES company_details(id) ON DELETE CASCADE,
+        INDEX idx_supplier_ledger (supplier_id),
+        INDEX idx_supplier_ledger_date (date)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('supplier_ledger table verified.');
+
+    // Check if we need to seed historical data for supplier_ledger
+    const [supplierLedgerCountRows] = await connection.query('SELECT COUNT(*) as count FROM supplier_ledger');
+    if (supplierLedgerCountRows[0].count === 0) {
+      console.log('Seeding supplier_ledger with historical data...');
+
+      // A. Fetch all purchase bills
+      const [purchaseBills] = await connection.query(
+        `SELECT id, bill_date, supplier_id, payment_method, grand_total, advance_paid, credit_note 
+         FROM inventory_bills`
+      );
+
+      for (const bill of purchaseBills) {
+        // 1. Insert PURCHASE (credit - increases payables)
+        await connection.query(
+          `INSERT INTO supplier_ledger (date, supplier_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+           VALUES (?, ?, 'PURCHASE', ?, ?, 0.00, ?, 0.00, NOW())`,
+          [bill.bill_date, bill.supplier_id, bill.id, `Purchase Invoice ${bill.id}`, bill.grand_total]
+        );
+
+        // 2. Insert downpayment / immediate cash paid (debit - reduces payables)
+        const amtPaid = bill.payment_method !== 'Credit' ? bill.grand_total : bill.advance_paid;
+        if (parseFloat(amtPaid) > 0) {
+          await connection.query(
+            `INSERT INTO supplier_ledger (date, supplier_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+             VALUES (?, ?, 'PAYMENT', ?, 'Payment Made (At Purchase Creation)', ?, 0.00, 0.00, NOW())`,
+            [bill.bill_date, bill.supplier_id, bill.id, amtPaid]
+          );
+        }
+
+        // 3. Insert credit note applied (debit - reduces payables)
+        if (parseFloat(bill.credit_note) > 0) {
+          await connection.query(
+            `INSERT INTO supplier_ledger (date, supplier_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+             VALUES (?, ?, 'PAYMENT', ?, 'Credit Note Applied', ?, 0.00, 0.00, NOW())`,
+            [bill.bill_date, bill.supplier_id, bill.id, bill.credit_note]
+          );
+        }
+      }
+
+      // B. Fetch approved additional supplier payments
+      const [supplierPayments] = await connection.query(
+        `SELECT p.id, p.bill_id, p.payment_date, p.amount, b.supplier_id 
+         FROM supplier_payments p
+         JOIN inventory_bills b ON p.bill_id = b.id
+         WHERE p.payment_status = 'Approved'`
+      );
+
+      for (const pay of supplierPayments) {
+        await connection.query(
+          `INSERT INTO supplier_ledger (date, supplier_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
+           VALUES (?, ?, 'PAYMENT', ?, ?, ?, 0.00, 0.00, NOW())`,
+          [pay.payment_date, pay.supplier_id, pay.id, `Payment Made — Bill ${pay.bill_id}`, pay.amount]
+        );
+      }
+
+      // C. Recalculate supplier running balances chronologically (balance = credit - debit)
+      const [supplierIdsRows] = await connection.query(`SELECT id FROM company_details`);
+      for (const sup of supplierIdsRows) {
+        const [ledgerRows] = await connection.query(
+          `SELECT id, debit, credit FROM supplier_ledger WHERE supplier_id = ? ORDER BY date ASC, id ASC`,
+          [sup.id]
+        );
+        let balance = 0.00;
+        for (const row of ledgerRows) {
+          balance = balance + parseFloat(row.credit) - parseFloat(row.debit);
+          await connection.query(`UPDATE supplier_ledger SET balance = ? WHERE id = ?`, [balance, row.id]);
+        }
+      }
+
+      console.log('Historical supplier ledger seeding complete.');
     }
 
     console.log('Migration complete!');

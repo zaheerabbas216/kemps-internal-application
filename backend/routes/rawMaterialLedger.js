@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import authMiddleware from '../middleware/auth.js';
+import { getSecondUnit, getConversionFactor } from '../helpers/conversion.js';
 
 const router = express.Router();
 
@@ -10,7 +11,7 @@ function normalizeName(name) {
 }
 
 // Helper: Fetch transactions for raw materials
-async function getTransactions(connection, rawMaterialId, startDate, endDate, isBottle, bottleName) {
+async function getTransactions(connection, rawMaterialId, startDate, endDate) {
   let params = [rawMaterialId];
   let dateFilter = '';
   
@@ -23,7 +24,7 @@ async function getTransactions(connection, rawMaterialId, startDate, endDate, is
   }
 
   const txQuery = `
-    SELECT tx.quantity, tx.transaction_type, tx.reference_id, tx.tx_date
+    SELECT tx.quantity, tx.transaction_type, tx.reference_id, tx.tx_date, tx.user_name
     FROM (
       SELECT 
         sr.quantity,
@@ -33,52 +34,29 @@ async function getTransactions(connection, rawMaterialId, startDate, endDate, is
           WHEN sr.transaction_type = 'PURCHASE' THEN ib.bill_date
           WHEN sr.transaction_type = 'PRODUCTION' AND sr.reference_id LIKE 'BATCH-%' THEN pbb.batch_date
           WHEN sr.transaction_type = 'PRODUCTION' AND sr.reference_id LIKE 'PROD-%' THEN pb.production_date
+          WHEN sr.transaction_type = 'CORRECTION' THEN sc.correction_date
           ELSE DATE(sr.created_at)
-        END AS tx_date
+        END AS tx_date,
+        CASE
+          WHEN sr.transaction_type = 'CORRECTION' THEN sc.created_by
+          ELSE 'Admin'
+        END AS user_name
       FROM stock_register sr
       LEFT JOIN inventory_bills ib ON sr.transaction_type = 'PURCHASE' AND sr.reference_id = ib.id
       LEFT JOIN pet_bottle_batches pbb ON sr.transaction_type = 'PRODUCTION' AND sr.reference_id = pbb.id
       LEFT JOIN production_batches pb ON sr.transaction_type = 'PRODUCTION' AND sr.reference_id = pb.id
+      LEFT JOIN stock_corrections sc ON sr.transaction_type = 'CORRECTION' AND sr.reference_id = sc.id
       WHERE sr.item_type = 'RAW_MATERIAL' AND sr.item_id = ?
     ) tx
     WHERE 1=1 ${dateFilter}
   `;
 
   const [txRows] = await connection.query(txQuery, params);
-  let allTxs = [...txRows];
-
-  // If category is BOTTLES, also fetch production output from pet_bottle_batches
-  if (isBottle && bottleName) {
-    let bottleParams = [bottleName];
-    let bottleDateFilter = '';
-    if (startDate) {
-      bottleDateFilter = 'AND pb.batch_date BETWEEN ? AND ?';
-      bottleParams.push(startDate, endDate);
-    } else {
-      bottleDateFilter = 'AND pb.batch_date <= ?';
-      bottleParams.push(endDate);
-    }
-
-    const bottleQuery = `
-      SELECT 
-        pb.actual_reading AS quantity,
-        'PRODUCTION' AS transaction_type,
-        pb.id AS reference_id,
-        pb.batch_date AS tx_date
-      FROM pet_bottle_batches pb
-      JOIN finished_products fp ON pb.finished_product_id = fp.id
-      WHERE LOWER(REPLACE(REPLACE(fp.name, ' ', ''), 'ltr', 'l')) = LOWER(REPLACE(REPLACE(?, ' ', ''), 'ltr', 'l'))
-        ${bottleDateFilter}
-    `;
-    const [bottleRows] = await connection.query(bottleQuery, bottleParams);
-    allTxs = allTxs.concat(bottleRows);
-  }
-
-  return allTxs;
+  return [...txRows];
 }
 
 // Helper: Aggregate transactions into stock_in and stock_out
-function aggregateTxs(txs, categoryName, subProductName, unit) {
+function aggregateTxs(txs, categoryName, subProductName, unit, factor) {
   let stock_in = 0;
   let stock_out = 0;
   const isPreform = categoryName.toLowerCase() === 'preforms';
@@ -95,16 +73,12 @@ function aggregateTxs(txs, categoryName, subProductName, unit) {
       } else if (qty < 0) {
         stock_out += Math.abs(qty);
       }
-    } else if (isBottle) {
-      // Bottles Stock IN comes from pet_bottle_batches (which will be positive production)
-      // and Stock OUT comes from stock_register deductions (which will be negative production)
-      if (qty > 0) {
-        stock_in += qty;
-      } else if (qty < 0) {
-        stock_out += Math.abs(qty);
-      }
     } else {
-      // General case
+      // General case for split categories
+      const secondUnit = getSecondUnit(categoryName);
+      if (secondUnit && unit === secondUnit) {
+        qty = qty / factor;
+      }
       if (qty > 0) {
         stock_in += qty;
       } else if (qty < 0) {
@@ -119,6 +93,7 @@ function aggregateTxs(txs, categoryName, subProductName, unit) {
 // Helper: Calculate ledger row for a specific item dynamically
 async function calculateDynamicRow(connection, rawMaterial, unit, targetDate) {
   const isBottle = rawMaterial.category_name.toLowerCase() === 'bottles';
+  const factor = await getConversionFactor(connection, rawMaterial);
   
   // 1. Find the latest manual opening stock
   const [manualRows] = await connection.query(
@@ -197,11 +172,9 @@ async function calculateDynamicRow(connection, rawMaterial, unit, targetDate) {
       connection, 
       rawMaterial.id, 
       startQueryDate, 
-      yesterdayStr, 
-      isBottle, 
-      rawMaterial.sub_product_name
+      yesterdayStr
     );
-    const aggregates = aggregateTxs(priorTxs, rawMaterial.category_name, rawMaterial.sub_product_name, unit);
+    const aggregates = aggregateTxs(priorTxs, rawMaterial.category_name, rawMaterial.sub_product_name, unit, factor);
     openingStock = checkpointStock + aggregates.stock_in - aggregates.stock_out;
   }
 
@@ -210,11 +183,9 @@ async function calculateDynamicRow(connection, rawMaterial, unit, targetDate) {
     connection, 
     rawMaterial.id, 
     targetDate, 
-    targetDate, 
-    isBottle, 
-    rawMaterial.sub_product_name
+    targetDate
   );
-  const todayAgg = aggregateTxs(todayTxs, rawMaterial.category_name, rawMaterial.sub_product_name, unit);
+  const todayAgg = aggregateTxs(todayTxs, rawMaterial.category_name, rawMaterial.sub_product_name, unit, factor);
 
   const closingStock = openingStock + todayAgg.stock_in - todayAgg.stock_out;
 
@@ -304,12 +275,19 @@ router.get('/day', authMiddleware, async (req, res) => {
       `);
 
       for (const rm of materials) {
+        const secondUnit = getSecondUnit(rm.category_name);
         if (rm.category_name.toLowerCase() === 'preforms') {
           // Preforms splits into BAGS and PCS
           const bagsRow = await calculateDynamicRow(connection, rm, 'BAGS', date);
           const pcsRow = await calculateDynamicRow(connection, rm, 'PCS', date);
           ledgerItems.push(bagsRow);
           ledgerItems.push(pcsRow);
+        } else if (secondUnit && secondUnit !== rm.unit) {
+          // Categories with a separate second unit (e.g. Caps, Labels, etc.)
+          const secondRow = await calculateDynamicRow(connection, rm, secondUnit, date);
+          const mainRow = await calculateDynamicRow(connection, rm, rm.unit, date);
+          ledgerItems.push(secondRow);
+          ledgerItems.push(mainRow);
         } else {
           // General raw material
           const row = await calculateDynamicRow(connection, rm, rm.unit, date);
@@ -318,7 +296,7 @@ router.get('/day', authMiddleware, async (req, res) => {
       }
     }
 
-    // 3. Compute Dashboard Summary values (avoiding double counting preforms)
+    // 3. Compute Dashboard Summary values (avoiding double counting preforms/split units)
     let totalStockValue = 0;
     let totalStockInToday = 0;
     let totalStockOutToday = 0;
@@ -330,6 +308,7 @@ router.get('/day', authMiddleware, async (req, res) => {
     ledgerItems.forEach(item => {
       const rate = ratesMap[item.raw_material_id] || 0;
       const isPreforms = item.category_name.toLowerCase() === 'preforms';
+      const secondUnit = getSecondUnit(item.category_name);
 
       if (isPreforms) {
         if (!processedValuations.has(item.raw_material_id)) {
@@ -344,13 +323,25 @@ router.get('/day', authMiddleware, async (req, res) => {
             processedValuations.add(item.raw_material_id);
           }
         }
+        if (item.unit === 'PCS') {
+          totalStockInToday += item.stock_in;
+          totalStockOutToday += item.stock_out;
+        }
+      } else if (secondUnit && secondUnit !== item.unit) {
+        if (item.unit === secondUnit) {
+          // Skip second unit row for dashboard summary calculation
+        } else {
+          totalStockValue += item.opening_stock * rate;
+          totalClosingValue += item.closing_stock * rate;
+          totalStockInToday += item.stock_in;
+          totalStockOutToday += item.stock_out;
+        }
       } else {
         totalStockValue += item.opening_stock * rate;
         totalClosingValue += item.closing_stock * rate;
+        totalStockInToday += item.stock_in;
+        totalStockOutToday += item.stock_out;
       }
-
-      totalStockInToday += item.stock_in;
-      totalStockOutToday += item.stock_out;
     });
 
     res.json({
@@ -413,7 +404,7 @@ router.post('/set-opening', authMiddleware, async (req, res) => {
 
       // Get raw material category & sub_product_name to check if it's a preform
       const [rmRows] = await connection.query(
-        `SELECT rm.id, rm.sub_product_name, rmc.name AS category_name 
+        `SELECT rm.id, rm.sub_product_name, rm.unit, rmc.name AS category_name 
          FROM raw_materials rm 
          JOIN raw_material_categories rmc ON rm.category_id = rmc.id 
          WHERE rm.id = ?`,
@@ -423,34 +414,34 @@ router.post('/set-opening', authMiddleware, async (req, res) => {
         throw new Error(`Raw material with ID ${rId} not found.`);
       }
       const rm = rmRows[0];
-      const isPreforms = rm.category_name.toLowerCase() === 'preforms';
+      const secondUnit = getSecondUnit(rm.category_name);
 
-      if (isPreforms) {
-        const weight = parseFloat(rm.sub_product_name) || 0;
-        let qtyBags = 0;
-        let qtyPcs = 0;
+      if (secondUnit && secondUnit !== rm.unit) {
+        const factor = await getConversionFactor(connection, rm);
+        let qtySecond = 0;
+        let qtyMain = 0;
 
-        if (u === 'BAGS') {
-          qtyBags = parsedQty;
-          qtyPcs = weight > 0 ? (qtyBags * 25000) / weight : 0;
+        if (u === secondUnit) {
+          qtySecond = parsedQty;
+          qtyMain = qtySecond * factor;
         } else {
-          qtyPcs = parsedQty;
-          qtyBags = weight > 0 ? (qtyPcs * weight) / 25000 : 0;
+          qtyMain = parsedQty;
+          qtySecond = factor > 0 ? qtyMain / factor : 0;
         }
 
         // Insert/Update both units
         await connection.query(
           `INSERT INTO raw_material_ledger_manual_opening (ledger_date, raw_material_id, unit, quantity)
-           VALUES (?, ?, 'BAGS', ?)
+           VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE quantity = ?, updated_at = NOW()`,
-          [date, rId, qtyBags, qtyBags]
+          [date, rId, secondUnit, qtySecond, qtySecond]
         );
 
         await connection.query(
           `INSERT INTO raw_material_ledger_manual_opening (ledger_date, raw_material_id, unit, quantity)
-           VALUES (?, ?, 'PCS', ?)
+           VALUES (?, ?, ?, ?)
            ON DUPLICATE KEY UPDATE quantity = ?, updated_at = NOW()`,
-          [date, rId, qtyPcs, qtyPcs]
+          [date, rId, rm.unit, qtyMain, qtyMain]
         );
       } else {
         // General raw material
@@ -511,7 +502,10 @@ router.post('/close', authMiddleware, async (req, res) => {
     // Calculate dynamic state and save snapshots
     for (const rm of materials) {
       const isPreforms = rm.category_name.toLowerCase() === 'preforms';
-      const unitsToSave = isPreforms ? ['BAGS', 'PCS'] : [rm.unit];
+      const secondUnit = getSecondUnit(rm.category_name);
+      const unitsToSave = isPreforms 
+        ? ['BAGS', 'PCS'] 
+        : (secondUnit ? [...new Set([secondUnit, rm.unit])] : [rm.unit]);
 
       for (const unit of unitsToSave) {
         const calc = await calculateDynamicRow(connection, rm, unit, date);
@@ -553,7 +547,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
     }
 
     const [rmRows] = await connection.query(
-      `SELECT rm.id, rm.sub_product_name, rmc.name AS category_name 
+      `SELECT rm.id, rm.sub_product_name, rm.unit, rmc.name AS category_name 
        FROM raw_materials rm 
        JOIN raw_material_categories rmc ON rm.category_id = rmc.id 
        WHERE rm.id = ?`,
@@ -561,6 +555,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
     );
     if (rmRows.length === 0) throw new Error('Raw material not found.');
     const rm = rmRows[0];
+    const factor = await getConversionFactor(connection, rm);
 
     const isBottle = rm.category_name.toLowerCase() === 'bottles';
     const weight = parseFloat(rm.sub_product_name) || 0;
@@ -570,7 +565,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
 
     if (type === 'IN') {
       // Find Stock IN transactions on targetDate
-      const txs = await getTransactions(connection, rawMaterialId, date, date, isBottle, rm.sub_product_name);
+      const txs = await getTransactions(connection, rawMaterialId, date, date);
       
       for (const t of txs) {
         let qty = parseFloat(t.quantity) || 0;
@@ -580,23 +575,30 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
         let details = {
           date: t.tx_date,
           reference: t.reference_id,
-          product: isBottle ? t.product || rm.sub_product_name : rm.sub_product_name,
+          product: rm.sub_product_name,
           quantity: qty,
-          user: 'Admin',
-          source: t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : 'PET Production',
+          user: t.user_name || 'Admin',
+          source: t.transaction_type === 'PURCHASE' ? 'Purchase Entry' :
+                  t.transaction_type === 'PRODUCTION' ? 'PET Production' :
+                  t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System',
           type: 'Stock IN'
         };
 
         if (isPreform) {
           const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
           details.quantity = qty * scale;
+        } else {
+          const secondUnit = getSecondUnit(rm.category_name);
+          if (secondUnit && unit === secondUnit) {
+            details.quantity = qty / factor;
+          }
         }
 
         transactions.push(details);
       }
     } else if (type === 'OUT') {
       // Find Stock OUT transactions on targetDate
-      const txs = await getTransactions(connection, rawMaterialId, date, date, isBottle, rm.sub_product_name);
+      const txs = await getTransactions(connection, rawMaterialId, date, date);
 
       for (const t of txs) {
         let qty = parseFloat(t.quantity) || 0;
@@ -607,14 +609,20 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
           reference: t.reference_id,
           product: rm.sub_product_name,
           quantity: Math.abs(qty),
-          user: 'Admin',
-          source: isPreform ? 'PET Production' : 'Finished Goods Production',
+          user: t.user_name || 'Admin',
+          source: t.transaction_type === 'PRODUCTION' ? (isPreform ? 'PET Production' : 'Finished Goods Production') :
+                  t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System',
           type: 'Stock OUT'
         };
 
         if (isPreform) {
           const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
           details.quantity = Math.abs(qty) * scale;
+        } else {
+          const secondUnit = getSecondUnit(rm.category_name);
+          if (secondUnit && unit === secondUnit) {
+            details.quantity = Math.abs(qty) / factor;
+          }
         }
 
         transactions.push(details);
@@ -707,13 +715,18 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
       const yesterdayStr = yesterday.toISOString().split('T')[0];
 
       if (!startQueryDate || startQueryDate <= yesterdayStr) {
-        const priorTxs = await getTransactions(connection, rawMaterialId, startQueryDate, yesterdayStr, isBottle, rm.sub_product_name);
+        const priorTxs = await getTransactions(connection, rawMaterialId, startQueryDate, yesterdayStr);
         
         for (const t of priorTxs) {
           let qty = parseFloat(t.quantity) || 0;
           if (isPreform) {
             const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
             qty = qty * scale;
+          } else {
+            const secondUnit = getSecondUnit(rm.category_name);
+            if (secondUnit && unit === secondUnit) {
+              qty = qty / factor;
+            }
           }
 
           transactions.push({
@@ -721,10 +734,10 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
             reference: t.reference_id,
             product: rm.sub_product_name,
             quantity: Math.abs(qty),
-            user: 'Admin',
+            user: t.user_name || 'Admin',
             source: qty > 0 
-              ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : 'PET Production') 
-              : (isPreform ? 'PET Production' : 'Finished Goods Production'),
+              ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : t.transaction_type === 'PRODUCTION' ? 'PET Production' : t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System') 
+              : (t.transaction_type === 'PRODUCTION' ? (isPreform ? 'PET Production' : 'Finished Goods Production') : t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System'),
             type: qty > 0 ? 'Stock IN' : 'Stock OUT'
           });
         }
@@ -738,12 +751,17 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
       transactions = [...openingTxs];
 
       // Add today's transactions
-      const todayTxs = await getTransactions(connection, rawMaterialId, date, date, isBottle, rm.sub_product_name);
+      const todayTxs = await getTransactions(connection, rawMaterialId, date, date);
       for (const t of todayTxs) {
         let qty = parseFloat(t.quantity) || 0;
         if (isPreform) {
           const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
           qty = qty * scale;
+        } else {
+          const secondUnit = getSecondUnit(rm.category_name);
+          if (secondUnit && unit === secondUnit) {
+            qty = qty / factor;
+          }
         }
 
         transactions.push({
@@ -751,10 +769,10 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
           reference: t.reference_id,
           product: rm.sub_product_name,
           quantity: Math.abs(qty),
-          user: 'Admin',
+          user: t.user_name || 'Admin',
           source: qty > 0 
-            ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : 'PET Production') 
-            : (isPreform ? 'PET Production' : 'Finished Goods Production'),
+            ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : t.transaction_type === 'PRODUCTION' ? 'PET Production' : t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System') 
+            : (t.transaction_type === 'PRODUCTION' ? (isPreform ? 'PET Production' : 'Finished Goods Production') : t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System'),
           type: qty > 0 ? 'Stock IN' : 'Stock OUT'
         });
       }
@@ -862,14 +880,20 @@ async function getTransactionsForOpening(connection, rawMaterialId, unit, date, 
   const yesterday = new Date(date);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const factor = await getConversionFactor(connection, rm);
 
   if (!startQueryDate || startQueryDate <= yesterdayStr) {
-    const priorTxs = await getTransactions(connection, rawMaterialId, startQueryDate, yesterdayStr, isBottle, rm.sub_product_name);
+    const priorTxs = await getTransactions(connection, rawMaterialId, startQueryDate, yesterdayStr);
     for (const t of priorTxs) {
       let qty = parseFloat(t.quantity) || 0;
       if (isPreform) {
         const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
         qty = qty * scale;
+      } else {
+        const secondUnit = getSecondUnit(rm.category_name);
+        if (secondUnit && unit === secondUnit) {
+          qty = qty / factor;
+        }
       }
 
       list.push({
@@ -877,9 +901,9 @@ async function getTransactionsForOpening(connection, rawMaterialId, unit, date, 
         reference: t.reference_id,
         product: rm.sub_product_name,
         quantity: Math.abs(qty),
-        user: 'Admin',
+        user: t.user_name || 'Admin',
         source: qty > 0 
-          ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : 'PET Production') 
+          ? (t.transaction_type === 'PURCHASE' ? 'Purchase Entry' : t.transaction_type === 'PRODUCTION' ? 'PET Production' : t.transaction_type === 'CORRECTION' ? 'Stock Correction' : 'System') 
           : (isPreform ? 'PET Production' : 'Finished Goods Production'),
         type: qty > 0 ? 'Stock IN' : 'Stock OUT'
       });

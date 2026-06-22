@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { addSupplierLedgerEntry, deleteSupplierLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -188,6 +189,30 @@ router.post('/', async (req, res) => {
           paymentMethod || 'Cash'
         ]
       );
+    }
+
+    // Supplier Ledger Hook: PURCHASE credit
+    await addSupplierLedgerEntry(connection, {
+      date: billDate,
+      supplierId: supplierId,
+      entryType: 'PURCHASE',
+      referenceNo: billId,
+      particular: `Purchase Invoice ${billId}`,
+      debit: 0.00,
+      credit: parseFloat(grandTotal) || 0.00
+    });
+
+    // Supplier Ledger Hook: PAYMENT debit if paid immediately
+    if (paymentMethod !== 'Credit') {
+      await addSupplierLedgerEntry(connection, {
+        date: billDate,
+        supplierId: supplierId,
+        entryType: 'PAYMENT',
+        referenceNo: billId,
+        particular: `Payment Made (At Purchase Creation)`,
+        debit: parseFloat(grandTotal) || 0.00,
+        credit: 0.00
+      });
     }
 
     await connection.commit();
@@ -675,6 +700,9 @@ router.delete('/:id', async (req, res) => {
       `DELETE FROM expenses WHERE particulars = ?`,
       [`Inventory Purchase Expense: ${id}`]
     );
+
+    // Supplier Ledger Hook: delete bill ledger records
+    await deleteSupplierLedgerEntriesForReference(connection, id);
 
     await connection.commit();
     res.json({ ok: true, message: 'Inventory bill and stock registry adjustments deleted successfully.' });

@@ -57,6 +57,7 @@ async function initDB() {
         company_name VARCHAR(200) NOT NULL,
         phone_number VARCHAR(15),
         gst_number VARCHAR(20),
+        address TEXT,
         bank_name VARCHAR(200),
         account_number VARCHAR(50),
         ifsc_code VARCHAR(20),
@@ -81,6 +82,7 @@ async function initDB() {
         category_id INT NOT NULL,
         sub_product_name VARCHAR(255) NOT NULL,
         unit VARCHAR(20) NOT NULL,
+        qty_in_pc_per_kg DECIMAL(10, 2) DEFAULT NULL,
         status INT DEFAULT 1, -- 1 = Active, 0 = Disabled
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

@@ -93,7 +93,7 @@ router.get('/', async (req, res) => {
     // Get paginated materials
     queryParams.push(limit, offset);
     const [rows] = await pool.query(
-      `SELECT rm.id, rm.category_id, rmc.name AS category_name, rm.sub_product_name, rm.unit, rm.status, rm.created_at
+      `SELECT rm.id, rm.category_id, rmc.name AS category_name, rm.sub_product_name, rm.unit, rm.qty_in_pc_per_kg, rm.status, rm.created_at
        FROM raw_materials rm
        JOIN raw_material_categories rmc ON rm.category_id = rmc.id
        ${baseWhere}
@@ -118,10 +118,11 @@ router.get('/', async (req, res) => {
 // Create a new raw material
 router.post('/', async (req, res) => {
   try {
-    const { categoryId, subProductName, unit } = req.body;
+    const { categoryId, subProductName, unit, qtyInPcPerKg } = req.body;
     
     const subProductNameTrimmed = String(subProductName || '').trim();
     const unitTrimmed = String(unit || '').trim();
+    const qtyInPcPerKgParsed = (qtyInPcPerKg !== undefined && qtyInPcPerKg !== null && qtyInPcPerKg !== '') ? parseFloat(qtyInPcPerKg) : null;
     
     if (!categoryId) {
       throw new Error('Category is required.');
@@ -143,8 +144,8 @@ router.post('/', async (req, res) => {
     }
     
     const [result] = await pool.query(
-      'INSERT INTO raw_materials (category_id, sub_product_name, unit, status) VALUES (?, ?, ?, 1)',
-      [categoryId, subProductNameTrimmed, unitTrimmed]
+      'INSERT INTO raw_materials (category_id, sub_product_name, unit, qty_in_pc_per_kg, status) VALUES (?, ?, ?, ?, 1)',
+      [categoryId, subProductNameTrimmed, unitTrimmed, qtyInPcPerKgParsed]
     );
     
     res.json({
@@ -162,7 +163,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { categoryId, subProductName, unit, status } = req.body;
+    const { categoryId, subProductName, unit, qtyInPcPerKg, status } = req.body;
     
     // Check if raw material exists
     const [existing] = await pool.query('SELECT * FROM raw_materials WHERE id = ?', [id]);
@@ -202,6 +203,12 @@ router.put('/:id', async (req, res) => {
       }
       updates.push('unit = ?');
       values.push(unitTrimmed);
+    }
+
+    if (qtyInPcPerKg !== undefined) {
+      const qtyInPcPerKgParsed = (qtyInPcPerKg !== null && qtyInPcPerKg !== '') ? parseFloat(qtyInPcPerKg) : null;
+      updates.push('qty_in_pc_per_kg = ?');
+      values.push(qtyInPcPerKgParsed);
     }
     
     if (status !== undefined) {

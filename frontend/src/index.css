@@ -58,3 +58,193 @@
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   RESPONSIVE DESIGN OVERRIDES
+   ────────────────────────────────────────────────────────────────────────── */
+
+/* Mobile view styling (<768px) */
+@media (max-width: 767px) {
+  /* Reduce excessive layout padding */
+  .p-10 {
+    padding: 1rem !important;
+  }
+  .p-8 {
+    padding: 1rem !important;
+  }
+  .p-6 {
+    padding: 1rem !important;
+  }
+  .px-10 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+  }
+
+  /* Make containers fit viewport */
+  .max-w-5xl, .max-w-7xl, .max-w-2xl, .max-w-md, .max-w-sm {
+    max-width: 100% !important;
+  }
+
+  /* Convert tables to cards on mobile screen */
+  table:not(.table-no-responsive),
+  .table:not(.table-no-responsive) {
+    display: block !important;
+    width: 100% !important;
+    background: transparent !important;
+    border: none !important;
+  }
+
+  table:not(.table-no-responsive) thead,
+  .table:not(.table-no-responsive) thead {
+    display: none !important;
+  }
+
+  table:not(.table-no-responsive) tbody,
+  .table:not(.table-no-responsive) tbody {
+    display: block !important;
+    width: 100% !important;
+    background: transparent !important;
+    border: none !important;
+  }
+
+  table:not(.table-no-responsive) tr,
+  .table:not(.table-no-responsive) tr {
+    display: block !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 1rem !important;
+    padding: 1.25rem !important;
+    margin-bottom: 1.25rem !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03) !important;
+  }
+
+  table:not(.table-no-responsive) td,
+  .table:not(.table-no-responsive) td {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.75rem 0 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    font-size: 0.85rem !important;
+    text-align: right !important;
+    background: transparent !important;
+    min-height: 2.75rem !important;
+  }
+
+  table:not(.table-no-responsive) td:last-child,
+  .table:not(.table-no-responsive) td:last-child {
+    border-bottom: none !important;
+    justify-content: flex-end !important;
+    padding-top: 1rem !important;
+  }
+
+  /* Add card header label from data-label */
+  table:not(.table-no-responsive) td::before,
+  .table:not(.table-no-responsive) td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: #64748b;
+    text-align: left;
+    margin-right: 1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  table:not(.table-no-responsive) td[data-label=""]::before,
+  .table:not(.table-no-responsive) td[data-label=""]::before,
+  table:not(.table-no-responsive) td[data-label="Actions"]::before,
+  .table:not(.table-no-responsive) td[data-label="Actions"]::before {
+    display: none !important;
+  }
+
+  /* Make forms and grids stack vertically */
+  .grid-cols-2, .grid-cols-3, .grid-cols-4, .grid-cols-5, .grid-cols-12 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+    gap: 1rem !important;
+  }
+
+  /* Stack button containers */
+  .flex:has(> .btn), .flex:has(> .btn-premium) {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  /* Table cells action buttons styling inside cards */
+  table:not(.table-no-responsive) td .flex, 
+  .table:not(.table-no-responsive) td .flex {
+    flex-direction: row !important;
+    justify-content: flex-end !important;
+    width: auto !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Button touch target heights */
+  .btn, .btn-premium, .btn-primary-premium {
+    min-height: 48px !important;
+    height: 48px !important;
+    width: 100% !important;
+    font-size: 0.875rem !important;
+    border-radius: 0.75rem !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* Table-specific button target heights within td */
+  table td .btn, .table td .btn {
+    min-height: 36px !important;
+    height: 36px !important;
+    width: auto !important;
+  }
+
+  /* Input full width */
+  .input-premium, input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    width: 100% !important;
+    height: 48px !important;
+    border-radius: 0.75rem !important;
+  }
+  textarea {
+    height: 100px !important;
+  }
+
+  /* Modal responsive scale */
+  .modal-box, 
+  .fixed.inset-0 .bg-white.rounded-3xl {
+    width: 92vw !important;
+    max-width: 95vw !important;
+    margin: auto !important;
+    height: auto !important;
+    max-height: 85vh !important;
+    border-radius: 1.5rem !important;
+    overflow-y: auto !important;
+  }
+
+  /* Hide raw-scroll elements or convert to swipeable */
+  .overflow-x-auto {
+    overflow-x: hidden !important;
+  }
+}
+
+/* Tablet view styling (768px - 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+  /* Dynamic grids behave as 2-column layouts */
+  .grid-cols-3, .grid-cols-4, .grid-cols-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 1.25rem !important;
+  }
+
+  .p-10 {
+    padding: 1.5rem !important;
+  }
+  
+  /* Make modal responsive */
+  .modal-box, 
+  .fixed.inset-0 .bg-white.rounded-3xl {
+    width: 80vw !important;
+    max-width: 85vw !important;
+    max-height: 85vh !important;
+  }
+}

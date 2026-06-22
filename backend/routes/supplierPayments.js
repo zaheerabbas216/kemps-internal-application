@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
+import { addSupplierLedgerEntry, deleteSupplierLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -123,7 +124,10 @@ router.get('/bills', async (req, res) => {
 
 // POST /api/supplier-payments/manual-bill - Add manual credit bill
 router.post('/manual-bill', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { billDate, supplierId, billedTo, billNumber, grandTotal, advancePaid = 0, creditNote = 0, remarks } = req.body;
 
     if (!billDate) throw new Error('Billing Date is required.');
@@ -137,7 +141,7 @@ router.post('/manual-bill', async (req, res) => {
     const balance = parseFloat(grandTotal) - parseFloat(advancePaid) - parseFloat(creditNote);
     const status = balance <= 0 ? 'SETTLED' : 'PENDING';
 
-    await pool.query(
+    await connection.query(
       `INSERT INTO inventory_bills 
        (id, bill_date, supplier_id, billed_to, bill_number, payment_method, sub_total, total_tax, additional_expenses, grand_total, remarks, is_manual, advance_paid, credit_note, status, created_at)
        VALUES (?, ?, ?, ?, ?, 'Credit', ?, 0, 0, ?, ?, TRUE, ?, ?, ?, NOW())`,
@@ -156,10 +160,51 @@ router.post('/manual-bill', async (req, res) => {
       ]
     );
 
+    // Supplier Ledger Hook: PURCHASE credit
+    await addSupplierLedgerEntry(connection, {
+      date: billDate,
+      supplierId,
+      entryType: 'PURCHASE',
+      referenceNo: billId,
+      particular: `Purchase Invoice ${billId}`,
+      debit: 0.00,
+      credit: parseFloat(grandTotal) || 0.00
+    });
+
+    // Supplier Ledger Hook: PAYMENT debit if advancePaid > 0
+    if (parseFloat(advancePaid) > 0) {
+      await addSupplierLedgerEntry(connection, {
+        date: billDate,
+        supplierId,
+        entryType: 'PAYMENT',
+        referenceNo: billId,
+        particular: `Payment Made (At Purchase Creation)`,
+        debit: parseFloat(advancePaid) || 0.00,
+        credit: 0.00
+      });
+    }
+
+    // Supplier Ledger Hook: PAYMENT debit if creditNote > 0
+    if (parseFloat(creditNote) > 0) {
+      await addSupplierLedgerEntry(connection, {
+        date: billDate,
+        supplierId,
+        entryType: 'PAYMENT',
+        referenceNo: billId,
+        particular: `Credit Note Applied`,
+        debit: parseFloat(creditNote) || 0.00,
+        credit: 0.00
+      });
+    }
+
+    await connection.commit();
     res.json({ ok: true, id: billId, message: 'Manual credit bill saved successfully!' });
   } catch (error) {
+    await connection.rollback();
     console.error('Save manual bill error:', error);
     res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
   }
 });
 
@@ -202,6 +247,52 @@ router.put('/bill/:id', async (req, res) => {
       ]
     );
 
+    // Supplier Ledger Hook: Clear old entries and re-insert updated ones
+    await deleteSupplierLedgerEntriesForReference(connection, id);
+    
+    const [billRows] = await connection.query(
+      `SELECT bill_date, supplier_id FROM inventory_bills WHERE id = ?`,
+      [id]
+    );
+    if (billRows.length > 0) {
+      const { bill_date, supplier_id } = billRows[0];
+      // Insert updated PURCHASE credit entry
+      await addSupplierLedgerEntry(connection, {
+        date: bill_date,
+        supplierId: supplier_id,
+        entryType: 'PURCHASE',
+        referenceNo: id,
+        particular: `Purchase Invoice ${id}`,
+        debit: 0.00,
+        credit: parseFloat(grandTotal) || 0.00
+      });
+
+      // Re-insert advancePaid/creditNote payments if greater than 0
+      if (parseFloat(advancePaid) > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: bill_date,
+          supplierId: supplier_id,
+          entryType: 'PAYMENT',
+          referenceNo: id,
+          particular: `Payment Made (At Purchase Creation)`,
+          debit: parseFloat(advancePaid) || 0.00,
+          credit: 0.00
+        });
+      }
+
+      if (parseFloat(creditNote) > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: bill_date,
+          supplierId: supplier_id,
+          entryType: 'PAYMENT',
+          referenceNo: id,
+          particular: `Credit Note Applied`,
+          debit: parseFloat(creditNote) || 0.00,
+          credit: 0.00
+        });
+      }
+    }
+
     await connection.commit();
     res.json({ ok: true, message: 'Bill updated successfully!' });
   } catch (error) {
@@ -215,16 +306,27 @@ router.put('/bill/:id', async (req, res) => {
 
 // PUT /api/supplier-payments/bill/:id/cancel - Cancel credit bill
 router.put('/bill/:id/cancel', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
+    await connection.beginTransaction();
+
     const { id } = req.params;
-    await pool.query(
+    await connection.query(
       `UPDATE inventory_bills SET status = 'CANCELLED' WHERE id = ?`,
       [id]
     );
+
+    // Supplier Ledger Hook: delete ledger entries on cancel
+    await deleteSupplierLedgerEntriesForReference(connection, id);
+
+    await connection.commit();
     res.json({ ok: true, message: 'Bill cancelled successfully.' });
   } catch (error) {
+    await connection.rollback();
     console.error('Cancel bill error:', error);
     res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
   }
 });
 

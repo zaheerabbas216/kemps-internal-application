@@ -72,17 +72,12 @@ const PetBottle = () => {
 
   const fetchDropdowns = async () => {
     try {
-      // 1. Fetch finished products
-      const fpRes = await api.get('/finished-products', { params: { limit: 100, activeOnly: true } });
-      if (fpRes.data.ok) {
-        setFinishedProducts(fpRes.data.products || []);
-      }
-
-      // 2. Fetch raw materials and filter by "Preforms" category
+      // Fetch raw materials and filter by "Preforms" and "Bottles" categories
       const categoriesRes = await api.get('/raw-materials/categories');
       const materialsRes = await api.get('/raw-materials', { params: { limit: 200, activeOnly: true } });
 
       if (categoriesRes.data.ok && materialsRes.data.ok) {
+        // 1. Filter by "Preforms" category
         const preformCat = categoriesRes.data.categories.find(
           c => c.name.toLowerCase() === 'preforms'
         );
@@ -91,6 +86,20 @@ const PetBottle = () => {
             m => m.category_id === preformCat.id
           );
           setPreformMaterials(preformMats);
+        }
+
+        // 2. Filter by "Bottles" category
+        const bottlesCat = categoriesRes.data.categories.find(
+          c => c.name.toLowerCase() === 'bottles'
+        );
+        if (bottlesCat) {
+          const bottleMats = materialsRes.data.materials.filter(
+            m => m.category_id === bottlesCat.id
+          );
+          setFinishedProducts(bottleMats.map(b => ({
+            id: b.id,
+            name: b.sub_product_name
+          })));
         }
       }
     } catch (err) {
