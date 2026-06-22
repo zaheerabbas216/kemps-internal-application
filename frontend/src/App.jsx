@@ -58,6 +58,7 @@ const AdminRoute = () => {
   const isAdmin = localStorage.getItem('kemps_username')?.toLowerCase() === 'admin';
   return isAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
 };
+import BankDeposit from './pages/BankDeposit';
 
 function App() {
   return (
@@ -115,6 +116,13 @@ function App() {
             </Route>
             <Route path="*" element={<div className="p-8">Page under construction...</div>} />
           </Route>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Navigate to="/customer" replace />} />
+          <Route path="/customer" element={<Customer />} />
+          <Route path="/company-details" element={<CompanyDetails />} />
+          <Route path="/product-master" element={<ProductMaster />} />
+          <Route path="/bank-deposit" element={<BankDeposit />} />
+          <Route path="*" element={<div className="p-8">Page under construction...</div>} />
         </Route>
       </Routes>
     </BrowserRouter>
