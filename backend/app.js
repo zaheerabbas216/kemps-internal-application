@@ -29,7 +29,6 @@ import stockCorrectionsRoutes from './routes/stockCorrections.js';
 import accountsLedgerRoutes from './routes/accountsLedger.js';
 import supplierLedgerRoutes from './routes/supplierLedger.js';
 import authMiddleware from './middleware/auth.js';
-import bankDepositRoutes from './routes/bankDeposit.js';
 
 const app = express();
 

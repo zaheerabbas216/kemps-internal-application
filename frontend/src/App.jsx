@@ -58,7 +58,6 @@ const AdminRoute = () => {
   const isAdmin = localStorage.getItem('kemps_username')?.toLowerCase() === 'admin';
   return isAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
 };
-import BankDeposit from './pages/BankDeposit';
 
 function App() {
   return (
@@ -67,7 +66,7 @@ function App() {
         {/* Public / Auth routes */}
         <Route path="/login" element={<LoginRoute />} />
 
-        {/* Protected Dashboard routes */}
+        {/* Protected routes */}
         <Route element={<ProtectedRoute />}>
           <Route element={<Layout />}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -108,21 +107,15 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/total-sales" element={<TotalSales />} />
             <Route path="/costing-master" element={<CostingMaster />} />
-            
+
             {/* Admin only routes */}
             <Route element={<AdminRoute />}>
               <Route path="/payment-approval" element={<PaymentApproval />} />
               <Route path="/user-authentication" element={<UserAuthentication />} />
             </Route>
+
             <Route path="*" element={<div className="p-8">Page under construction...</div>} />
           </Route>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/customer" replace />} />
-          <Route path="/customer" element={<Customer />} />
-          <Route path="/company-details" element={<CompanyDetails />} />
-          <Route path="/product-master" element={<ProductMaster />} />
-          <Route path="/bank-deposit" element={<BankDeposit />} />
-          <Route path="*" element={<div className="p-8">Page under construction...</div>} />
         </Route>
       </Routes>
     </BrowserRouter>
