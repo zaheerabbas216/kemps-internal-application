@@ -3,12 +3,18 @@ dotenv.config();
 
 import app from './app.js';
 import pool from './config/db.js';
+import { runMigration } from './migrate.js';
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8000;
 
 async function startServer() {
   try {
-    // Test DB connection
+    // Run migrations automatically at startup
+    console.log('Running automatic database migrations...');
+    await runMigration(false);
+    console.log('Database migrations completed successfully.');
+
+    // Test DB connection after migrations have created the database/schema.
     const connection = await pool.getConnection();
     console.log('Database connected successfully!');
     connection.release();

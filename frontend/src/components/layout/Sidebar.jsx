@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 
 const navGroups = [
   {
@@ -19,6 +19,12 @@ const navGroups = [
     icon: '👤'
   },
   {
+    type: 'button',
+    name: 'Accounts Ledger',
+    path: '/accounts-ledger',
+    icon: '📒'
+  },
+  {
     type: 'group',
     title: 'Sales',
     id: 'grpSales',
@@ -26,8 +32,9 @@ const navGroups = [
     items: [
       { name: 'Billing', path: '/billing' },
       { name: 'Credit Balance', path: '/credit-balance' },
+      { name: 'Order Management', path: '/orders' },
       { name: 'Total Sales', path: '/total-sales' },
-      { name: 'Return Goods', path: '/return-goods' },
+      { name: 'Sales Return / Credit Note', path: '/sales-return' },
     ]
   },
   {
@@ -42,7 +49,7 @@ const navGroups = [
     items: [
       { name: 'Inventory', path: '/inventory' },
       { name: 'Pet Bottle', path: '/pet-bottle' },
-      { name: 'Stock Correction', path: '/stock-correction' },
+      { name: 'Stock Correction', path: '/stock-correction' }
     ]
   },
   {
@@ -52,14 +59,13 @@ const navGroups = [
     icon: '🏭',
     items: [
       { name: 'Production Form', path: '/production-form' },
-      { name: 'Present Stock', path: '/present-stock' },
       { name: 'Goods Ledger', path: '/goods-ledger' },
     ]
   },
   {
     type: 'button',
-    name: 'Raw Material Stock',
-    path: '/raw-material-stock',
+    name: 'Raw Material Ledger',
+    path: '/raw-material-ledger',
     icon: '🪨'
   },
   {
@@ -68,32 +74,11 @@ const navGroups = [
   },
   {
     type: 'group',
-    title: 'Function Order',
-    id: 'grpFO',
-    icon: '🎯',
-    items: [
-      { name: 'Function Order', path: '/function-order' },
-      { name: 'FO Order View', path: '/fo-order-view' },
-    ]
-  },
-  {
-    type: 'group',
     title: 'Distribution',
     id: 'grpDO',
     icon: '🚚',
     items: [
       { name: 'Distribution Order', path: '/distribution-order' },
-      { name: 'DO Order View', path: '/do-order-view' },
-    ]
-  },
-  {
-    type: 'group',
-    title: 'Local Orders',
-    id: 'grpLO',
-    icon: '📍',
-    items: [
-      { name: 'Local Orders', path: '/local-order' },
-      { name: 'LO Order View', path: '/lo-order-view' },
     ]
   },
   {
@@ -102,13 +87,11 @@ const navGroups = [
   },
   {
     type: 'group',
-    title: 'Loading / Return',
+    title: 'Loading',
     id: 'grpWH',
     icon: '🏪',
     items: [
       { name: 'Loading', path: '/loading' },
-      { name: 'Return Stock', path: '/return-stock' },
-      { name: 'Godown Transfer', path: '/godown-transfer' },
     ]
   },
   {
@@ -122,16 +105,14 @@ const navGroups = [
     ]
   },
   {
-    type: 'button',
-    name: 'Function Can Supply',
-    path: '/function-can-supply',
-    icon: '🚚'
+    type: 'section',
+    title: 'Costing'
   },
   {
     type: 'button',
-    name: 'Function Return Stock',
-    path: '/function-return-stock',
-    icon: '↩'
+    name: 'Costing Master',
+    path: '/costing-master',
+    icon: '📊'
   },
   {
     type: 'section',
@@ -143,10 +124,14 @@ const navGroups = [
     id: 'grpOff',
     icon: '🗂️',
     items: [
-      { name: 'Courier Parcel', path: '/courier-parcel' },
-      { name: 'Warranty Details', path: '/warranty-details' },
       { name: 'Maintenance Form', path: '/maintenance-form' },
     ]
+  },
+  {
+    type: 'button',
+    name: 'User Authentication',
+    path: '/user-authentication',
+    icon: '🔑'
   },
   {
     type: 'button',
@@ -168,25 +153,31 @@ const navGroups = [
   },
   {
     type: 'button',
+    name: 'Company Details',
+    path: '/company-details',
+    icon: '🏢'
+  },
+  {
+    type: 'button',
     name: 'Supplier Payments',
     path: '/supplier-payments',
     icon: '💳'
   },
   {
     type: 'button',
-    name: 'Product Master',
-    path: '/product-master',
-    icon: '📦'
+    name: 'Supplier Ledger',
+    path: '/supplier-ledger',
+    icon: '📓'
   },
   {
     type: 'button',
-    name: 'Company Details',
-    path: '/company-details',
-    icon: '🏢'
+    name: 'Product Master',
+    path: '/product-master',
+    icon: '📦'
   }
 ];
 
-const SidebarItem = ({ item }) => {
+const SidebarItem = ({ item, onClickItem }) => {
   if (item.type === 'section') {
     return (
       <h3 className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-8 mb-3">
@@ -199,6 +190,7 @@ const SidebarItem = ({ item }) => {
     return (
       <NavLink
         to={item.path}
+        onClick={onClickItem}
         className={({ isActive }) =>
           `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
         }
@@ -232,6 +224,7 @@ const SidebarItem = ({ item }) => {
               <NavLink
                 key={idx}
                 to={sub.path}
+                onClick={onClickItem}
                 className={({ isActive }) =>
                   `block px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 ${
                     isActive ? 'text-primary bg-primary/5 font-bold' : 'text-slate-500 hover:text-slate-900'
@@ -250,10 +243,45 @@ const SidebarItem = ({ item }) => {
   return null;
 };
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
+  const navigate = useNavigate();
+
+  const currentLoggedUser = localStorage.getItem('kemps_username') || '';
+  const isAdmin = currentLoggedUser.toLowerCase() === 'admin';
+  const fullName = localStorage.getItem('kemps_name') || (currentLoggedUser ? currentLoggedUser.charAt(0).toUpperCase() + currentLoggedUser.slice(1) : 'User');
+  const userInitials = fullName
+    .split(' ')
+    .map(word => word.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'US';
+
+  const handleLogout = () => {
+    localStorage.removeItem('kemps_logged_in');
+    localStorage.removeItem('kemps_username');
+    localStorage.removeItem('kemps_name');
+    localStorage.removeItem('kemps_auth_token');
+    navigate('/login');
+  };
+
+  const handleItemClick = () => {
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  const filteredNavGroups = navGroups.filter(item => {
+    if (item.type === 'button') {
+      if (item.path === '/payment-approval' || item.path === '/user-authentication') {
+        return isAdmin;
+      }
+    }
+    return true;
+  });
+
   return (
     <aside className="w-72 bg-white border-r border-slate-200/60 h-screen flex flex-col shrink-0 sticky top-0 overflow-hidden">
-      <div className="p-8 shrink-0">
+      <div className="p-8 shrink-0 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic">
             K
@@ -265,27 +293,47 @@ const Sidebar = () => {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management</p>
           </div>
         </div>
+        
+        {/* Mobile Close Button */}
+        <button 
+          onClick={onClose}
+          className="lg:hidden w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto"
+        >
+          ✕
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 pb-12 space-y-1 scrollbar-hide">
-        {navGroups.map((item, idx) => (
-          <SidebarItem key={idx} item={item} />
+        {filteredNavGroups.map((item, idx) => (
+          <SidebarItem key={idx} item={item} onClickItem={handleItemClick} />
         ))}
       </nav>
       
       <div className="p-6 border-t border-slate-100 shrink-0">
-        <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center gap-3 border border-slate-100">
-          <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white">
-            ZA
+        <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
+          <div className="flex items-center gap-3 overflow-hidden">
+            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
+              {userInitials}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
+              <p className="text-[10px] text-slate-500 font-medium">
+                {isAdmin ? 'Administrator' : 'Operator'}
+              </p>
+            </div>
           </div>
-          <div className="overflow-hidden">
-            <p className="text-xs font-bold text-slate-800 truncate">Zaheer Abbas</p>
-            <p className="text-[10px] text-slate-500 font-medium">Administrator</p>
-          </div>
+          <button 
+            onClick={handleLogout}
+            title="Log Out"
+            className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-450 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0 ml-1"
+          >
+            ➔
+          </button>
         </div>
       </div>
     </aside>
   );
 };
+
 
 export default Sidebar;
