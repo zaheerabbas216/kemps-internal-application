@@ -9,15 +9,15 @@ const PORT = process.env.PORT || 8000;
 
 async function startServer() {
   try {
-    // Test DB connection
-    const connection = await pool.getConnection();
-    console.log('Database connected successfully!');
-    connection.release();
-
     // Run migrations automatically at startup
     console.log('Running automatic database migrations...');
     await runMigration(false);
     console.log('Database migrations completed successfully.');
+
+    // Test DB connection after migrations have created the database/schema.
+    const connection = await pool.getConnection();
+    console.log('Database connected successfully!');
+    connection.release();
 
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
