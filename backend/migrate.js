@@ -923,6 +923,186 @@ export async function runMigration(shouldExit = false) {
       console.log('can_deposit_ledger holding/reversal columns added and initialized.');
     }
 
+    // 33. Create costing tables
+    console.log('Creating costing master tables if they do not exist...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS raw_material_costs (
+        raw_material_id INT PRIMARY KEY,
+        use_purchase_cost TINYINT(1) NOT NULL DEFAULT 1,
+        manual_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cost_templates (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) UNIQUE NOT NULL,
+        components TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cost_sheets (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        finished_product_id INT UNIQUE NOT NULL,
+        total_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (finished_product_id) REFERENCES finished_products(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cost_sheet_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cost_sheet_id INT NOT NULL,
+        component_name VARCHAR(100) NOT NULL,
+        component_type ENUM('RAW_MATERIAL', 'OVERHEAD') NOT NULL,
+        raw_material_id INT NULL,
+        quantity DECIMAL(12, 4) NOT NULL DEFAULT 1.0000,
+        cost_value DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        FOREIGN KEY (cost_sheet_id) REFERENCES cost_sheets(id) ON DELETE CASCADE,
+        FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS cost_sheet_history (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        finished_product_id INT NOT NULL,
+        change_date DATE NOT NULL,
+        old_cost DECIMAL(12, 4) NOT NULL,
+        new_cost DECIMAL(12, 4) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (finished_product_id) REFERENCES finished_products(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('Costing master tables verified.');
+
+    // 34. Check and add unit_cost and production_value columns to production_batches
+    const [prodCostCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'production_batches' AND COLUMN_NAME = 'unit_cost'`,
+      [dbName]
+    );
+    if (prodCostCols.length === 0) {
+      console.log('Adding unit_cost and production_value columns to production_batches...');
+      await connection.query(`
+        ALTER TABLE production_batches
+        ADD COLUMN unit_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        ADD COLUMN production_value DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 35. Check and add unit_cost and production_value columns to pet_bottle_batches
+    const [pbCostCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'pet_bottle_batches' AND COLUMN_NAME = 'unit_cost'`,
+      [dbName]
+    );
+    if (pbCostCols.length === 0) {
+      console.log('Adding unit_cost and production_value columns to pet_bottle_batches...');
+      await connection.query(`
+        ALTER TABLE pet_bottle_batches
+        ADD COLUMN unit_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        ADD COLUMN production_value DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 36. Check and add unit_cost and total_cost columns to customer_bill_items
+    const [biCostCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_bill_items' AND COLUMN_NAME = 'unit_cost'`,
+      [dbName]
+    );
+    if (biCostCols.length === 0) {
+      console.log('Adding unit_cost and total_cost columns to customer_bill_items...');
+      await connection.query(`
+        ALTER TABLE customer_bill_items
+        ADD COLUMN unit_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        ADD COLUMN total_cost DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 37. Check and add cogs and profit columns to customer_bills
+    const [billCogsCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_bills' AND COLUMN_NAME = 'cogs'`,
+      [dbName]
+    );
+    if (billCogsCols.length === 0) {
+      console.log('Adding cogs and profit columns to customer_bills...');
+      await connection.query(`
+        ALTER TABLE customer_bills
+        ADD COLUMN cogs DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        ADD COLUMN profit DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 38. Check and add unit_cost and total_cost columns to sales_return_items
+    const [sriCostCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'sales_return_items' AND COLUMN_NAME = 'unit_cost'`,
+      [dbName]
+    );
+    if (sriCostCols.length === 0) {
+      console.log('Adding unit_cost and total_cost columns to sales_return_items...');
+      await connection.query(`
+        ALTER TABLE sales_return_items
+        ADD COLUMN unit_cost DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        ADD COLUMN total_cost DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 39. Check and add cogs columns to sales_returns
+    const [retCogsCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'sales_returns' AND COLUMN_NAME = 'cogs'`,
+      [dbName]
+    );
+    if (retCogsCols.length === 0) {
+      console.log('Adding cogs columns to sales_returns...');
+      await connection.query(`
+        ALTER TABLE sales_returns
+        ADD COLUMN cogs DECIMAL(12, 2) NOT NULL DEFAULT 0.00
+      `);
+    }
+
+    // 40. Add category and payment_method columns to expenses, and category to payment_approvals
+    console.log('Checking and adding category & payment_method columns to expenses...');
+    const [expCatCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'expenses' AND COLUMN_NAME = 'category'`,
+      [dbName]
+    );
+    if (expCatCols.length === 0) {
+      console.log('Adding category and payment_method to expenses...');
+      await connection.query(`
+        ALTER TABLE expenses
+        ADD COLUMN category VARCHAR(100) NOT NULL DEFAULT 'General',
+        ADD COLUMN payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash'
+      `);
+      console.log('Columns category and payment_method added to expenses.');
+    }
+
+    console.log('Converting expenses table collation to utf8mb4_unicode_ci...');
+    await connection.query('ALTER TABLE expenses CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+
+
+    const [paCatCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'payment_approvals' AND COLUMN_NAME = 'category'`,
+      [dbName]
+    );
+    if (paCatCols.length === 0) {
+      console.log('Adding category to payment_approvals...');
+      await connection.query(`
+        ALTER TABLE payment_approvals
+        ADD COLUMN category VARCHAR(100) NULL
+      `);
+      console.log('Column category added to payment_approvals.');
+    }
+
     console.log('Migration complete!');
     await connection.end();
     if (shouldExit) {

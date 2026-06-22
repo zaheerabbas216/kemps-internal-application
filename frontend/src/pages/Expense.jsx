@@ -26,7 +26,9 @@ const Expense = () => {
     particulars: '',
     amount: '',
     enteredBy: '',
-    remarks: ''
+    remarks: '',
+    category: 'General',
+    paymentMethod: 'Cash'
   });
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -71,7 +73,9 @@ const Expense = () => {
         particulars: expense.particulars,
         amount: expense.amount,
         enteredBy: expense.entered_by,
-        remarks: expense.remarks || ''
+        remarks: expense.remarks || '',
+        category: expense.category || 'General',
+        paymentMethod: expense.payment_method || 'Cash'
       });
     } else {
       setEditingExpense(null);
@@ -89,7 +93,9 @@ const Expense = () => {
         particulars: '',
         amount: '',
         enteredBy: formattedAdminName,
-        remarks: ''
+        remarks: '',
+        category: 'General',
+        paymentMethod: 'Cash'
       });
     }
     setIsFormModalOpen(true);
@@ -103,7 +109,9 @@ const Expense = () => {
       particulars: '',
       amount: '',
       enteredBy: '',
-      remarks: ''
+      remarks: '',
+      category: 'General',
+      paymentMethod: 'Cash'
     });
   };
 
@@ -280,17 +288,18 @@ const Expense = () => {
               <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
                 <th className="py-4 px-6 text-left">Expense ID</th>
                 <th className="py-4 px-6 text-left">Date</th>
+                <th className="py-4 px-6 text-left">Category</th>
                 <th className="py-4 px-6 text-left">Particulars</th>
                 <th className="py-4 px-6 text-left">Amount (₹)</th>
-                <th className="py-4 px-6 text-left">Entered By</th>
-                <th className="py-4 px-6 text-left">Remarks</th>
+                <th className="py-4 px-6 text-left">Method</th>
+                <th className="py-4 px-6 text-center">Status</th>
                 <th className="py-4 px-6 text-center">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="7" className="py-20 text-center">
+                  <td colSpan="8" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                        <span className="loading loading-spinner text-primary"></span>
                        <span className="text-slate-400 text-sm font-medium">Loading today's expenses...</span>
@@ -299,47 +308,63 @@ const Expense = () => {
                 </tr>
               ) : expenses.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="8" className="py-20 text-center text-slate-400 font-medium italic">
                     {searchQuery ? 'No matching expenses found for today.' : 'No expenses recorded today.'}
                   </td>
                 </tr>
               ) : (
-                expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{exp.id}</td>
-                    <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(exp.expense_date)}</td>
-                    <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[200px] truncate" title={exp.particulars}>{exp.particulars}</td>
-                    <td className="py-4 px-6 text-[14px] font-black text-slate-800">
-                      ₹ {parseFloat(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="py-4 px-6 text-[14px] font-semibold text-slate-650">{exp.entered_by}</td>
-                    <td className="py-4 px-6 text-[13px] text-slate-400 max-w-[150px] truncate" title={exp.remarks || ''}>
-                      {exp.remarks || '—'}
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={() => handleOpenView(exp)}
-                          className="btn btn-ghost btn-xs text-slate-500 hover:bg-slate-100 rounded-lg px-2"
-                        >
-                          View
-                        </button>
-                        <button 
-                          onClick={() => handleOpenForm(exp)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => confirmDelete(exp)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                expenses.map((exp) => {
+                  const editable = exp.payment_status === 'Pending Approval';
+                  const lockMsg = "This expense has already been approved and posted to accounts. Please create an adjustment or reversal entry.";
+                  return (
+                    <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors group">
+                      <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{exp.id}</td>
+                      <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(exp.expense_date)}</td>
+                      <td className="py-4 px-6 text-[13px] font-semibold text-slate-600">{exp.category || 'General'}</td>
+                      <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[200px] truncate" title={exp.particulars}>{exp.particulars}</td>
+                      <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                        ₹ {parseFloat(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </td>
+                      <td className="py-4 px-6 text-[13px] font-semibold text-slate-600">{exp.payment_method || 'Cash'}</td>
+                      <td className="py-4 px-6 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
+                          exp.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                          exp.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                          exp.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                          'bg-slate-50 text-slate-500'
+                        }`}>
+                          {(exp.payment_status || 'Pending Approval').toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handleOpenView(exp)}
+                            className="btn btn-ghost btn-xs text-slate-505 hover:bg-slate-100 rounded-lg px-2"
+                          >
+                            View
+                          </button>
+                          <button 
+                            onClick={() => handleOpenForm(exp)}
+                            disabled={!editable}
+                            className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!editable ? lockMsg : "Edit record"}
+                          >
+                            Edit
+                          </button>
+                          <button 
+                            onClick={() => confirmDelete(exp)}
+                            disabled={!editable}
+                            className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={!editable ? lockMsg : "Delete record"}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -406,6 +431,49 @@ const Expense = () => {
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                         required
                       />
+                    </div>
+
+                    {/* Category */}
+                    <div className="space-y-1.5">
+                      <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Category *
+                      </label>
+                      <select 
+                        name="category"
+                        value={formData.category}
+                        onChange={handleInputChange}
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                        required
+                      >
+                        <option value="General">General</option>
+                        <option value="Raw Material">Raw Material</option>
+                        <option value="Transport">Transport</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Office Supplies">Office Supplies</option>
+                        <option value="Printing & Stationery">Printing & Stationery</option>
+                        <option value="Salary/Wages">Salary/Wages</option>
+                        <option value="Rent">Rent</option>
+                        <option value="Electricity">Electricity</option>
+                        <option value="Others">Others</option>
+                      </select>
+                    </div>
+
+                    {/* Payment Method */}
+                    <div className="space-y-1.5">
+                      <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Payment Method *
+                      </label>
+                      <select 
+                        name="paymentMethod"
+                        value={formData.paymentMethod}
+                        onChange={handleInputChange}
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                        required
+                      >
+                        <option value="Cash">Cash</option>
+                        <option value="UPI">UPI</option>
+                        <option value="Bank">Bank</option>
+                      </select>
                     </div>
 
                     {/* Particulars */}
@@ -546,14 +614,51 @@ const Expense = () => {
                 <span className="col-span-2 font-mono font-bold text-primary text-xs">{viewingExpense.id}</span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
-                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Date</span>
-                <span className="col-span-2 text-slate-800">{formatDateDDMMYYYY(viewingExpense.expense_date)}</span>
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Category</span>
+                <span className="col-span-2 text-slate-800">{viewingExpense.category || 'General'}</span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Amount</span>
                 <span className="col-span-2 font-black text-slate-800">
                   ₹ {parseFloat(viewingExpense.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Payment Method</span>
+                <span className="col-span-2 text-slate-800">{viewingExpense.payment_method || 'Cash'}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Status</span>
+                <span className={`col-span-2 px-2 py-0.5 rounded text-[9px] font-extrabold w-fit ${
+                  viewingExpense.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
+                  viewingExpense.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
+                  viewingExpense.payment_status === 'Rejected' ? 'bg-rose-50 text-rose-600' :
+                  'bg-slate-50 text-slate-500'
+                }`}>
+                  {(viewingExpense.payment_status || 'Pending Approval').toUpperCase()}
+                </span>
+              </div>
+              
+              {viewingExpense.payment_status === 'Rejected' && (
+                <>
+                  <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Reason</span>
+                    <span className="col-span-2 text-rose-600 font-semibold">{viewingExpense.rejection_reason || 'No reason provided'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Rejected By</span>
+                    <span className="col-span-2 text-slate-700">{viewingExpense.rejected_by || 'Admin'}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                    <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Rejected Date</span>
+                    <span className="col-span-2 text-slate-700">{viewingExpense.rejected_date || '—'}</span>
+                  </div>
+                </>
+              )}
+
+              <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Date</span>
+                <span className="col-span-2 text-slate-800">{formatDateDDMMYYYY(viewingExpense.expense_date)}</span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Particulars</span>
@@ -571,11 +676,13 @@ const Expense = () => {
 
             <div className="pt-2 border-t border-slate-100 flex gap-2">
               <button 
+                disabled={viewingExpense.payment_status !== 'Pending Approval'}
                 onClick={() => {
                   setIsViewModalOpen(false);
                   handleOpenForm(viewingExpense);
                 }}
-                className="btn-premium btn-primary-premium flex-1 h-11 text-xs uppercase"
+                className="btn-premium btn-primary-premium flex-1 h-11 text-xs uppercase disabled:opacity-50 disabled:cursor-not-allowed"
+                title={viewingExpense.payment_status !== 'Pending Approval' ? "Approved or Rejected records are locked" : "Edit record"}
               >
                 Edit Record
               </button>

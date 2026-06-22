@@ -442,13 +442,56 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // 3. Insert Invoice Header (using unapproved amounts & payment_status/approval_id)
+    // Calculate COGS and Profit first by checking costing sheets
+    let totalCogs = 0;
+    const itemsWithCosts = [];
+    let totalTaxAmount = 0;
+
+    for (const item of items) {
+      const { finishedProductId, quantity, rateWithTax, taxPercent } = item;
+      const q = parseInt(quantity, 10);
+      const r = parseFloat(rateWithTax) || 0.00;
+      const t = parseFloat(taxPercent) || 0.00;
+
+      if (!finishedProductId) throw new Error('Product is invalid.');
+      if (isNaN(q) || q <= 0) throw new Error('Product quantity must be greater than 0.');
+
+      // Query cost sheet
+      const [costRows] = await connection.query(
+        `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+        [parseInt(finishedProductId, 10)]
+      );
+      const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+      const itemCogs = q * unitCost;
+      totalCogs += itemCogs;
+
+      const basic = r / (1 + t / 100);
+      const total = q * r;
+      totalTaxAmount += (total - (q * basic));
+
+      itemsWithCosts.push({
+        finishedProductId: parseInt(finishedProductId, 10),
+        q,
+        r,
+        t,
+        basic,
+        total,
+        unitCost,
+        itemCogs
+      });
+    }
+
+    const billGrandTotal = parseFloat(grandTotal) || 0.00;
+    const basicRevenue = billGrandTotal - totalTaxAmount;
+    const billProfit = basicRevenue - totalCogs;
+
+    // 3. Insert Invoice Header (using unapproved amounts & payment_status/approval_id, cogs, profit)
     await connection.query(
       `INSERT INTO customer_bills 
        (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
         grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
-        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 0.00, ?, NOW())`,
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, cogs, profit, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 0.00, ?, ?, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -459,45 +502,36 @@ router.post('/', async (req, res) => {
         cleanPhone,
         cleanGst,
         cleanAddress,
-        parseFloat(grandTotal) || 0.00,
+        billGrandTotal,
         finalPaymentMode,
-        appliedCredit, // amount_paid is initially only the applied credit amount
-        parseFloat(grandTotal) - appliedCredit, // due_amount is initially grand_total minus applied credit
+        appliedCredit,
+        billGrandTotal - appliedCredit,
         finalCashPaid,
         finalUpiPaid,
         finalBankPaid,
         paymentStatus,
         pendingAmount,
-        approvalId || null
+        approvalId || null,
+        totalCogs,
+        billProfit
       ]
     );
 
     // 4. Insert Items and Stock Register Deductions
-    for (const item of items) {
-      const { finishedProductId, quantity, rateWithTax, taxPercent } = item;
-      const q = parseInt(quantity, 10);
-      const r = parseFloat(rateWithTax) || 0.00;
-      const t = parseFloat(taxPercent) || 0.00;
-      
-      if (!finishedProductId) throw new Error('Product is invalid.');
-      if (isNaN(q) || q <= 0) throw new Error('Product quantity must be greater than 0.');
-
-      const basic = r / (1 + t / 100);
-      const total = q * r;
-
+    for (const item of itemsWithCosts) {
       // Insert line item
       await connection.query(
         `INSERT INTO customer_bill_items 
-         (bill_id, finished_product_id, quantity, rate_with_tax, tax_percent, basic_rate, total_amount)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [billId, parseInt(finishedProductId, 10), q, r, t, basic, total]
+         (bill_id, finished_product_id, quantity, rate_with_tax, tax_percent, basic_rate, total_amount, unit_cost, total_cost)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [billId, item.finishedProductId, item.q, item.r, item.t, item.basic, item.total, item.unitCost, item.itemCogs]
       );
 
       // Stock Register Deduction (transaction_type = 'SALE', quantity is negative)
       await connection.query(
         `INSERT INTO stock_register (item_type, item_id, transaction_type, reference_id, quantity, created_at)
          VALUES ('FINISHED_PRODUCT', ?, 'SALE', ?, ?, NOW())`,
-        [parseInt(finishedProductId, 10), billId, -q]
+        [item.finishedProductId, billId, -item.q]
       );
     }
 

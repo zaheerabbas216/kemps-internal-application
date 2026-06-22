@@ -11,6 +11,27 @@ async function generateId(prefix, table, idColumn, connection = pool) {
   const istDate = new Date(now.getTime() + (330 + offset) * 60000);
   const yyyy = istDate.getFullYear();
   
+  if (prefix === 'EXP') {
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}${mm}${dd}`;
+    
+    const [rows] = await connection.query(
+      `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
+      [`EXP-${dateStr}-%`]
+    );
+    
+    let seq = 1;
+    if (rows.length) {
+      const lastId = rows[0][idColumn];
+      const match = lastId.match(/^EXP-\d{8}-(\d+)$/);
+      if (match && match[1]) {
+        seq = parseInt(match[1]) + 1;
+      }
+    }
+    return `EXP-${dateStr}-${String(seq).padStart(4, '0')}`;
+  }
+  
   const [rows] = await connection.query(
     `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
     [`${prefix}-${yyyy}-%`]
@@ -201,31 +222,43 @@ router.post('/', async (req, res) => {
       const rowTotal = q * rate;
       totalReturnAmount += rowTotal;
 
+      // Retrieve unit cost of this finished product
+      const [costRows] = await connection.query(
+        `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+        [parseInt(finishedProductId, 10)]
+      );
+      const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+      const itemCogs = q * unitCost;
+
       validatedItems.push({
         finishedProductId: parseInt(finishedProductId, 10),
         quantity: q,
         rateWithTax: rate,
         taxPercent: taxPct,
-        totalAmount: rowTotal
+        totalAmount: rowTotal,
+        unitCost,
+        itemCogs
       });
     }
+
+    const totalReturnedCogs = validatedItems.reduce((acc, curr) => acc + curr.itemCogs, 0);
 
     // 3. Generate Return ID
     const returnId = await generateId('SR', 'sales_returns', 'id', connection);
 
     // 4. Create Sales Return entry
     await connection.query(
-      `INSERT INTO sales_returns (id, return_date, customer_id, bill_id, total_return_amount, reason, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [returnId, returnDate, customerId, billId, totalReturnAmount, reason, createdBy]
+      `INSERT INTO sales_returns (id, return_date, customer_id, bill_id, total_return_amount, reason, created_by, cogs, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [returnId, returnDate, customerId, billId, totalReturnAmount, reason, createdBy, totalReturnedCogs]
     );
 
     // 5. Create Sales Return items & update inventory via Stock Register
     for (const vItem of validatedItems) {
       await connection.query(
-        `INSERT INTO sales_return_items (sales_return_id, finished_product_id, quantity, rate_with_tax, tax_percent, total_amount)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [returnId, vItem.finishedProductId, vItem.quantity, vItem.rateWithTax, vItem.taxPercent, vItem.totalAmount]
+        `INSERT INTO sales_return_items (sales_return_id, finished_product_id, quantity, rate_with_tax, tax_percent, total_amount, unit_cost, total_cost)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [returnId, vItem.finishedProductId, vItem.quantity, vItem.rateWithTax, vItem.taxPercent, vItem.totalAmount, vItem.unitCost, vItem.itemCogs]
       );
 
       // Inventory: Add stock back to finished products inventory (positive value)
@@ -239,15 +272,17 @@ router.post('/', async (req, res) => {
     // 6. Accounting: Create Expense entry
     const expenseId = await generateId('EXP', 'expenses', 'id', connection);
     await connection.query(
-      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
+        payment_status, approved_amount, pending_amount, rejected_amount, category, payment_method, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Sales Return', 'Cash', NOW())`,
       [
         expenseId,
         returnDate,
         `Sales Return: ${returnId}`,
         totalReturnAmount,
         createdBy,
-        `Returned goods against invoice: ${billId}`
+        `Returned goods against invoice: ${billId}`,
+        totalReturnAmount
       ]
     );
 

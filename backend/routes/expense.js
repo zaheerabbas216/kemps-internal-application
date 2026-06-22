@@ -4,13 +4,34 @@ import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js'
 
 const router = express.Router();
 
-// Helper to generate custom sequence ID (e.g. EXP-2026-00001)
+// Helper to generate custom sequence ID
 async function generateId(prefix, table, idColumn) {
   const now = new Date();
   const offset = now.getTimezoneOffset();
   // Adjust to IST timezone (UTC+5:30)
   const istDate = new Date(now.getTime() + (330 + offset) * 60000);
   const yyyy = istDate.getFullYear();
+  
+  if (prefix === 'EXP') {
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}${mm}${dd}`;
+    
+    const [rows] = await pool.query(
+      `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
+      [`EXP-${dateStr}-%`]
+    );
+    
+    let seq = 1;
+    if (rows.length) {
+      const lastId = rows[0][idColumn];
+      const match = lastId.match(/^EXP-\d{8}-(\d+)$/);
+      if (match && match[1]) {
+        seq = parseInt(match[1]) + 1;
+      }
+    }
+    return `EXP-${dateStr}-${String(seq).padStart(4, '0')}`;
+  }
   
   const [rows] = await pool.query(
     `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
@@ -45,26 +66,33 @@ router.get('/today', async (req, res) => {
 
     // Get today's total sum and count (overall, ignore search filters for the absolute aggregate summary)
     const [summaryRows] = await pool.query(
-      `SELECT COALESCE(SUM(amount), 0) as totalAmount, COUNT(*) as totalCount FROM expenses WHERE expense_date = ?`,
+      `SELECT 
+         COALESCE(SUM(CASE WHEN payment_status = 'Approved' THEN amount ELSE 0 END), 0) as totalAmount, 
+         COUNT(*) as totalCount 
+       FROM expenses 
+       WHERE expense_date = ?`,
       [todayStr]
     );
     const todayTotal = parseFloat(summaryRows[0].totalAmount);
     const todayCount = parseInt(summaryRows[0].totalCount, 10);
 
     let queryParams = [todayStr];
-    let whereClause = 'WHERE expense_date = ?';
+    let whereClause = 'WHERE e.expense_date = ?';
 
     if (search.trim()) {
-      whereClause += ' AND (particulars LIKE ? OR entered_by LIKE ? OR id LIKE ? OR remarks LIKE ?)';
+      whereClause += ' AND (e.particulars LIKE ? OR e.entered_by LIKE ? OR e.id LIKE ? OR e.remarks LIKE ?)';
       const wildSearch = `%${search.trim()}%`;
       queryParams.push(wildSearch, wildSearch, wildSearch, wildSearch);
     }
 
     const [rows] = await pool.query(
-      `SELECT id, DATE_FORMAT(expense_date, '%Y-%m-%d') as expense_date, particulars, amount, entered_by, remarks, created_at 
-       FROM expenses 
+      `SELECT e.id, DATE_FORMAT(e.expense_date, '%Y-%m-%d') as expense_date, e.particulars, e.amount, e.entered_by, e.remarks, 
+              e.payment_status, e.category, e.payment_method, e.created_at,
+              pa.rejected_by, DATE_FORMAT(pa.rejected_at, '%d-%m-%Y %h:%i %p') as rejected_date, pa.rejection_reason
+       FROM expenses e 
+       LEFT JOIN payment_approvals pa ON e.approval_id = pa.approval_id
        ${whereClause} 
-       ORDER BY created_at DESC`,
+       ORDER BY e.created_at DESC`,
       queryParams
     );
 
@@ -97,15 +125,15 @@ router.get('/history', async (req, res) => {
     let whereClauses = [];
 
     if (startDate) {
-      whereClauses.push('expense_date >= ?');
+      whereClauses.push('e.expense_date >= ?');
       queryParams.push(startDate);
     }
     if (endDate) {
-      whereClauses.push('expense_date <= ?');
+      whereClauses.push('e.expense_date <= ?');
       queryParams.push(endDate);
     }
     if (search.trim()) {
-      whereClauses.push('(particulars LIKE ? OR entered_by LIKE ? OR id LIKE ? OR remarks LIKE ?)');
+      whereClauses.push('(e.particulars LIKE ? OR e.entered_by LIKE ? OR e.id LIKE ? OR e.remarks LIKE ?)');
       const wildSearch = `%${search.trim()}%`;
       queryParams.push(wildSearch, wildSearch, wildSearch, wildSearch);
     }
@@ -114,7 +142,7 @@ router.get('/history', async (req, res) => {
 
     // Get count
     const [countRows] = await pool.query(
-      `SELECT COUNT(*) as count FROM expenses ${whereClauseStr}`,
+      `SELECT COUNT(*) as count FROM expenses e ${whereClauseStr}`,
       queryParams
     );
     const total = countRows[0].count;
@@ -122,10 +150,13 @@ router.get('/history', async (req, res) => {
     // Get rows
     let listParams = [...queryParams, limit, offset];
     const [rows] = await pool.query(
-      `SELECT id, DATE_FORMAT(expense_date, '%Y-%m-%d') as expense_date, particulars, amount, entered_by, remarks, created_at 
-       FROM expenses 
+      `SELECT e.id, DATE_FORMAT(e.expense_date, '%Y-%m-%d') as expense_date, e.particulars, e.amount, e.entered_by, e.remarks, 
+              e.payment_status, e.category, e.payment_method, e.created_at,
+              pa.rejected_by, DATE_FORMAT(pa.rejected_at, '%d-%m-%Y %h:%i %p') as rejected_date, pa.rejection_reason
+       FROM expenses e 
+       LEFT JOIN payment_approvals pa ON e.approval_id = pa.approval_id
        ${whereClauseStr} 
-       ORDER BY expense_date DESC, created_at DESC 
+       ORDER BY e.expense_date DESC, e.created_at DESC 
        LIMIT ? OFFSET ?`,
       listParams
     );
@@ -146,11 +177,13 @@ router.get('/history', async (req, res) => {
 // Create new expense
 router.post('/', async (req, res) => {
   try {
-    const { expenseDate, particulars, amount, enteredBy, remarks } = req.body;
+    const { expenseDate, particulars, amount, enteredBy, remarks, category, paymentMethod } = req.body;
     
     const particularsTrimmed = String(particulars || '').trim();
     const enteredByTrimmed = String(enteredBy || '').trim();
     const amountVal = parseFloat(amount);
+    const categoryVal = String(category || 'General').trim();
+    const paymentMethodVal = String(paymentMethod || 'Cash').trim();
 
     if (!expenseDate) throw new Error('Date is required.');
     if (!particularsTrimmed) throw new Error('Particulars is required.');
@@ -167,21 +200,22 @@ router.post('/', async (req, res) => {
       referenceNo: id,
       partyName: enteredByTrimmed,
       description: `Expense: ${particularsTrimmed}`,
-      paymentMethod: 'Cash',
-      cashAmount: amountVal,
-      upiAmount: 0,
-      bankAmount: 0,
+      paymentMethod: paymentMethodVal,
+      cashAmount: paymentMethodVal === 'Cash' ? amountVal : 0,
+      upiAmount: paymentMethodVal === 'UPI' ? amountVal : 0,
+      bankAmount: paymentMethodVal === 'Bank' ? amountVal : 0,
       amount: amountVal,
       transactionDate: expenseDate,
       enteredBy: enteredByTrimmed,
-      remarks: String(remarks || '').trim()
+      remarks: String(remarks || '').trim(),
+      category: categoryVal
     });
 
     await pool.query(
       `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
-        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
-      [id, expenseDate, particularsTrimmed, amountVal, enteredByTrimmed, String(remarks || '').trim(), amountVal, approvalId || null]
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, category, payment_method, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, ?, ?, NOW())`,
+      [id, expenseDate, particularsTrimmed, amountVal, enteredByTrimmed, String(remarks || '').trim(), amountVal, approvalId || null, categoryVal, paymentMethodVal]
     );
 
     res.json({ ok: true, id, message: 'Expense saved successfully!' });
@@ -195,10 +229,21 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { expenseDate, particulars, amount, enteredBy, remarks } = req.body;
+    const { expenseDate, particulars, amount, enteredBy, remarks, category, paymentMethod } = req.body;
 
     const [existing] = await pool.query('SELECT * FROM expenses WHERE id = ?', [id]);
     if (existing.length === 0) throw new Error('Expense record not found.');
+    const expense = existing[0];
+
+    // Lock check
+    if (expense.approval_id) {
+      const [appRows] = await pool.query('SELECT status FROM payment_approvals WHERE approval_id = ?', [expense.approval_id]);
+      if (appRows.length > 0 && appRows[0].status !== 'Pending') {
+        throw new Error('This expense has already been approved and posted to accounts. Please create an adjustment or reversal entry.');
+      }
+    } else if (expense.payment_status !== 'Pending Approval') {
+      throw new Error('This expense has already been approved or rejected and cannot be modified.');
+    }
 
     const updates = [];
     const values = [];
@@ -218,6 +263,8 @@ router.put('/:id', async (req, res) => {
       if (isNaN(amountVal) || amountVal <= 0) throw new Error('Amount must be a positive number.');
       updates.push('amount = ?');
       values.push(amountVal);
+      updates.push('pending_amount = ?');
+      values.push(amountVal);
     }
     if (enteredBy !== undefined) {
       const enteredByTrimmed = String(enteredBy || '').trim();
@@ -229,10 +276,58 @@ router.put('/:id', async (req, res) => {
       updates.push('remarks = ?');
       values.push(String(remarks || '').trim());
     }
+    if (category !== undefined) {
+      updates.push('category = ?');
+      values.push(String(category || 'General').trim());
+    }
+    if (paymentMethod !== undefined) {
+      updates.push('payment_method = ?');
+      values.push(String(paymentMethod || 'Cash').trim());
+    }
 
     if (updates.length > 0) {
       values.push(id);
       await pool.query(`UPDATE expenses SET ${updates.join(', ')} WHERE id = ?`, values);
+    }
+
+    // Sync update to payment approval
+    if (expense.approval_id) {
+      const newParticulars = particulars !== undefined ? particulars : expense.particulars;
+      const newAmount = amount !== undefined ? parseFloat(amount) : parseFloat(expense.amount);
+      const newEnteredBy = enteredBy !== undefined ? enteredBy : expense.entered_by;
+      const newRemarks = remarks !== undefined ? remarks : expense.remarks;
+      const newCategory = category !== undefined ? category : expense.category;
+      const newPaymentMethod = paymentMethod !== undefined ? paymentMethod : expense.payment_method;
+      const newDate = expenseDate !== undefined ? expenseDate : expense.expense_date;
+
+      await pool.query(
+        `UPDATE payment_approvals SET
+          party_name = ?,
+          description = ?,
+          payment_method = ?,
+          amount = ?,
+          cash_amount = ?,
+          upi_amount = ?,
+          bank_amount = ?,
+          transaction_date = ?,
+          remarks = ?,
+          category = ?,
+          updated_at = NOW()
+         WHERE approval_id = ? AND status = 'Pending'`,
+        [
+          newEnteredBy,
+          `Expense: ${newParticulars}`,
+          newPaymentMethod,
+          newAmount,
+          newPaymentMethod === 'Cash' ? newAmount : 0,
+          newPaymentMethod === 'UPI' ? newAmount : 0,
+          newPaymentMethod === 'Bank' ? newAmount : 0,
+          newDate,
+          newRemarks,
+          newCategory,
+          expense.approval_id
+        ]
+      );
     }
 
     res.json({ ok: true, message: 'Expense updated successfully!' });
@@ -246,10 +341,24 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+
+    const [existing] = await pool.query('SELECT * FROM expenses WHERE id = ?', [id]);
+    if (existing.length === 0) throw new Error('Expense record not found.');
+    const expense = existing[0];
+
+    // Lock check
+    if (expense.approval_id) {
+      const [appRows] = await pool.query('SELECT status FROM payment_approvals WHERE approval_id = ?', [expense.approval_id]);
+      if (appRows.length > 0 && appRows[0].status !== 'Pending') {
+        throw new Error('This expense has already been approved or rejected and cannot be deleted.');
+      }
+    } else if (expense.payment_status !== 'Pending Approval') {
+      throw new Error('This expense has already been approved or rejected and cannot be deleted.');
+    }
     
     // Clean up associated payment approval if pending
     await pool.query(
-      `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'Expense'`,
+      `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'Expense' AND status = 'Pending'`,
       [id]
     );
 

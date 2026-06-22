@@ -11,6 +11,27 @@ async function generateId(prefix, table, idColumn) {
   const istDate = new Date(now.getTime() + (330 + offset) * 60000);
   const yyyy = istDate.getFullYear();
   
+  if (prefix === 'EXP') {
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}${mm}${dd}`;
+    
+    const [rows] = await pool.query(
+      `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
+      [`EXP-${dateStr}-%`]
+    );
+    
+    let seq = 1;
+    if (rows.length) {
+      const lastId = rows[0][idColumn];
+      const match = lastId.match(/^EXP-\d{8}-(\d+)$/);
+      if (match && match[1]) {
+        seq = parseInt(match[1]) + 1;
+      }
+    }
+    return `EXP-${dateStr}-${String(seq).padStart(4, '0')}`;
+  }
+  
   const [rows] = await pool.query(
     `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
     [`${prefix}-${yyyy}-%`]
@@ -153,15 +174,18 @@ router.post('/', async (req, res) => {
       const expenseId = await generateId('EXP', 'expenses', 'id');
       const createdBy = req.admin?.name || req.admin?.username || 'Admin';
       await connection.query(
-        `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
+          payment_status, approved_amount, pending_amount, rejected_amount, category, payment_method, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', ?, NOW())`,
         [
           expenseId,
           billDate,
           `Inventory Purchase Expense: ${billId}`,
           parseFloat(additionalExpenses),
           createdBy,
-          `Additional expenses for inventory bill: ${billId}`
+          `Additional expenses for inventory bill: ${billId}`,
+          parseFloat(additionalExpenses),
+          paymentMethod || 'Cash'
         ]
       );
     }
@@ -604,15 +628,18 @@ router.put('/:id', async (req, res) => {
       const expenseId = await generateId('EXP', 'expenses', 'id');
       const createdBy = req.admin?.name || req.admin?.username || 'Admin';
       await connection.query(
-        `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
+          payment_status, approved_amount, pending_amount, rejected_amount, category, payment_method, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', ?, NOW())`,
         [
           expenseId,
           billDate,
           `Inventory Purchase Expense: ${id}`,
           parseFloat(additionalExpenses),
           createdBy,
-          `Additional expenses for inventory bill: ${id}`
+          `Additional expenses for inventory bill: ${id}`,
+          parseFloat(additionalExpenses),
+          paymentMethod || 'Cash'
         ]
       );
     }

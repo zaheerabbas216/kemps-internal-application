@@ -174,14 +174,22 @@ router.post('/', async (req, res) => {
       throw new Error(`Actual Reading (${parsedActual}) cannot exceed Expected Reading (${expectedReading}). Difference cannot be negative.`);
     }
 
+    // Fetch product unit cost from cost sheet
+    const [costRows] = await connection.query(
+      `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+      [parseInt(productId, 10)]
+    );
+    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    const productionValue = parsedActual * unitCost;
+
     // Generate Batch ID
     const batchId = await generateId('BATCH', 'pet_bottle_batches', 'id');
 
     // 1. Insert into pet_bottle_batches
     await connection.query(
       `INSERT INTO pet_bottle_batches 
-       (id, batch_date, finished_product_id, raw_material_id, bags_used, actual_reading, expected_reading, difference_val, bottle_bags, wastage, start_time, stop_time, notes, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, batch_date, finished_product_id, raw_material_id, bags_used, actual_reading, expected_reading, difference_val, bottle_bags, wastage, start_time, stop_time, notes, unit_cost, production_value, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         batchId,
         batchDate,
@@ -195,7 +203,9 @@ router.post('/', async (req, res) => {
         parseFloat(wastage) || 0,
         startTime || '',
         stopTime || '',
-        notes
+        notes,
+        unitCost,
+        productionValue
       ]
     );
 
@@ -461,6 +471,14 @@ router.put('/:id', async (req, res) => {
       throw new Error(`Actual Reading (${parsedActual}) cannot exceed Expected Reading (${expectedReading}). Difference cannot be negative.`);
     }
 
+    // Fetch product unit cost from cost sheet
+    const [costRows] = await connection.query(
+      `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+      [parseInt(productId, 10)]
+    );
+    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    const productionValue = parsedActual * unitCost;
+
     // 2. Update pet_bottle_batches
     await connection.query(
       `UPDATE pet_bottle_batches SET 
@@ -475,7 +493,9 @@ router.put('/:id', async (req, res) => {
          wastage = ?, 
          start_time = ?, 
          stop_time = ?, 
-         notes = ? 
+         notes = ?, 
+         unit_cost = ?,
+         production_value = ?
        WHERE id = ?`,
       [
         batchDate,
@@ -490,6 +510,8 @@ router.put('/:id', async (req, res) => {
         startTime || '',
         stopTime || '',
         notes,
+        unitCost,
+        productionValue,
         id
       ]
     );

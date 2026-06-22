@@ -54,8 +54,8 @@ export async function createPaymentApprovalEntry(opts, connection = null) {
       `INSERT INTO payment_approvals 
        (approval_id, transaction_id, source_module, transaction_type, reference_no, party_name, description,
         payment_method, cash_amount, upi_amount, bank_amount, amount, transaction_date, entered_by, remarks, 
-        status, cash_ledger_updated, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 0, NOW(), NOW())`,
+        status, cash_ledger_updated, category, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', 0, ?, NOW(), NOW())`,
       [
         approvalId,
         opts.transactionId,
@@ -71,7 +71,8 @@ export async function createPaymentApprovalEntry(opts, connection = null) {
         parseFloat(opts.amount) || 0,
         opts.transactionDate,
         opts.enteredBy || '',
-        opts.remarks || ''
+        opts.remarks || '',
+        opts.category || null
       ]
     );
 

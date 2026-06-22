@@ -99,6 +99,16 @@ const navGroups = [
   },
   {
     type: 'section',
+    title: 'Costing'
+  },
+  {
+    type: 'button',
+    name: 'Costing Master',
+    path: '/costing-master',
+    icon: '📊'
+  },
+  {
+    type: 'section',
     title: 'Office'
   },
   {

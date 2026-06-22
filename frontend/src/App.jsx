@@ -34,6 +34,7 @@ import MaintenanceHistory from './pages/MaintenanceHistory';
 import Dashboard from './pages/Dashboard';
 import TotalSales from './pages/TotalSales';
 import PaymentApproval from './pages/PaymentApproval';
+import CostingMaster from './pages/CostingMaster';
 
 // Route guard for authenticated pages
 const ProtectedRoute = () => {
@@ -91,6 +92,7 @@ function App() {
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/total-sales" element={<TotalSales />} />
             <Route path="/payment-approval" element={<PaymentApproval />} />
+            <Route path="/costing-master" element={<CostingMaster />} />
             <Route path="*" element={<div className="p-8">Page under construction...</div>} />
           </Route>
         </Route>

@@ -296,14 +296,22 @@ router.post('/', async (req, res) => {
 
     const totalBottlesBlown = boxes * perBox;
 
+    // Fetch product unit cost from cost sheet
+    const [costRows] = await connection.query(
+      `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+      [parseInt(productId, 10)]
+    );
+    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    const productionValue = totalBottlesBlown * unitCost;
+
     // Generate Batch ID
     const batchId = await generateId('PROD', 'production_batches', 'id');
 
     // 1. Insert into production_batches
     await connection.query(
       `INSERT INTO production_batches 
-       (id, production_date, finished_product_id, production_boxes, bottles_per_box, batch_no, mfg_date, expiry_date, start_time, end_time, ink_qty, solvent_qty, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, production_date, finished_product_id, production_boxes, bottles_per_box, batch_no, mfg_date, expiry_date, start_time, end_time, ink_qty, solvent_qty, unit_cost, production_value, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         batchId,
         productionDate,
@@ -316,7 +324,9 @@ router.post('/', async (req, res) => {
         startTime,
         endTime,
         parseFloat(inkQty) || 0,
-        parseFloat(solventQty) || 0
+        parseFloat(solventQty) || 0,
+        unitCost,
+        productionValue
       ]
     );
 
@@ -449,6 +459,14 @@ router.put('/:id', async (req, res) => {
 
     const totalBottlesBlown = boxes * perBox;
 
+    // Fetch product unit cost from cost sheet
+    const [costRows] = await connection.query(
+      `SELECT total_cost FROM cost_sheets WHERE finished_product_id = ?`,
+      [parseInt(productId, 10)]
+    );
+    const unitCost = costRows.length > 0 ? parseFloat(costRows[0].total_cost) : 0.0000;
+    const productionValue = totalBottlesBlown * unitCost;
+
     // 2. Update production_batches
     await connection.query(
       `UPDATE production_batches SET 
@@ -462,7 +480,9 @@ router.put('/:id', async (req, res) => {
          start_time = ?, 
          end_time = ?, 
          ink_qty = ?, 
-         solvent_qty = ? 
+         solvent_qty = ?, 
+         unit_cost = ?,
+         production_value = ?
        WHERE id = ?`,
       [
         productionDate,
@@ -476,6 +496,8 @@ router.put('/:id', async (req, res) => {
         endTime,
         parseFloat(inkQty) || 0,
         parseFloat(solventQty) || 0,
+        unitCost,
+        productionValue,
         id
       ]
     );

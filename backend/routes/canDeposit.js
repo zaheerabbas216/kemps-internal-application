@@ -20,6 +20,27 @@ async function generateId(prefix, table, idColumn, connection = pool) {
   const istDate = new Date(now.getTime() + (330 + offset) * 60000);
   const yyyy = istDate.getFullYear();
   
+  if (prefix === 'EXP') {
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    const dateStr = `${yyyy}${mm}${dd}`;
+    
+    const [rows] = await connection.query(
+      `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
+      [`EXP-${dateStr}-%`]
+    );
+    
+    let seq = 1;
+    if (rows.length) {
+      const lastId = rows[0][idColumn];
+      const match = lastId.match(/^EXP-\d{8}-(\d+)$/);
+      if (match && match[1]) {
+        seq = parseInt(match[1]) + 1;
+      }
+    }
+    return `EXP-${dateStr}-${String(seq).padStart(4, '0')}`;
+  }
+  
   const [rows] = await connection.query(
     `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
     [`${prefix}-${yyyy}-%`]
@@ -460,8 +481,8 @@ router.post('/return', async (req, res) => {
 
     await connection.query(
       `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
-        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
+        payment_status, pending_amount, approved_amount, rejected_amount, approval_id, category, payment_method, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, ?, ?, NOW())`,
       [
         expenseId,
         expenseDate,
@@ -470,7 +491,9 @@ router.post('/return', async (req, res) => {
         createdBy,
         remarks || '',
         amountVal,
-        approvalId || null
+        approvalId || null,
+        'Deposit Return',
+        paymentMode
       ]
     );
 
