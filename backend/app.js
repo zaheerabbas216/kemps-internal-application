@@ -29,6 +29,7 @@ import stockCorrectionsRoutes from './routes/stockCorrections.js';
 import accountsLedgerRoutes from './routes/accountsLedger.js';
 import supplierLedgerRoutes from './routes/supplierLedger.js';
 import authMiddleware from './middleware/auth.js';
+import bankDepositRoutes from './routes/bankDeposit.js';
 
 const app = express();
 
@@ -85,6 +86,11 @@ app.use('/api/costing', authMiddleware, costingRoutes);
 app.use('/api/stock-corrections', authMiddleware, stockCorrectionsRoutes);
 app.use('/api/accounts-ledger', authMiddleware, accountsLedgerRoutes);
 app.use('/api/supplier-ledger', authMiddleware, supplierLedgerRoutes);
+app.use('/api/customers', customerRoutes);
+app.use('/api/company-details', companyDetailsRoutes);
+app.use('/api/raw-materials', rawMaterialsRoutes);
+app.use('/api/finished-products', finishedProductsRoutes);
+app.use('/api/bank-deposits', bankDepositRoutes);
 
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {

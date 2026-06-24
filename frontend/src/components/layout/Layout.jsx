@@ -113,6 +113,7 @@ const Layout = () => {
   }, [location.pathname]);
 
   const cleanHeaderPaths = ['/company-details', '/product-master'];
+  const cleanHeaderPaths = ['/company-details', '/product-master', '/bank-deposit'];
   const isCleanHeader = cleanHeaderPaths.includes(location.pathname);
 
   return (
