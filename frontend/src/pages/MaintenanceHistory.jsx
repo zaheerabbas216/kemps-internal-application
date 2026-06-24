@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
+const particularOptions = ['filters', 'CLEANING', 'Others'];
+
 const MaintenanceHistory = () => {
   const navigate = useNavigate();
 
@@ -41,14 +43,39 @@ const MaintenanceHistory = () => {
   const [formSuccess, setFormSuccess] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  const particularOptions = [
-    'Filters',
-    'Formadail',
-    'Chlorine',
-    'PH',
-    'TDS',
-    'Tank Cleaning'
-  ];
+  // Raw materials master list for dropdown linking
+  const [rawMaterials, setRawMaterials] = useState([]);
+
+  useEffect(() => {
+    fetchRawMaterials();
+  }, []);
+
+  const fetchRawMaterials = async () => {
+    try {
+      const res = await api.get('/raw-materials', {
+        params: { page: 1, limit: 1000, activeOnly: true }
+      });
+      if (res.data.ok) {
+        setRawMaterials(res.data.materials || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch raw materials:', err);
+    }
+  };
+
+  const getSubProducts = (selectedCategory) => {
+    if (!selectedCategory) return [];
+    const list = rawMaterials
+      .filter(item => (item.category_name || '').toLowerCase() === selectedCategory.toLowerCase())
+      .map(item => item.sub_product_name);
+    
+    // Add existing editing value if not in list
+    if (formData.subDetail && !list.includes(formData.subDetail)) {
+      list.push(formData.subDetail);
+    }
+    
+    return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  };
 
   useEffect(() => {
     fetchHistory();
@@ -531,14 +558,20 @@ const MaintenanceHistory = () => {
                       <select 
                         name="particular"
                         value={formData.particular}
-                        onChange={handleInputChange}
+                        onChange={(e) => {
+                          handleInputChange(e);
+                          setFormData(prev => ({ ...prev, subDetail: '' }));
+                        }}
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                         required
                       >
                         <option value="">Select Particular</option>
-                        {particularOptions.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
+                        <option value="filters">Filters</option>
+                        <option value="CLEANING">Cleaning</option>
+                        <option value="Others">Others</option>
+                        {formData.particular && !['filters', 'cleaning', 'others'].includes(formData.particular.toLowerCase()) && (
+                          <option value={formData.particular}>{formData.particular}</option>
+                        )}
                       </select>
                     </div>
 
@@ -547,14 +580,18 @@ const MaintenanceHistory = () => {
                       <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                         Sub
                       </label>
-                      <input 
-                        type="text" 
+                      <select 
                         name="subDetail"
                         value={formData.subDetail}
                         onChange={handleInputChange}
-                        placeholder="Enter sub detail" 
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                      />
+                        disabled={!formData.particular}
+                      >
+                        <option value="">Select Sub Product</option>
+                        {getSubProducts(formData.particular).map(sub => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Company */}

@@ -12,6 +12,10 @@ const MaintenanceForm = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
 
+  // Due Tracker state
+  const [trackerData, setTrackerData] = useState({ latestRecord: null, perMachineList: [] });
+  const [trackerLoading, setTrackerLoading] = useState(true);
+
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -37,18 +41,43 @@ const MaintenanceForm = () => {
   const [formSuccess, setFormSuccess] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Particulars list
-  const particularOptions = [
-    'Filters',
-    'Formadail',
-    'Chlorine',
-    'PH',
-    'TDS',
-    'Tank Cleaning'
-  ];
+  // Raw materials master list for dropdown linking
+  const [rawMaterials, setRawMaterials] = useState([]);
+
+  useEffect(() => {
+    fetchRawMaterials();
+  }, []);
+
+  const fetchRawMaterials = async () => {
+    try {
+      const res = await api.get('/raw-materials', {
+        params: { page: 1, limit: 1000, activeOnly: true }
+      });
+      if (res.data.ok) {
+        setRawMaterials(res.data.materials || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch raw materials:', err);
+    }
+  };
+
+  const getSubProducts = (selectedCategory) => {
+    if (!selectedCategory) return [];
+    const list = rawMaterials
+      .filter(item => (item.category_name || '').toLowerCase() === selectedCategory.toLowerCase())
+      .map(item => item.sub_product_name);
+    
+    // Add existing editing value if not in list
+    if (formData.subDetail && !list.includes(formData.subDetail)) {
+      list.push(formData.subDetail);
+    }
+    
+    return Array.from(new Set(list)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+  };
 
   useEffect(() => {
     fetchTodayRecords();
+    fetchTrackerData();
   }, [searchQuery]);
 
   const fetchTodayRecords = async () => {
@@ -68,6 +97,46 @@ const MaintenanceForm = () => {
       console.error('Failed to fetch today\'s maintenance records:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTrackerData = async () => {
+    try {
+      setTrackerLoading(true);
+      const res = await api.get('/maintenance/due-tracker');
+      if (res.data.ok) {
+        setTrackerData({
+          latestRecord: res.data.latestRecord,
+          perMachineList: res.data.perMachineList || []
+        });
+      }
+    } catch (err) {
+      console.error('Failed to fetch due tracker data:', err);
+    } finally {
+      setTrackerLoading(false);
+    }
+  };
+
+  const getDueDateStatus = (dueDateStr, todayStr) => {
+    if (!dueDateStr) return null;
+    
+    // Parse dates (YYYY-MM-DD)
+    const due = new Date(dueDateStr);
+    const today = new Date(todayStr || getFormattedToday());
+    
+    // Reset hours to compare dates only
+    due.setHours(0,0,0,0);
+    today.setHours(0,0,0,0);
+    
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return { status: 'Overdue', color: 'text-red-500', bg: 'bg-red-50 border-red-100', dot: '🔴' };
+    } else if (diffDays <= 7) {
+      return { status: 'Due Soon', color: 'text-amber-500', bg: 'bg-amber-50 border-amber-100', dot: '🟡' };
+    } else {
+      return { status: 'Upcoming', color: 'text-emerald-500', bg: 'bg-emerald-50 border-emerald-100', dot: '🟢' };
     }
   };
 
@@ -197,6 +266,7 @@ const MaintenanceForm = () => {
         setTimeout(() => {
           handleCloseForm();
           fetchTodayRecords();
+          fetchTrackerData();
         }, 1000);
       } else {
         setFormError(res.data.error || 'Failed to save record.');
@@ -221,6 +291,7 @@ const MaintenanceForm = () => {
         setIsDeleteModalOpen(false);
         setDeletingRecord(null);
         fetchTodayRecords();
+        fetchTrackerData();
       } else {
         alert(res.data.error || 'Failed to delete record.');
       }
@@ -273,7 +344,7 @@ const MaintenanceForm = () => {
       </div>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {/* Today's Service Count Card */}
         <div className="card-premium flex items-center justify-between">
           <div>
@@ -284,6 +355,48 @@ const MaintenanceForm = () => {
           </div>
           <div className="w-12 h-12 bg-blue-50 text-primary rounded-xl flex items-center justify-center text-xl border border-blue-100">
             🔧
+          </div>
+        </div>
+
+        {/* Next Due Date Tracker Card */}
+        <div className="card-premium flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Next Due Date</p>
+            {trackerLoading ? (
+              <div className="mt-2 flex items-center gap-1.5">
+                <span className="loading loading-spinner loading-xs text-primary"></span>
+                <span className="text-slate-400 text-xs font-semibold">Loading...</span>
+              </div>
+            ) : trackerData.latestRecord ? (
+              (() => {
+                const status = getDueDateStatus(trackerData.latestRecord.next_due_date, todayDateStr);
+                return (
+                  <>
+                    <h3 className={`text-2xl font-extrabold mt-1.5 flex items-center gap-2 ${status?.color || 'text-slate-800'}`}>
+                      {formatDateDDMMYYYY(trackerData.latestRecord.next_due_date)}
+                    </h3>
+                    <p className="text-[11px] text-slate-500 font-semibold mt-1 flex items-center gap-1">
+                      <span>{status?.dot}</span>
+                      <span className="uppercase tracking-wider">{status?.status}</span>
+                      <span className="text-slate-400 font-normal truncate max-w-[120px]" title={`${trackerData.latestRecord.sub_detail || ''} ${trackerData.latestRecord.company ? `(${trackerData.latestRecord.company})` : ''}`}>
+                        — {trackerData.latestRecord.sub_detail} {trackerData.latestRecord.company && `(${trackerData.latestRecord.company})`}
+                      </span>
+                    </p>
+                  </>
+                );
+              })()
+            ) : (
+              <h3 className="text-xl font-extrabold text-slate-400 mt-2">
+                Not Scheduled
+              </h3>
+            )}
+          </div>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl border ${
+            trackerData.latestRecord && !trackerLoading
+              ? getDueDateStatus(trackerData.latestRecord.next_due_date, todayDateStr)?.bg
+              : 'bg-slate-50 border-slate-100 text-slate-400'
+          }`}>
+            🔔
           </div>
         </div>
 
@@ -300,6 +413,60 @@ const MaintenanceForm = () => {
           </div>
         </div>
       </div>
+
+      {/* NEXT DUE DATES BY MACHINE */}
+      {!trackerLoading && trackerData.perMachineList && trackerData.perMachineList.length > 0 && (
+        <div className="card-premium">
+          <div className="flex items-center justify-between mb-4 border-b border-slate-100 pb-3">
+            <div>
+              <h3 className="text-base font-bold text-slate-800 tracking-tight uppercase flex items-center gap-2">
+                <span>⏱️</span> Next Due Dates by Machine
+              </h3>
+              <p className="text-slate-400 text-xs mt-0.5">Upcoming scheduled maintenance tasks per machine</p>
+            </div>
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
+              {trackerData.perMachineList.length} {trackerData.perMachineList.length === 1 ? 'Machine' : 'Machines'}
+            </span>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl border border-slate-100">
+            <table className="table table-zebra w-full overflow-hidden">
+              <thead className="bg-slate-50 border-b border-slate-100">
+                <tr className="text-slate-500 text-[10px] font-black uppercase tracking-wider">
+                  <th className="py-3 px-4 text-left">Machine / Company</th>
+                  <th className="py-3 px-4 text-left">Particular Type</th>
+                  <th className="py-3 px-4 text-left">Last Service Date</th>
+                  <th className="py-3 px-4 text-left">Next Due Date</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {trackerData.perMachineList.map((m) => {
+                  const status = getDueDateStatus(m.next_due_date, todayDateStr);
+                  return (
+                    <tr key={m.id} className="hover:bg-blue-50/20 transition-colors">
+                      <td className="py-3 px-4 text-[13px] font-bold text-slate-700">
+                        <span>{m.sub_detail || '—'}</span>
+                        {m.company && <span className="text-[11px] text-slate-400 font-normal block">{m.company}</span>}
+                      </td>
+                      <td className="py-3 px-4 text-[13px] font-semibold text-slate-600">{m.particular}</td>
+                      <td className="py-3 px-4 text-[12px] text-slate-500">{formatDateDDMMYYYY(m.service_date)}</td>
+                      <td className="py-3 px-4 text-[13px] font-bold text-slate-700">
+                        {formatDateDDMMYYYY(m.next_due_date)}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${status?.color} ${status?.bg}`}>
+                          {status?.dot} {status?.status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* SEARCH AND TODAY'S DATA TABLE CARD */}
       <div className="card-premium">
@@ -444,14 +611,20 @@ const MaintenanceForm = () => {
                       <select 
                         name="particular"
                         value={formData.particular}
-                        onChange={handleInputChange}
+                        onChange={(e) => {
+                          handleInputChange(e);
+                          setFormData(prev => ({ ...prev, subDetail: '' }));
+                        }}
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                         required
                       >
                         <option value="">Select Particular</option>
-                        {particularOptions.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
+                        <option value="filters">Filters</option>
+                        <option value="CLEANING">Cleaning</option>
+                        <option value="Others">Others</option>
+                        {formData.particular && !['filters', 'cleaning', 'others'].includes(formData.particular.toLowerCase()) && (
+                          <option value={formData.particular}>{formData.particular}</option>
+                        )}
                       </select>
                     </div>
 
@@ -460,14 +633,18 @@ const MaintenanceForm = () => {
                       <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                         Sub
                       </label>
-                      <input 
-                        type="text" 
+                      <select 
                         name="subDetail"
                         value={formData.subDetail}
                         onChange={handleInputChange}
-                        placeholder="Enter sub detail" 
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                      />
+                        disabled={!formData.particular}
+                      >
+                        <option value="">Select Sub Product</option>
+                        {getSubProducts(formData.particular).map(sub => (
+                          <option key={sub} value={sub}>{sub}</option>
+                        ))}
+                      </select>
                     </div>
 
                     {/* Company */}

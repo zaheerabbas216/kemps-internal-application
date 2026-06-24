@@ -730,8 +730,11 @@ router.get('/cash-ledger', async (req, res) => {
     );
 
     const [rows] = await pool.query(
-      `SELECT cl.*, DATE_FORMAT(cl.approved_at, '%Y-%m-%d %H:%i:%s') AS approved_at_fmt
-       FROM cash_ledger cl ${whereStr}
+      `SELECT cl.*, DATE_FORMAT(cl.approved_at, '%Y-%m-%d %H:%i:%s') AS approved_at_fmt,
+              pa.payment_method, pa.cash_amount, pa.upi_amount, pa.bank_amount
+       FROM cash_ledger cl
+       LEFT JOIN payment_approvals pa ON cl.approval_id = pa.approval_id
+       ${whereStr}
        ORDER BY cl.id DESC LIMIT ? OFFSET ?`,
       [...queryParams, limit, offset]
     );

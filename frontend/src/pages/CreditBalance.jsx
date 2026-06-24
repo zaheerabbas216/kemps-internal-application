@@ -129,6 +129,28 @@ const CreditBalance = () => {
     setIsPayModalOpen(true);
   };
 
+  const handleAmountChange = (e) => {
+    const val = e.target.value;
+    if (val === '') {
+      setPaymentForm(prev => ({ ...prev, amountReceived: '' }));
+      setPayError('');
+      return;
+    }
+
+    const amt = parseFloat(val);
+    const maxDue = selectedBill ? parseFloat(selectedBill.due_amount) : 0;
+
+    if (!isNaN(amt) && amt > maxDue) {
+      setPaymentForm(prev => ({ ...prev, amountReceived: String(maxDue) }));
+      setPayError(`Amount cannot exceed the remaining outstanding balance of ₹${maxDue.toFixed(2)}.`);
+    } else {
+      setPaymentForm(prev => ({ ...prev, amountReceived: val }));
+      if (payError.includes('cannot exceed')) {
+        setPayError('');
+      }
+    }
+  };
+
   const handleSavePayment = async (e) => {
     e.preventDefault();
     setPayError('');
@@ -614,8 +636,9 @@ const CreditBalance = () => {
                 <input 
                   type="number"
                   step="0.01"
+                  max={selectedBill ? selectedBill.due_amount : undefined}
                   value={paymentForm.amountReceived}
-                  onChange={(e) => setPaymentForm(prev => ({ ...prev, amountReceived: e.target.value }))}
+                  onChange={handleAmountChange}
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                   required
                 />

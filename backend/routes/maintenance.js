@@ -259,4 +259,62 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// GET /api/maintenance/due-tracker
+// Returns the due date tracker summary and per-machine next due dates
+router.get('/due-tracker', async (req, res) => {
+  try {
+    // 1. Get the most recently recorded service entry with a next due date
+    const [latestRows] = await pool.query(
+      `SELECT id, particular, sub_detail, company, 
+              DATE_FORMAT(service_date, '%Y-%m-%d') as service_date, 
+              DATE_FORMAT(next_due_date, '%Y-%m-%d') as next_due_date, 
+              note, entered_by, created_at 
+       FROM maintenance_records 
+       WHERE next_due_date IS NOT NULL 
+       ORDER BY created_at DESC 
+       LIMIT 1`
+    );
+    const latestRecord = latestRows[0] || null;
+
+    // 2. Get all records with a next due date to find the latest next due date per machine
+    const [allRows] = await pool.query(
+      `SELECT id, particular, sub_detail, company, 
+              DATE_FORMAT(service_date, '%Y-%m-%d') as service_date, 
+              DATE_FORMAT(next_due_date, '%Y-%m-%d') as next_due_date, 
+              note, entered_by, created_at 
+       FROM maintenance_records 
+       WHERE next_due_date IS NOT NULL 
+       ORDER BY service_date DESC, created_at DESC`
+    );
+
+    // Group by machine: sub_detail + company
+    const machineMap = {};
+    for (const row of allRows) {
+      const sub = (row.sub_detail || '').trim();
+      const comp = (row.company || '').trim();
+      // Skip if both are empty (not a specific machine/company)
+      if (!sub && !comp) continue;
+      
+      const machineKey = comp ? `${sub} – ${comp}` : sub;
+      if (!machineMap[machineKey]) {
+        machineMap[machineKey] = row;
+      }
+    }
+
+    // Convert map to list and sort by next_due_date ASC (earliest upcoming due date first)
+    const perMachineList = Object.values(machineMap).sort((a, b) => {
+      return new Date(a.next_due_date) - new Date(b.next_due_date);
+    });
+
+    res.json({
+      ok: true,
+      latestRecord,
+      perMachineList
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 export default router;
+

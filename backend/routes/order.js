@@ -165,27 +165,47 @@ router.post('/', async (req, res) => {
 // GET /api/orders/dashboard-widgets - Dashboard metric counts
 router.get('/dashboard-widgets', async (req, res) => {
   try {
+    const { customerType = '', excludeCustomerType = '' } = req.query;
+    
+    let whereClauses = [];
+    let queryParams = [];
+    
+    if (customerType) {
+      whereClauses.push('customer_type = ?');
+      queryParams.push(customerType);
+    }
+    if (excludeCustomerType) {
+      whereClauses.push('customer_type != ?');
+      queryParams.push(excludeCustomerType);
+    }
+    
+    const extraFilter = whereClauses.length > 0 ? ` AND ${whereClauses.join(' AND ')}` : '';
+
     // Today's scheduled deliveries (Pending status, supply_date = today)
     const [todayDeliveries] = await pool.query(
       `SELECT COUNT(*) as count FROM customer_orders 
-       WHERE status = 'PENDING' AND supply_date = CURDATE()`
+       WHERE status = 'PENDING' AND supply_date = CURDATE()${extraFilter}`,
+      queryParams
     );
 
     // Pending orders (all pending)
     const [pendingCount] = await pool.query(
-      `SELECT COUNT(*) as count FROM customer_orders WHERE status = 'PENDING'`
+      `SELECT COUNT(*) as count FROM customer_orders WHERE status = 'PENDING'${extraFilter}`,
+      queryParams
     );
 
     // Supplied today
     const [suppliedToday] = await pool.query(
       `SELECT COUNT(*) as count FROM customer_orders 
-       WHERE status = 'SUPPLIED' AND DATE(supplied_at) = CURDATE()`
+       WHERE status = 'SUPPLIED' AND DATE(supplied_at) = CURDATE()${extraFilter}`,
+      queryParams
     );
 
     // Cancelled today
     const [cancelledToday] = await pool.query(
       `SELECT COUNT(*) as count FROM customer_orders 
-       WHERE status = 'CANCELLED' AND DATE(cancelled_at) = CURDATE()`
+       WHERE status = 'CANCELLED' AND DATE(cancelled_at) = CURDATE()${extraFilter}`,
+      queryParams
     );
 
     res.json({
@@ -215,7 +235,8 @@ router.get('/', async (req, res) => {
       productId = '', 
       deliveryArea = '',
       upcoming = '',
-      customerType = ''
+      customerType = '',
+      excludeCustomerType = ''
     } = req.query;
 
     page = parseInt(page, 10);
@@ -250,6 +271,11 @@ router.get('/', async (req, res) => {
     if (customerType) {
       whereClauses.push('co.customer_type = ?');
       queryParams.push(customerType);
+    }
+
+    if (excludeCustomerType) {
+      whereClauses.push('co.customer_type != ?');
+      queryParams.push(excludeCustomerType);
     }
 
     if (productId) {

@@ -1,7 +1,32 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
+
+// Helper to generate custom sequence ID
+async function generateId(prefix, table, idColumn, connection = pool) {
+  const now = new Date();
+  const offset = now.getTimezoneOffset();
+  const istDate = new Date(now.getTime() + (330 + offset) * 60000);
+  const yyyy = istDate.getFullYear();
+  
+  const [rows] = await connection.query(
+    `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
+    [`${prefix}-${yyyy}-%`]
+  );
+  
+  let seq = 1;
+  if (rows.length) {
+    const lastId = rows[0][idColumn];
+    const match = lastId.match(new RegExp(`^${prefix}-${yyyy}-(\\d+)$`));
+    if (match && match[1]) {
+      seq = parseInt(match[1]) + 1;
+    }
+  }
+  
+  return `${prefix}-${yyyy}-${String(seq).padStart(5, '0')}`;
+}
 
 // GET /api/can-supply/search-customer?query=...
 // Search customer with their active balances
@@ -77,8 +102,67 @@ router.get('/active-balances', async (req, res) => {
   }
 });
 
+// GET /api/can-supply/bills
+// List all can supply invoices
+router.get('/bills', async (req, res) => {
+  try {
+    const { search = '', paymentStatus = '', startDate = '', endDate = '' } = req.query;
+    let queryParams = [];
+    let whereClauses = [];
+
+    if (search.trim()) {
+      whereClauses.push('(bill_no LIKE ? OR customer_name LIKE ?)');
+      const wild = `%${search.trim()}%`;
+      queryParams.push(wild, wild);
+    }
+    if (paymentStatus) {
+      whereClauses.push('payment_status = ?');
+      queryParams.push(paymentStatus);
+    }
+    if (startDate) {
+      whereClauses.push('date >= ?');
+      queryParams.push(startDate);
+    }
+    if (endDate) {
+      whereClauses.push('date <= ?');
+      queryParams.push(endDate);
+    }
+
+    const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        bill_no AS billNo, 
+        DATE_FORMAT(date, '%Y-%m-%d') as date, 
+        customer_id AS customerId, 
+        customer_name AS customerName,
+        qty_supplied AS qtySupplied, 
+        rate_per_can AS ratePerCan, 
+        water_amount AS waterAmount,
+        dispenser_rent AS dispenserRent, 
+        delivery_charge AS deliveryCharge, 
+        other_charge AS otherCharge,
+        gst_percentage AS gstPercentage, 
+        gst_amount AS gstAmount, 
+        grand_total AS grandTotal,
+        amount_paid AS amountPaid, 
+        (grand_total - amount_paid) AS balance,
+        payment_status AS paymentStatus, 
+        remarks, 
+        created_by AS createdBy
+      FROM can_billing
+      ${whereStr}
+      ORDER BY date DESC, id DESC
+    `, queryParams);
+
+    res.json({ ok: true, bills: rows });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 // GET /api/can-supply/customer/:customerId/details
-// Retrieves running balances, outstanding supplies, and ledger history
+// Retrieves running balances, outstanding supplies, ledger history and customer summary metrics
 router.get('/customer/:customerId/details', async (req, res) => {
   try {
     const { customerId } = req.params;
@@ -130,46 +214,113 @@ router.get('/customer/:customerId/details', async (req, res) => {
       ORDER BY t.transaction_date ASC, t.id ASC
     `, [customerId]);
 
-    // 4. Fetch full transaction history to build ledger
-    const [txRows] = await pool.query(`
+    // 4. Fetch unified transaction history to build ledger (combining SUPPLY/RETURN and can_payments)
+    const [supplyRows] = await pool.query(`
       SELECT 
-        id, 
-        DATE_FORMAT(transaction_date, '%Y-%m-%d') as date, 
-        type, 
-        supply_type AS supplyType, 
-        product, 
-        quantity, 
-        rate, 
-        amount, 
-        notes,
-        function_name AS functionName,
-        parent_transaction_id AS parentTransactionId,
-        created_by AS user
-      FROM can_supply_transactions
-      WHERE customer_id = ?
-      ORDER BY transaction_date ASC, id ASC
+        t.id,
+        DATE_FORMAT(t.transaction_date, '%Y-%m-%d') as date,
+        t.type,
+        t.supply_type AS supplyType,
+        t.product,
+        t.quantity,
+        COALESCE(b.bill_no, '') AS referenceNo,
+        COALESCE(b.grand_total, 0.00) AS debit,
+        0.00 AS credit,
+        t.created_by AS user
+      FROM can_supply_transactions t
+      LEFT JOIN can_billing b ON t.billing_id = b.id
+      WHERE t.customer_id = ?
     `, [customerId]);
 
-    // Compute running balances per product dynamically
+    const [paymentRows] = await pool.query(`
+      SELECT 
+        p.id,
+        DATE_FORMAT(p.payment_date, '%Y-%m-%d') as date,
+        'PAYMENT' AS type,
+        'Payment Received' AS supplyType,
+        p.payment_method AS product,
+        0 AS quantity,
+        p.payment_no AS referenceNo,
+        0.00 AS debit,
+        p.amount_paid AS credit,
+        p.created_by AS user
+      FROM can_payments p
+      JOIN can_billing b ON p.bill_id = b.id
+      WHERE b.customer_id = ?
+    `, [customerId]);
+
+    const combined = [...supplyRows, ...paymentRows];
+    // Sort chronologically
+    combined.sort((a, b) => new Date(a.date) - new Date(b.date) || a.id - b.id);
+
     let canBalance = 0;
-    let dispenserBalance = 0;
-    const ledger = txRows.map(row => {
+    let financialBalance = 0;
+    const ledger = combined.map(row => {
       const q = parseInt(row.quantity, 10);
-      if (row.product === '20 Ltr Can') {
-        canBalance = row.type === 'SUPPLY' ? (canBalance + q) : (canBalance - q);
-        return { ...row, runningBalance: canBalance };
-      } else {
-        dispenserBalance = row.type === 'SUPPLY' ? (dispenserBalance + q) : (dispenserBalance - q);
-        return { ...row, runningBalance: dispenserBalance };
+      if (row.type === 'SUPPLY') {
+        if (row.product === '20 Ltr Can') canBalance += q;
+        financialBalance += parseFloat(row.debit);
+      } else if (row.type === 'RETURN') {
+        if (row.product === '20 Ltr Can') canBalance -= q;
+      } else if (row.type === 'PAYMENT') {
+        financialBalance -= parseFloat(row.credit);
       }
+      return {
+        ...row,
+        runningCanBalance: canBalance,
+        runningFinancialBalance: financialBalance
+      };
     });
+
+    ledger.reverse(); // latest first
+
+    // 5. Compute Customer Summary Statistics
+    const [[summaryStats]] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(qty_supplied), 0) AS totalCansSupplied,
+        COALESCE(SUM(grand_total), 0) AS totalRevenue,
+        COUNT(id) AS totalBills,
+        COALESCE(SUM(grand_total - amount_paid), 0) AS outstandingAmount
+      FROM can_billing
+      WHERE customer_id = ?
+    `, [customerId]);
+
+    const [[lastSupplyRow]] = await pool.query(`
+      SELECT DATE_FORMAT(MAX(transaction_date), '%Y-%m-%d') AS lastSupplyDate
+      FROM can_supply_transactions
+      WHERE customer_id = ? AND type = 'SUPPLY'
+    `, [customerId]);
+
+    const [[currentMonthStats]] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(qty_supplied), 0) AS monthCans,
+        COALESCE(SUM(grand_total), 0) AS monthRevenue
+      FROM can_billing
+      WHERE customer_id = ? AND DATE_FORMAT(date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')
+    `, [customerId]);
+
+    const totalCansOut = (parseInt(balances.cansOutCompany) || 0) + 
+                         (parseInt(balances.cansOutDistributor) || 0) + 
+                         (parseInt(balances.cansOutFunction) || 0);
+
+    const customerSummary = {
+      totalCansSupplied: parseInt(summaryStats.totalCansSupplied, 10),
+      totalRevenue: parseFloat(summaryStats.totalRevenue),
+      totalBills: parseInt(summaryStats.totalBills, 10),
+      outstandingCans: totalCansOut,
+      outstandingAmount: parseFloat(summaryStats.outstandingAmount),
+      lastSupplyDate: lastSupplyRow.lastSupplyDate || 'N/A',
+      currentMonthCans: parseInt(currentMonthStats.monthCans, 10) || 0,
+      currentMonthRevenue: parseFloat(currentMonthStats.monthRevenue) || 0.00
+    };
 
     res.json({
       ok: true,
       customer,
       balances,
       outstanding,
-      ledger: ledger.reverse() // Display latest first in ledger
+      ledger,
+      customerSummary
     });
 
   } catch (error) {
@@ -178,7 +329,7 @@ router.get('/customer/:customerId/details', async (req, res) => {
 });
 
 // POST /api/can-supply
-// Create a new supply entry
+// Create a new supply entry and generate a corresponding invoice
 router.post('/', async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -192,11 +343,20 @@ router.post('/', async (req, res) => {
       notes,
       functionName,
       eventDate,
-      expectedReturnDate
+      expectedReturnDate,
+      dispenserRent = 0,
+      deliveryCharge = 0,
+      otherCharge = 0,
+      gstPercentage = 0
     } = req.body;
 
     const qty = parseInt(quantity, 10);
     const parsedRate = parseFloat(rate || 0);
+    const dispRent = parseFloat(dispenserRent || 0);
+    const delCharge = parseFloat(deliveryCharge || 0);
+    const othCharge = parseFloat(otherCharge || 0);
+    const gstPct = parseFloat(gstPercentage || 0);
+
     if (!customerId) throw new Error('Customer ID is required.');
     if (!transactionDate) throw new Error('Transaction date is required.');
     if (!supplyType || !['Company Can', 'Distributor Can', 'Function Can'].includes(supplyType)) {
@@ -208,14 +368,14 @@ router.post('/', async (req, res) => {
     if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than 0.');
     if (isNaN(parsedRate) || parsedRate < 0) throw new Error('Rate cannot be negative.');
 
-    const amount = qty * parsedRate;
     const user = req.admin?.name || req.admin?.username || 'Admin';
 
     await connection.beginTransaction();
 
     // Verify customer exists
-    const [custExists] = await connection.query('SELECT 1 FROM customers WHERE id = ?', [customerId]);
-    if (custExists.length === 0) throw new Error('Customer not found.');
+    const [custRows] = await connection.query('SELECT name FROM customers WHERE id = ?', [customerId]);
+    if (custRows.length === 0) throw new Error('Customer not found.');
+    const customerName = custRows[0].name;
 
     // Verify product is active in Product Master
     const [prodCheck] = await connection.query(
@@ -223,14 +383,37 @@ router.post('/', async (req, res) => {
       [product]
     );
     if (prodCheck.length > 0 && prodCheck[0].status === 0) {
-      throw new Error(`The product '${product}' is disabled in Product Master. You cannot log a new supply transaction for it.`);
+      throw new Error(`The product '${product}' is disabled in Product Master.`);
     }
 
+    // 1. Calculations
+    const waterAmount = product === '20 Ltr Can' ? (qty * parsedRate) : 0;
+    const subTotal = waterAmount + dispRent + delCharge + othCharge;
+    const gstAmount = subTotal * (gstPct / 100);
+    const grandTotal = subTotal + gstAmount;
+
+    // 2. Generate bill_no and insert into can_billing
+    const billNo = await generateId('CAN', 'can_billing', 'bill_no', connection);
+
+    const [billResult] = await connection.query(`
+      INSERT INTO can_billing (
+        bill_no, date, customer_id, customer_name, qty_supplied, rate_per_can, water_amount,
+        dispenser_rent, delivery_charge, other_charge, gst_percentage, gst_amount, grand_total,
+        amount_paid, payment_status, remarks, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, 'Unpaid', ?, ?)
+    `, [
+      billNo, transactionDate, customerId, customerName, qty, parsedRate, waterAmount,
+      dispRent, delCharge, othCharge, gstPct, gstAmount, grandTotal,
+      notes || null, user
+    ]);
+    const billingId = billResult.insertId;
+
+    // 3. Insert into can_supply_transactions
     const insertQuery = `
       INSERT INTO can_supply_transactions (
         customer_id, transaction_date, type, supply_type, product, quantity, rate, amount, notes,
-        function_name, event_date, expected_return_date, created_by
-      ) VALUES (?, ?, 'SUPPLY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        function_name, event_date, expected_return_date, billing_id, created_by
+      ) VALUES (?, ?, 'SUPPLY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     await connection.query(insertQuery, [
@@ -240,22 +423,293 @@ router.post('/', async (req, res) => {
       product,
       qty,
       parsedRate,
-      amount,
+      waterAmount,
       notes || null,
       supplyType === 'Function Can' ? (functionName || null) : null,
       supplyType === 'Function Can' ? (eventDate || null) : null,
       supplyType === 'Function Can' ? (expectedReturnDate || null) : null,
+      billingId,
       user
     ]);
 
+    // 4. Post Debit Entry to customer ledger
+    await addLedgerEntry(connection, {
+      date: transactionDate,
+      customerId: customerId,
+      entryType: 'BILL GENERATED',
+      referenceNo: billNo,
+      particular: `Can Supply Bill generated - ${billNo} (${qty} ${product === 'Dispenser' ? 'Dispensers' : 'Cans'})`,
+      debit: grandTotal,
+      credit: 0.00
+    });
+
     await connection.commit();
-    res.json({ ok: true, message: 'Supply transaction logged successfully!' });
+    res.json({ ok: true, message: 'Supply logged and Bill generated successfully!', billNo });
 
   } catch (error) {
     await connection.rollback();
     res.status(400).json({ ok: false, error: error.message });
   } finally {
     connection.release();
+  }
+});
+
+// PUT /api/can-supply/bill/:billId
+// Edit an existing can supply invoice and linked transactions
+router.put('/bill/:billId', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { billId } = req.params;
+    const {
+      date,
+      qtySupplied,
+      ratePerCan,
+      dispenserRent,
+      deliveryCharge,
+      otherCharge,
+      gstPercentage,
+      remarks
+    } = req.body;
+
+    const qty = parseInt(qtySupplied, 10);
+    const rate = parseFloat(ratePerCan || 0);
+    const dispRent = parseFloat(dispenserRent || 0);
+    const delCharge = parseFloat(deliveryCharge || 0);
+    const othCharge = parseFloat(otherCharge || 0);
+    const gstPct = parseFloat(gstPercentage || 0);
+
+    if (isNaN(qty) || qty <= 0) throw new Error('Quantity must be greater than 0.');
+    if (isNaN(rate) || rate < 0) throw new Error('Rate cannot be negative.');
+
+    await connection.beginTransaction();
+
+    // 1. Fetch current bill
+    const [billRows] = await connection.query(`
+      SELECT bill_no, customer_id, grand_total, amount_paid FROM can_billing WHERE id = ? FOR UPDATE
+    `, [billId]);
+    if (billRows.length === 0) throw new Error('Bill not found.');
+    const bill = billRows[0];
+
+    // Fetch product type from linked transaction
+    const [txRows] = await connection.query(`
+      SELECT product FROM can_supply_transactions WHERE billing_id = ? AND type = 'SUPPLY'
+    `, [billId]);
+    const product = txRows.length > 0 ? txRows[0].product : '20 Ltr Can';
+
+    // 2. Recalculate
+    const waterAmount = product === '20 Ltr Can' ? (qty * rate) : 0;
+    const subTotal = waterAmount + dispRent + delCharge + othCharge;
+    const gstAmount = subTotal * (gstPct / 100);
+    const grandTotal = subTotal + gstAmount;
+
+    // Check payment status logic
+    let paymentStatus = 'Unpaid';
+    const paid = parseFloat(bill.amount_paid);
+    if (paid >= grandTotal) {
+      paymentStatus = 'Paid';
+    } else if (paid > 0) {
+      paymentStatus = 'Partially Paid';
+    }
+
+    // 3. Update can_billing
+    await connection.query(`
+      UPDATE can_billing SET
+        date = ?, qty_supplied = ?, rate_per_can = ?, water_amount = ?,
+        dispenser_rent = ?, delivery_charge = ?, other_charge = ?,
+        gst_percentage = ?, gst_amount = ?, grand_total = ?, payment_status = ?, remarks = ?
+      WHERE id = ?
+    `, [
+      date, qty, rate, waterAmount, dispRent, delCharge, othCharge,
+      gstPct, gstAmount, grandTotal, paymentStatus, remarks || null, billId
+    ]);
+
+    // 4. Update can_supply_transactions linked to this bill
+    await connection.query(`
+      UPDATE can_supply_transactions SET
+        transaction_date = ?, quantity = ?, rate = ?, amount = ?, notes = ?
+      WHERE billing_id = ? AND type = 'SUPPLY'
+    `, [date, qty, rate, waterAmount, remarks || null, billId]);
+
+    // 5. Update customer_ledger entry for this bill
+    await connection.query(`
+      UPDATE customer_ledger SET
+        date = ?, debit = ?, particular = ?
+      WHERE reference_no = ? AND entry_type = 'BILL GENERATED'
+    `, [date, grandTotal, `Can Supply Bill generated - ${bill.bill_no} (${qty} ${product === 'Dispenser' ? 'Dispensers' : 'Cans'})`, bill.bill_no]);
+
+    // Recalculate ledger balances for this customer
+    await recalculateLedgerBalances(connection, bill.customer_id);
+
+    await connection.commit();
+    res.json({ ok: true, message: 'Bill and transaction updated successfully!' });
+  } catch (error) {
+    await connection.rollback();
+    res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// DELETE /api/can-supply/bill/:billId
+// Delete bill and reverse ledger & can inventory movements
+router.delete('/bill/:billId', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { billId } = req.params;
+
+    await connection.beginTransaction();
+
+    // 1. Fetch current bill
+    const [billRows] = await connection.query(`
+      SELECT bill_no, customer_id FROM can_billing WHERE id = ? FOR UPDATE
+    `, [billId]);
+    if (billRows.length === 0) throw new Error('Bill not found.');
+    const bill = billRows[0];
+
+    // 2. Fetch linked supply transactions to verify returns or delete
+    const [txRows] = await connection.query(`
+      SELECT id FROM can_supply_transactions WHERE billing_id = ?
+    `, [billId]);
+    
+    for (const tx of txRows) {
+      // Check if there are returns linked to this transaction
+      const [retRows] = await connection.query(`
+        SELECT COUNT(*) as count FROM can_supply_transactions WHERE parent_transaction_id = ? AND type = 'RETURN'
+      `, [tx.id]);
+      if (retRows[0].count > 0) {
+        throw new Error('Cannot delete this supply entry because it has returns recorded against it. Delete the returns first.');
+      }
+    }
+
+    // 3. Delete linked transactions (this reverses can movement out)
+    await connection.query(`
+      DELETE FROM can_supply_transactions WHERE billing_id = ?
+    `, [billId]);
+
+    // 4. Delete ledger entries for this bill and payments associated with it
+    // First find any payments and delete them from customer_ledger
+    const [payRows] = await connection.query(`
+      SELECT payment_no FROM can_payments WHERE bill_id = ?
+    `, [billId]);
+    for (const pay of payRows) {
+      await connection.query(`
+        DELETE FROM customer_ledger WHERE reference_no = ? AND entry_type = 'PAYMENT RECEIVED'
+      `, [pay.payment_no]);
+    }
+
+    await connection.query(`
+      DELETE FROM customer_ledger WHERE reference_no = ? AND entry_type = 'BILL GENERATED'
+    `, [bill.bill_no]);
+
+    // 5. Delete can_billing (cascades to can_payments due to foreign key)
+    await connection.query(`
+      DELETE FROM can_billing WHERE id = ?
+    `, [billId]);
+
+    // 6. Recalculate customer ledger balance
+    await recalculateLedgerBalances(connection, bill.customer_id);
+
+    await connection.commit();
+    res.json({ ok: true, message: 'Bill and supply transactions deleted successfully!' });
+  } catch (error) {
+    await connection.rollback();
+    res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// POST /api/can-supply/bill/:billId/pay
+// Record full/part payment on a can bill
+router.post('/bill/:billId/pay', async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    const { billId } = req.params;
+    const { paymentDate, amountPaid, paymentMethod, remarks } = req.body;
+    const user = req.admin?.name || req.admin?.username || 'Admin';
+
+    const amt = parseFloat(amountPaid);
+    if (isNaN(amt) || amt <= 0) throw new Error('Payment amount must be greater than 0.');
+
+    await connection.beginTransaction();
+
+    // 1. Fetch bill details
+    const [billRows] = await connection.query(`
+      SELECT bill_no, customer_id, grand_total, amount_paid FROM can_billing WHERE id = ? FOR UPDATE
+    `, [billId]);
+    if (billRows.length === 0) throw new Error('Bill not found.');
+    const bill = billRows[0];
+
+    const currentPaid = parseFloat(bill.amount_paid);
+    const grandTotal = parseFloat(bill.grand_total);
+    const balance = grandTotal - currentPaid;
+
+    if (amt > balance) {
+      throw new Error(`Payment amount (₹${amt.toFixed(2)}) cannot exceed outstanding balance (₹${balance.toFixed(2)}).`);
+    }
+
+    const newPaid = currentPaid + amt;
+    let paymentStatus = 'Partially Paid';
+    if (newPaid >= grandTotal) {
+      paymentStatus = 'Paid';
+    }
+
+    // 2. Generate Payment number
+    const paymentNo = await generateId('CPY', 'can_payments', 'payment_no', connection);
+
+    // 3. Insert into can_payments
+    await connection.query(`
+      INSERT INTO can_payments (payment_no, bill_id, payment_date, amount_paid, payment_method, remarks, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [paymentNo, billId, paymentDate, amt, paymentMethod, remarks || null, user]);
+
+    // 4. Update can_billing
+    await connection.query(`
+      UPDATE can_billing SET amount_paid = ?, payment_status = ? WHERE id = ?
+    `, [newPaid, paymentStatus, billId]);
+
+    // 5. Post credit entry to customer_ledger
+    await addLedgerEntry(connection, {
+      date: paymentDate,
+      customerId: bill.customer_id,
+      entryType: 'PAYMENT RECEIVED',
+      referenceNo: paymentNo,
+      particular: `Payment received for Can Bill ${bill.bill_no} via ${paymentMethod}`,
+      debit: 0.00,
+      credit: amt
+    });
+
+    await connection.commit();
+    res.json({ ok: true, message: 'Payment successfully recorded!' });
+  } catch (error) {
+    await connection.rollback();
+    res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// GET /api/can-supply/bill/:billId/payments
+// List payments for a bill
+router.get('/bill/:billId/payments', async (req, res) => {
+  try {
+    const { billId } = req.params;
+    const [rows] = await pool.query(`
+      SELECT 
+        id, 
+        payment_no AS paymentNo, 
+        DATE_FORMAT(payment_date, '%Y-%m-%d') as paymentDate,
+        amount_paid AS amountPaid, 
+        payment_method AS paymentMethod, 
+        remarks, 
+        created_by AS createdBy
+      FROM can_payments
+      WHERE bill_id = ?
+      ORDER BY payment_date DESC, id DESC
+    `, [billId]);
+    res.json({ ok: true, payments: rows });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
   }
 });
 
@@ -399,6 +853,21 @@ router.get('/dashboard', async (req, res) => {
     const totalCansOut = cCans + dCans + fCans;
     const totalPendingReturns = totalCansOut + disp;
 
+    // Billing metrics
+    const [[billingStats]] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN date = CURDATE() THEN grand_total ELSE 0 END), 0) AS todayRevenue,
+        COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1) THEN grand_total ELSE 0 END), 0) AS weeklyRevenue,
+        COALESCE(SUM(CASE WHEN DATE_FORMAT(date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN grand_total ELSE 0 END), 0) AS monthlyRevenue,
+        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) THEN grand_total ELSE 0 END), 0) AS yearlyRevenue,
+        COALESCE(SUM(CASE WHEN date = CURDATE() THEN qty_supplied ELSE 0 END), 0) AS todayCans,
+        COALESCE(SUM(CASE WHEN YEARWEEK(date, 1) = YEARWEEK(CURDATE(), 1) THEN qty_supplied ELSE 0 END), 0) AS weeklyCans,
+        COALESCE(SUM(CASE WHEN DATE_FORMAT(date, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m') THEN qty_supplied ELSE 0 END), 0) AS monthlyCans,
+        COALESCE(SUM(CASE WHEN YEAR(date) = YEAR(CURDATE()) THEN qty_supplied ELSE 0 END), 0) AS yearlyCans,
+        COALESCE(SUM(grand_total - amount_paid), 0) AS pendingPayments
+      FROM can_billing
+    `);
+
     res.json({
       ok: true,
       summary: {
@@ -408,7 +877,19 @@ router.get('/dashboard', async (req, res) => {
         dispensersOut: disp,
         totalPendingReturns: totalPendingReturns
       },
-      overdue
+      overdue,
+      billingStats: {
+        todayRevenue: parseFloat(billingStats.todayRevenue),
+        weeklyRevenue: parseFloat(billingStats.weeklyRevenue),
+        monthlyRevenue: parseFloat(billingStats.monthlyRevenue),
+        yearlyRevenue: parseFloat(billingStats.yearlyRevenue),
+        todayCans: parseInt(billingStats.todayCans, 10),
+        weeklyCans: parseInt(billingStats.weeklyCans, 10),
+        monthlyCans: parseInt(billingStats.monthlyCans, 10),
+        yearlyCans: parseInt(billingStats.yearlyCans, 10),
+        pendingPayments: parseFloat(billingStats.pendingPayments),
+        outstandingCans: totalCansOut
+      }
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
@@ -432,6 +913,20 @@ router.get('/reports', async (req, res) => {
     } else if (endDate) {
       dateFilter = 'AND t.transaction_date <= ?';
       dateParams.push(endDate);
+    }
+
+    // Different date filter logic for Billing report (references `date` instead of `transaction_date`)
+    let billingDateFilter = '';
+    let billingDateParams = [];
+    if (startDate && endDate) {
+      billingDateFilter = 'AND date BETWEEN ? AND ?';
+      billingDateParams.push(startDate, endDate);
+    } else if (startDate) {
+      billingDateFilter = 'AND date >= ?';
+      billingDateParams.push(startDate);
+    } else if (endDate) {
+      billingDateFilter = 'AND date <= ?';
+      billingDateParams.push(endDate);
     }
 
     let reportData = [];
@@ -553,6 +1048,40 @@ router.get('/reports', async (req, res) => {
         `, dateParams);
         reportData = historyReport;
         break;
+
+      case 'CanBillingReport':
+        const [billingReportRows] = await pool.query(`
+          SELECT 
+            DATE_FORMAT(date, '%Y-%m-%d') as date,
+            bill_no AS invoiceNo,
+            customer_name AS customer,
+            qty_supplied AS qtySupplied,
+            rate_per_can AS rate,
+            grand_total AS amount,
+            payment_status AS status
+          FROM can_billing
+          WHERE 1=1 ${billingDateFilter}
+          ORDER BY date DESC, id DESC
+        `, billingDateParams);
+
+        // Calculate summary
+        const totalCans = billingReportRows.reduce((sum, r) => sum + parseInt(r.qtySupplied, 10), 0);
+        const totalRev = billingReportRows.reduce((sum, r) => sum + parseFloat(r.amount), 0);
+        const uniqueDates = new Set(billingReportRows.map(r => r.date));
+        const avgRevPerDay = uniqueDates.size > 0 ? (totalRev / uniqueDates.size) : 0;
+        const uniqueCustomers = new Set(billingReportRows.map(r => r.customer));
+        const avgRevPerCustomer = uniqueCustomers.size > 0 ? (totalRev / uniqueCustomers.size) : 0;
+
+        return res.json({
+          ok: true,
+          data: billingReportRows,
+          summary: {
+            totalCansSupplied: totalCans,
+            totalRevenue: totalRev,
+            averageRevenuePerDay: avgRevPerDay,
+            averageRevenuePerCustomer: avgRevPerCustomer
+          }
+        });
 
       default:
         throw new Error('Invalid report type specified.');

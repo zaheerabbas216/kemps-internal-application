@@ -16,6 +16,9 @@ const ProductMaster = () => {
   const [searchRmQuery, setSearchRmQuery] = useState('');
   const [currentRmPage, setCurrentRmPage] = useState(1);
   const rmPageLimit = 10;
+  
+  // Custom pages tracker for grouped categories
+  const [rmCurrentPages, setRmCurrentPages] = useState({});
 
   const [isRmCategoryModalOpen, setIsRmCategoryModalOpen] = useState(false);
   const [newRmCategoryName, setNewRmCategoryName] = useState('');
@@ -70,6 +73,21 @@ const ProductMaster = () => {
   useEffect(() => {
     fetchRmCategories();
     fetchFpCategories();
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsRmCategoryModalOpen(false);
+        setIsFpCategoryModalOpen(false);
+        setIsRmDeleteModalOpen(false);
+        setDeletingRmMaterial(null);
+        setIsFpDeleteModalOpen(false);
+        setDeletingFpProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   useEffect(() => {
@@ -154,6 +172,7 @@ const ProductMaster = () => {
   const handleRmSearchChange = (e) => {
     setSearchRmQuery(e.target.value);
     setCurrentRmPage(1);
+    setRmCurrentPages({});
   };
 
   const handleRmInputChange = (e) => {
@@ -814,101 +833,151 @@ const ProductMaster = () => {
               </div>
             </div>
 
-            {/* Table listing */}
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="table table-zebra w-full overflow-hidden">
-                <thead className="bg-[#0b1324] text-white border-b border-slate-100">
-                  <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Category</th>
-                    <th className="py-4 px-6 text-left">Sub Product</th>
-                    <th className="py-4 px-6 text-left">Unit</th>
-                    <th className="py-4 px-6 text-left">Qty in PC (per KG)</th>
-                    <th className="py-4 px-6 text-left">Status</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {loadingRm ? (
-                    <tr>
-                      <td colSpan="6" className="py-20 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                           <span className="loading loading-spinner text-primary"></span>
-                           <span className="text-slate-400 text-sm font-medium">Fetching raw materials...</span>
+            {/* Accordion Layout with Pagination */}
+            <div className="space-y-4">
+              {loadingRm ? (
+                <div className="py-20 text-center">
+                  <span className="loading loading-spinner text-primary"></span>
+                  <span className="text-slate-400 text-sm font-medium block mt-2">Fetching raw materials...</span>
+                </div>
+              ) : rawMaterials.length === 0 ? (
+                <div className="py-20 text-center text-slate-400 font-medium italic border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                  {searchRmQuery ? 'No raw materials found matching your search.' : 'No raw materials added yet.'}
+                </div>
+              ) : (() => {
+                const { grouped, sortedCategories } = getGroupedRawMaterials();
+                
+                return sortedCategories.map((categoryName, idx) => {
+                  const items = grouped[categoryName] || [];
+                  const catPage = rmCurrentPages[categoryName] || 1;
+                  const itemsPerPage = 5;
+                  const totalCatPages = Math.ceil(items.length / itemsPerPage) || 1;
+                  const activeCatPage = Math.min(catPage, totalCatPages);
+                  
+                  const indexOfLastItem = activeCatPage * itemsPerPage;
+                  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                  const currentCatItems = items.slice(indexOfFirstItem, indexOfLastItem);
+                  
+                  return (
+                    <details 
+                      key={categoryName}
+                      className="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm pointer-events-auto"
+                      name="raw-materials-accordion"
+                      defaultOpen={idx === 0}
+                    >
+                      <summary className="collapse-title text-sm font-black text-slate-800 uppercase tracking-wide py-4 px-6 cursor-pointer flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          📁 {categoryName} <span className="text-xs text-slate-400 font-bold">({items.length} {items.length === 1 ? 'item' : 'items'})</span>
+                        </span>
+                      </summary>
+                      
+                      <div className="collapse-content px-6 pb-6 overflow-x-auto text-sm">
+                        <div className="overflow-x-auto rounded-xl border border-slate-100 mt-2 bg-white">
+                          <table className="table table-zebra w-full overflow-hidden">
+                            <thead className="bg-[#0b1324] text-white border-b border-slate-100">
+                              <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
+                                <th className="py-4 px-6 text-left">Sub Product</th>
+                                <th className="py-4 px-6 text-left">Unit</th>
+                                <th className="py-4 px-6 text-left">Qty in PC (per KG)</th>
+                                <th className="py-4 px-6 text-left">Status</th>
+                                <th className="py-4 px-6 text-center">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {currentCatItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                                  <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.sub_product_name}</td>
+                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500 uppercase">{item.unit}</td>
+                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500">
+                                    {item.qty_in_pc_per_kg !== null && item.qty_in_pc_per_kg !== undefined ? `${item.qty_in_pc_per_kg} pcs` : '—'}
+                                  </td>
+                                  <td className="py-4 px-6">
+                                    {item.status === 1 ? (
+                                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
+                                        Active
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
+                                        Disabled
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 px-6">
+                                    <div className="flex items-center justify-center gap-3">
+                                      <button 
+                                        type="button"
+                                        onClick={() => handleToggleRmStatus(item)}
+                                        className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
+                                          item.status === 1 
+                                            ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
+                                            : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
+                                        }`}
+                                      >
+                                        {item.status === 1 ? 'Disable' : 'Enable'}
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => confirmRmDelete(item)}
+                                        className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
+                                      >
+                                        <span>🗑️</span> Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      </td>
-                    </tr>
-                  ) : rawMaterials.length === 0 ? (
-                    <tr>
-                      <td colSpan="6" className="py-20 text-center text-slate-400 font-medium italic">
-                        {searchRmQuery ? 'No raw materials found matching your search.' : 'No raw materials added yet.'}
-                      </td>
-                    </tr>
-                  ) : (() => {
-                    const { grouped, sortedCategories } = getGroupedRawMaterials();
-                    return sortedCategories.map(categoryName => {
-                      const items = grouped[categoryName];
-                      return (
-                        <React.Fragment key={categoryName}>
-                          {/* Category Header Row */}
-                          <tr className="bg-blue-50/20 text-slate-800 font-black text-xs uppercase tracking-wider">
-                            <td colSpan="6" className="py-3.5 px-6 text-left border-y border-slate-100 text-blue-700 font-extrabold">
-                              📁 {categoryName} ({items.length} {items.length === 1 ? 'item' : 'items'})
-                            </td>
-                          </tr>
-                          {items.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
-                              <td className="py-4 px-6">
-                                <span className="bg-blue-50/50 text-blue-600 rounded-lg px-2.5 py-1 text-xs font-bold border border-blue-100/30">
-                                  {categoryName}
-                                </span>
-                              </td>
-                              <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.sub_product_name}</td>
-                              <td className="py-4 px-6 text-[13px] font-bold text-slate-500 uppercase">{item.unit}</td>
-                              <td className="py-4 px-6 text-[13px] font-bold text-slate-500">
-                                {item.qty_in_pc_per_kg !== null && item.qty_in_pc_per_kg !== undefined ? `${item.qty_in_pc_per_kg} pcs` : '—'}
-                              </td>
-                              <td className="py-4 px-6">
-                                {item.status === 1 ? (
-                                  <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
-                                    Active
-                                  </span>
-                                ) : (
-                                  <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
-                                    Disabled
-                                  </span>
-                                )}
-                              </td>
-                              <td className="py-4 px-6">
-                                <div className="flex items-center justify-center gap-3">
-                                  <button 
-                                    onClick={() => handleToggleRmStatus(item)}
-                                    className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
-                                      item.status === 1 
-                                        ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
-                                        : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
-                                    }`}
-                                  >
-                                    {item.status === 1 ? 'Disable' : 'Enable'}
-                                  </button>
-                                  <button 
-                                    onClick={() => confirmRmDelete(item)}
-                                    className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
-                                  >
-                                    <span>🗑️</span> Delete
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))}
-                        </React.Fragment>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
+                        
+                        {/* Pagination within Category */}
+                        {totalCatPages > 1 && (
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-100">
+                            <span className="text-xs text-slate-500 font-semibold">
+                              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, items.length)} of {items.length} records
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={activeCatPage === 1}
+                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage - 1 }))}
+                                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              >
+                                ← Prev
+                              </button>
+                              
+                              {Array.from({ length: totalCatPages }, (_, i) => i + 1).map(pageNum => (
+                                <button
+                                  key={pageNum}
+                                  type="button"
+                                  onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: pageNum }))}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                    activeCatPage === pageNum
+                                      ? 'bg-primary border-primary text-white'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              ))}
+                              
+                              <button
+                                type="button"
+                                disabled={activeCatPage === totalCatPages}
+                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage + 1 }))}
+                                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              >
+                                Next →
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                });
+              })()}
             </div>
-
-            {/* Pagination is disabled for raw materials as they are grouped by category */}
           </div>
         </div>
       )}
@@ -919,8 +988,14 @@ const ProductMaster = () => {
 
       {/* CREATE RM CATEGORY MODAL */}
       {isRmCategoryModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => setIsRmCategoryModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>➕</span> Add New RM Category
@@ -977,8 +1052,14 @@ const ProductMaster = () => {
 
       {/* CREATE FP CATEGORY MODAL */}
       {isFpCategoryModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => setIsFpCategoryModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>➕</span> Add New FP Category
@@ -1035,10 +1116,16 @@ const ProductMaster = () => {
 
       {/* RM DELETE CONFIRMATION MODAL */}
       {isRmDeleteModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
-              onClick={() => setIsRmDeleteModalOpen(false)}
+              onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
             >
               ✕
@@ -1092,7 +1179,7 @@ const ProductMaster = () => {
                 Yes, Delete
               </button>
               <button 
-                onClick={() => setIsRmDeleteModalOpen(false)}
+                onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
                 className="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition-all uppercase tracking-wider flex-1"
               >
                 Cancel
@@ -1104,10 +1191,16 @@ const ProductMaster = () => {
 
       {/* FP DELETE CONFIRMATION MODAL */}
       {isFpDeleteModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button 
-              onClick={() => setIsFpDeleteModalOpen(false)}
+              onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
             >
               ✕
@@ -1151,7 +1244,7 @@ const ProductMaster = () => {
                 Yes, Delete
               </button>
               <button 
-                onClick={() => setIsFpDeleteModalOpen(false)}
+                onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
                 className="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition-all uppercase tracking-wider flex-1"
               >
                 Cancel

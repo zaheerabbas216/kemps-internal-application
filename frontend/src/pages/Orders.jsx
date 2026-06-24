@@ -124,7 +124,9 @@ const Orders = () => {
 
   const fetchWidgets = async () => {
     try {
-      const res = await api.get('/orders/dashboard-widgets');
+      const res = await api.get('/orders/dashboard-widgets', {
+        params: { excludeCustomerType: 'Distributor' }
+      });
       if (res.data.ok) {
         setWidgets(res.data.widgets);
       }
@@ -143,7 +145,8 @@ const Orders = () => {
         startDate: filterStartDate,
         endDate: filterEndDate,
         productId: filterProductId,
-        deliveryArea: filterDeliveryArea
+        deliveryArea: filterDeliveryArea,
+        excludeCustomerType: 'Distributor'
       };
 
       if (activeTab === 'upcoming') {
@@ -718,7 +721,6 @@ const Orders = () => {
                   disabled={isEditing}
                 >
                   <option value="General Customer">General Customer</option>
-                  <option value="Distributor">Distributor</option>
                   <option value="Wholesaler">Wholesaler</option>
                 </select>
               </div>

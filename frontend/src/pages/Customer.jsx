@@ -6,6 +6,10 @@ const Customer = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Pagination states
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage] = useState(10);
+  
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -58,6 +62,23 @@ const Customer = () => {
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isFormModalOpen) {
+          handleCloseForm();
+        } else if (isLedgerModalOpen) {
+          handleCloseLedgerModal();
+        } else if (isDeleteModalOpen) {
+          setIsDeleteModalOpen(false);
+          setDeletingCustomer(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFormModalOpen, isLedgerModalOpen, isDeleteModalOpen]);
 
   const fetchCustomers = async () => {
     try {
@@ -161,6 +182,15 @@ const Customer = () => {
     return name.includes(query) || phone.includes(query) || id.includes(query);
   });
 
+  // Pagination calculation
+  const totalItems = filteredCustomers.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+  const activePage = Math.min(currentPage, totalPages);
+  
+  const indexOfLastItem = activePage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredCustomers.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <div className="space-y-6 animate-fade-in">
       
@@ -187,7 +217,10 @@ const Customer = () => {
               type="text" 
               placeholder="Search by name, phone or ID..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
               className="input-premium pl-11 h-10 w-full"
             />
           </div>
@@ -211,21 +244,21 @@ const Customer = () => {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="5" className="py-20 text-center">
+                  <td colSpan="6" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                        <span className="loading loading-spinner text-primary"></span>
                        <span className="text-slate-400 text-sm font-medium">Fetching customers...</span>
                     </div>
                   </td>
                 </tr>
-              ) : filteredCustomers.length === 0 ? (
+              ) : currentItems.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="6" className="py-20 text-center text-slate-400 font-medium italic">
                     {searchQuery ? 'No customers found matching your search.' : 'No customers registered yet.'}
                   </td>
                 </tr>
               ) : (
-                filteredCustomers.map((c) => (
+                currentItems.map((c) => (
                   <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{c.id}</td>
                     <td className="py-4 px-6 text-[14px] font-bold text-slate-700">
@@ -247,7 +280,7 @@ const Customer = () => {
                           ? 'bg-amber-50 border-amber-100 text-amber-600' 
                           : c.customerType === 'Function Customer' 
                           ? 'bg-indigo-50 border-indigo-100 text-indigo-600' 
-                          : 'bg-slate-100 border-slate-200 text-slate-650'
+                          : 'bg-slate-100 border-slate-200 text-slate-600'
                       }`}>
                         {c.customerType || 'General Customer'}
                       </span>
@@ -275,12 +308,58 @@ const Customer = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-slate-50/50 border-t border-slate-100 rounded-b-xl mt-4">
+            <span className="text-xs text-slate-500 font-semibold">
+              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, totalItems)} of {totalItems} records
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                disabled={activePage === 1}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ← Prev
+              </button>
+              
+              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(pageNum => (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                    activePage === pageNum
+                      ? 'bg-primary border-primary text-white'
+                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+
+              <button
+                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                disabled={activePage === totalPages}
+                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* FORM MODAL */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-0 bg-transparent pointer-events-none">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] max-h-[90vh] h-[550px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto animate-fade-in"
+          onClick={handleCloseForm}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] max-h-[90vh] h-[550px] flex flex-col overflow-hidden pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header - Fixed at top */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight">
@@ -385,21 +464,27 @@ const Customer = () => {
                 Yes, Delete Customer
               </button>
               <button 
-                onClick={() => setIsDeleteModalOpen(false)}
+                onClick={() => { setIsDeleteModalOpen(false); setDeletingCustomer(null); }}
                 className="btn-premium bg-slate-100 text-slate-600 hover:bg-slate-200"
               >
                 No, Keep Record
               </button>
             </div>
           </div>
-          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsDeleteModalOpen(false)}></div>
+          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => { setIsDeleteModalOpen(false); setDeletingCustomer(null); }}></div>
         </div>
       )}
 
       {/* CUSTOMER DEPOSIT LEDGER MODAL */}
       {isLedgerModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto animate-fade-in">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] max-h-[85vh] flex flex-col overflow-hidden pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto animate-fade-in"
+          onClick={handleCloseLedgerModal}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] max-h-[85vh] flex flex-col overflow-hidden pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header */}
             <div className="bg-primary p-6 text-white shrink-0 relative">
               <h3 className="text-xl font-black italic tracking-tight uppercase">

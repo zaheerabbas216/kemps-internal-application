@@ -46,6 +46,7 @@ const SalesReturn = () => {
   const [historyLimit] = useState(10);
   const [historyTotal, setHistoryTotal] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   // Reports States
   const [reportsData, setReportsData] = useState({
@@ -322,6 +323,67 @@ const SalesReturn = () => {
       console.error(err);
     } finally {
       setLoadingHistory(false);
+    }
+  };
+
+  const handleExportHistoryExcel = async () => {
+    try {
+      setExportingExcel(true);
+      const res = await api.get('/sales-return/history', {
+        params: {
+          page: 1,
+          limit: 1000,
+          search: historySearch,
+          startDate: historyStart,
+          endDate: historyEnd
+        }
+      });
+
+      if (!res.data.ok) return alert('Failed to retrieve return history for Excel export.');
+      const allReturns = res.data.returns || [];
+
+      // CSV columns mapping
+      const headers = [
+        'Return Number',
+        'Date',
+        'Customer Name',
+        'Customer Phone',
+        'Invoice Ref',
+        'Returned Items',
+        'Reason',
+        'Credit Value (INR)',
+        'Created By'
+      ];
+
+      const csvRows = [
+        headers.join(','),
+        ...allReturns.map(r => [
+          r.returnNumber,
+          r.returnDate,
+          r.customerName,
+          r.customerPhone,
+          r.invoiceNumber,
+          r.productsReturned,
+          r.reason,
+          r.returnAmount,
+          r.createdBy
+        ].map(val => `"${String(val || '').replace(/"/g, '""')}"`).join(','))
+      ];
+
+      // Add UTF-8 BOM so Excel reads it perfectly
+      const csvContent = "\uFEFF" + csvRows.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Sales_Returns_History_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      alert('Error exporting Excel report: ' + err.message);
+    } finally {
+      setExportingExcel(false);
     }
   };
 
@@ -635,6 +697,19 @@ const SalesReturn = () => {
                 onChange={(e) => { setHistoryEnd(e.target.value); setHistoryPage(1); }}
                 className="h-8 px-2 rounded-lg border border-slate-200 text-xs font-semibold"
               />
+              <button
+                onClick={handleExportHistoryExcel}
+                disabled={exportingExcel}
+                className="h-8 px-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Export Filtered Return History to Excel"
+              >
+                {exportingExcel ? (
+                  <span className="loading loading-spinner text-white text-[10px] w-3 h-3"></span>
+                ) : (
+                  <span>📥</span>
+                )}
+                Export Excel
+              </button>
             </div>
           </div>
 

@@ -14,6 +14,7 @@ const RawMaterialLedger = () => {
   };
 
   const [ledgerDate, setLedgerDate] = useState(getTodayISTStr());
+  const [rmCurrentPages, setRmCurrentPages] = useState({});
   const [ledgerData, setLedgerData] = useState({ items: [], summary: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -43,7 +44,18 @@ const RawMaterialLedger = () => {
 
   useEffect(() => {
     fetchLedger();
+    setRmCurrentPages({});
   }, [ledgerDate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsDrillOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchLedger = async () => {
     if (!ledgerDate) {
@@ -562,105 +574,158 @@ const RawMaterialLedger = () => {
               No raw materials found. Add raw materials to the Product Master first.
             </div>
           ) : (
-            <div className="space-y-6">
-              {Object.keys(groupedItems).map(categoryName => {
-                const groupItems = groupedItems[categoryName];
+            <div className="space-y-4">
+              {Object.keys(groupedItems).map((categoryName, idx) => {
+                const groupItems = groupedItems[categoryName] || [];
+                const catPage = rmCurrentPages[categoryName] || 1;
+                const itemsPerPage = 5;
+                const totalCatPages = Math.ceil(groupItems.length / itemsPerPage) || 1;
+                const activeCatPage = Math.min(catPage, totalCatPages);
+                
+                const indexOfLastItem = activeCatPage * itemsPerPage;
+                const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                const currentCatItems = groupItems.slice(indexOfFirstItem, indexOfLastItem);
+                
                 const groupTotals = calculateGroupTotals(groupItems);
 
                 return (
-                  <div key={categoryName} className="border border-slate-200/80 rounded-2xl bg-white overflow-hidden shadow-sm">
-                    {/* Category Header */}
-                    <div className="bg-[#1e293b] text-white px-5 py-3.5 flex justify-between items-center">
-                      <div className="flex items-center gap-2">
-                        <span className="font-heading font-black text-[13px] tracking-widest uppercase">
-                          📁 {categoryName}
-                        </span>
-                        <span className="bg-slate-700 text-slate-200 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
-                          {groupItems.length} {groupItems.length === 1 ? 'Item' : 'Items'}
-                        </span>
-                      </div>
-                    </div>
+                  <details 
+                    key={categoryName} 
+                    className="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm mb-4 pointer-events-auto"
+                    name="rm-ledger-accordion"
+                    defaultOpen={idx === 0}
+                  >
+                    <summary className="collapse-title text-sm font-black text-slate-800 uppercase tracking-wide py-4 px-6 cursor-pointer flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        📁 {categoryName} <span className="text-xs text-slate-400 font-bold">({groupItems.length} {groupItems.length === 1 ? 'Item' : 'Items'})</span>
+                      </span>
+                    </summary>
 
                     {/* Table list */}
-                    <div className="overflow-x-auto">
-                      <table className="table w-full">
-                        <thead>
-                          <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-100">
-                            <th className="py-3 px-5 text-left w-2/5">Sub Product</th>
-                            <th className="py-3 px-5 text-center w-1/12">Unit</th>
-                            <th className="py-3 px-5 text-right">Opening</th>
-                            <th className="py-3 px-5 text-right text-emerald-600">+IN</th>
-                            <th className="py-3 px-5 text-right text-rose-500">-OUT</th>
-                            <th className="py-3 px-5 text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100">=Closing</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 font-medium">
-                          {groupItems.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/40 transition-colors">
-                              <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
-                                {item.sub_product_name}
+                    <div className="collapse-content px-6 pb-6 overflow-x-auto text-sm">
+                      <div className="overflow-x-auto rounded-xl border border-slate-100 mt-2 bg-white">
+                        <table className="table w-full">
+                          <thead>
+                            <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-100">
+                              <th className="py-3 px-5 text-left w-2/5">Sub Product</th>
+                              <th className="py-3 px-5 text-center w-1/12">Unit</th>
+                              <th className="py-3 px-5 text-right">Opening</th>
+                              <th className="py-3 px-5 text-right text-emerald-600">+IN</th>
+                              <th className="py-3 px-5 text-right text-rose-500">-OUT</th>
+                              <th className="py-3 px-5 text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100">=Closing</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-50 font-medium">
+                            {currentCatItems.map((item, subIdx) => (
+                              <tr key={subIdx} className="hover:bg-slate-50/40 transition-colors">
+                                <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
+                                  {item.sub_product_name}
+                                </td>
+                                <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
+                                  {item.unit}
+                                </td>
+                                <td 
+                                  onClick={() => handleDrilldown(item, 'OPENING')}
+                                  className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  {item.opening_stock.toLocaleString('en-IN')}
+                                </td>
+                                <td 
+                                  onClick={() => handleDrilldown(item, 'IN')}
+                                  className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  {item.stock_in === 0 ? (
+                                    <span className="text-emerald-500 font-bold">—</span>
+                                  ) : (
+                                    <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
+                                  )}
+                                </td>
+                                <td 
+                                  onClick={() => handleDrilldown(item, 'OUT')}
+                                  className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  {item.stock_out === 0 ? (
+                                    <span className="text-rose-500 font-bold">—</span>
+                                  ) : (
+                                    <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
+                                  )}
+                                </td>
+                                <td 
+                                  onClick={() => handleDrilldown(item, 'CLOSING')}
+                                  className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
+                                >
+                                  {item.closing_stock.toLocaleString('en-IN')}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+
+                          {/* Group Totals Row */}
+                          <tfoot>
+                            <tr className="bg-[#f8fafc] border-t border-slate-200/80 text-slate-700 font-extrabold text-xs">
+                              <td className="py-3.5 px-5">Category Total</td>
+                              <td className="py-3.5 px-5"></td>
+                              <td className="py-3.5 px-5 text-right font-black">
+                                {groupTotals.opening.toLocaleString('en-IN')}
                               </td>
-                              <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
-                                {item.unit}
+                              <td className="py-3.5 px-5 text-right text-emerald-700 font-black">
+                                {groupTotals.stockIn === 0 ? '—' : `+${groupTotals.stockIn.toLocaleString('en-IN')}`}
                               </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'OPENING')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.opening_stock.toLocaleString('en-IN')}
+                              <td className="py-3.5 px-5 text-right text-rose-700 font-black">
+                                {groupTotals.stockOut === 0 ? '—' : `-${groupTotals.stockOut.toLocaleString('en-IN')}`}
                               </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'IN')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.stock_in === 0 ? (
-                                  <span className="text-emerald-500 font-bold">—</span>
-                                ) : (
-                                  <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
-                                )}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'OUT')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.stock_out === 0 ? (
-                                  <span className="text-rose-500 font-bold">—</span>
-                                ) : (
-                                  <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
-                                )}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'CLOSING')}
-                                className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.closing_stock.toLocaleString('en-IN')}
+                              <td className="py-3.5 px-5 text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black">
+                                {groupTotals.closing.toLocaleString('en-IN')}
                               </td>
                             </tr>
-                          ))}
-                        </tbody>
+                          </tfoot>
+                        </table>
+                      </div>
 
-                        {/* Group Totals Row */}
-                        <tfoot>
-                          <tr className="bg-[#f8fafc] border-t border-slate-200/80 text-slate-700 font-extrabold text-xs">
-                            <td className="py-3.5 px-5">Category Total</td>
-                            <td className="py-3.5 px-5"></td>
-                            <td className="py-3.5 px-5 text-right font-black">
-                              {groupTotals.opening.toLocaleString('en-IN')}
-                            </td>
-                            <td className="py-3.5 px-5 text-right text-emerald-700 font-black">
-                              {groupTotals.stockIn === 0 ? '—' : `+${groupTotals.stockIn.toLocaleString('en-IN')}`}
-                            </td>
-                            <td className="py-3.5 px-5 text-right text-rose-700 font-black">
-                              {groupTotals.stockOut === 0 ? '—' : `-${groupTotals.stockOut.toLocaleString('en-IN')}`}
-                            </td>
-                            <td className="py-3.5 px-5 text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black">
-                              {groupTotals.closing.toLocaleString('en-IN')}
-                            </td>
-                          </tr>
-                        </tfoot>
-                      </table>
+                      {/* Pagination Controls */}
+                      {totalCatPages > 1 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-100">
+                          <span className="text-xs text-slate-500 font-semibold">
+                            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, groupItems.length)} of {groupItems.length} records
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              disabled={activeCatPage === 1}
+                              onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage - 1 }))}
+                              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                              ← Prev
+                            </button>
+                            
+                            {Array.from({ length: totalCatPages }, (_, i) => i + 1).map(pageNum => (
+                              <button
+                                key={pageNum}
+                                type="button"
+                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: pageNum }))}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                  activeCatPage === pageNum
+                                    ? 'bg-primary border-primary text-white'
+                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                }`}
+                              >
+                                {pageNum}
+                              </button>
+                            ))}
+                            
+                            <button
+                              type="button"
+                              disabled={activeCatPage === totalCatPages}
+                              onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage + 1 }))}
+                              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                            >
+                              Next →
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
+                  </details>
                 );
               })}
             </div>
@@ -697,8 +762,14 @@ const RawMaterialLedger = () => {
 
       {/* DRILL DOWN AUDIT TRAIL MODAL */}
       {isDrillOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] h-[520px] p-8 flex flex-col overflow-hidden animate-fade-in pointer-events-auto relative animate-fade-in">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => setIsDrillOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[750px] h-[520px] p-8 flex flex-col overflow-hidden pointer-events-auto relative animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={() => setIsDrillOpen(false)}
               className="absolute right-6 top-6 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-sm text-slate-500 transition-colors"

@@ -397,14 +397,8 @@ const PaymentApproval = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        <SummaryCard icon="⏳" label="Total Pending" value={summary.totalPending} badgeBg="bg-amber-50" colorClass="border-amber-200" />
-        <SummaryCard icon="▲" label="Pending Cash In" value={fmt(summary.pendingCashIn)} badgeBg="bg-emerald-50" colorClass="border-emerald-200" />
-        <SummaryCard icon="▼" label="Pending Cash Out" value={fmt(summary.pendingCashOut)} badgeBg="bg-red-50" colorClass="border-red-200" />
-        <SummaryCard icon="✔" label="Today's Approved In" value={fmt(summary.approvedCashIn)} badgeBg="bg-green-50" colorClass="border-green-200" />
-        <SummaryCard icon="✔" label="Today's Approved Out" value={fmt(summary.approvedCashOut)} badgeBg="bg-rose-50" colorClass="border-rose-200" />
-        <SummaryCard icon="💵" label="Cash Balance" value={fmt(summary.currentBalance)} badgeBg="bg-blue-50" colorClass="border-blue-300" />
-        <SummaryCard icon="✕" label="Total Rejected" value={summary.totalRejected} badgeBg="bg-slate-100" colorClass="border-slate-200" />
+      <div className="max-w-xs">
+        <SummaryCard icon="⏳" label="Total Pending Approval" value={summary.totalPending} badgeBg="bg-amber-50" colorClass="border-amber-200" />
       </div>
 
       {/* ── APPROVALS TAB ── */}

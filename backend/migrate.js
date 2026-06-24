@@ -1617,6 +1617,69 @@ export async function runMigration(shouldExit = false) {
       console.log('Historical supplier ledger seeding complete.');
     }
 
+    // 47. Create can_billing table if not exists
+    console.log('Creating can_billing table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS can_billing (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        bill_no VARCHAR(50) UNIQUE NOT NULL,
+        date DATE NOT NULL,
+        customer_id VARCHAR(20) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
+        customer_name VARCHAR(200) NOT NULL,
+        qty_supplied INT NOT NULL,
+        rate_per_can DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        water_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        dispenser_rent DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        delivery_charge DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        other_charge DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        gst_percentage DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+        gst_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        grand_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        amount_paid DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        payment_status ENUM('Unpaid', 'Partially Paid', 'Paid') NOT NULL DEFAULT 'Unpaid',
+        remarks TEXT NULL,
+        created_by VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('can_billing table verified.');
+
+    // 48. Create can_payments table if not exists
+    console.log('Creating can_payments table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS can_payments (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        payment_no VARCHAR(50) UNIQUE NOT NULL,
+        bill_id INT NOT NULL,
+        payment_date DATE NOT NULL,
+        amount_paid DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
+        remarks TEXT NULL,
+        created_by VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (bill_id) REFERENCES can_billing(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log('can_payments table verified.');
+
+    // 49. Alter can_supply_transactions table to add billing_id if not exists
+    const [txCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'can_supply_transactions' AND COLUMN_NAME = 'billing_id'`,
+      [dbName]
+    );
+    if (txCols.length === 0) {
+      console.log('Adding billing_id column to can_supply_transactions...');
+      await connection.query(`
+        ALTER TABLE can_supply_transactions 
+        ADD COLUMN billing_id INT NULL,
+        ADD FOREIGN KEY (billing_id) REFERENCES can_billing(id) ON DELETE SET NULL
+      `);
+      console.log('billing_id column added successfully.');
+    }
+
     console.log('Migration complete!');
     await connection.end();
     if (shouldExit) {

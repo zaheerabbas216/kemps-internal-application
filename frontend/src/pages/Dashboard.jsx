@@ -107,15 +107,13 @@ const Dashboard = () => {
   const [todayOrders, setTodayOrders]   = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
-  // ── Goods Ledger ──────────────────────────────────────────────────────────────
-  const [goodsItems, setGoodsItems]   = useState([]);
-  const [goodsSummary, setGoodsSummary] = useState(null);
-  const [loadingGoods, setLoadingGoods] = useState(true);
+  // ── Today's Cash Ledger ───────────────────────────────────────────────────────
+  const [cashEntries, setCashEntries] = useState([]);
+  const [loadingCash, setLoadingCash] = useState(true);
 
-  // ── Raw Material Ledger ───────────────────────────────────────────────────────
-  const [rmItems, setRmItems]   = useState([]);
-  const [rmSummary, setRmSummary] = useState(null);
-  const [loadingRm, setLoadingRm] = useState(true);
+  // ── Maintenance Due Dates ───────────────────────────────────────────────────
+  const [maintenanceDue, setMaintenanceDue] = useState([]);
+  const [loadingDue, setLoadingDue] = useState(true);
 
   // ── Task panel ────────────────────────────────────────────────────────────────
   const [tasks, setTasks]             = useState([]);
@@ -141,7 +139,7 @@ const Dashboard = () => {
     const [billRes, expRes, ordRes] = await Promise.allSettled([
       api.get('/billing/today'),
       api.get('/expenses/today'),
-      api.get('/orders/dashboard-widgets'),
+      api.get('/orders/dashboard-widgets', { params: { excludeCustomerType: 'Distributor' } }),
     ]);
     if (billRes.status === 'fulfilled' && billRes.value.data.ok) setBillingSummary(billRes.value.data.summary);
     if (expRes.status  === 'fulfilled' && expRes.value.data.ok)  setExpenseSummary(expRes.value.data.summary);
@@ -152,28 +150,23 @@ const Dashboard = () => {
   const fetchTodayOrders = useCallback(async () => {
     setLoadingOrders(true);
     try {
-      const res = await api.get('/orders', { params: { status: 'PENDING', startDate: todayStr, endDate: todayStr, limit: 10 } });
+      const res = await api.get('/orders', { params: { status: 'PENDING', startDate: todayStr, endDate: todayStr, limit: 10, excludeCustomerType: 'Distributor' } });
       if (res.data.ok) setTodayOrders(res.data.orders || []);
     } catch (_) {}
     setLoadingOrders(false);
   }, [todayStr]);
 
-  const fetchGoodsLedger = useCallback(async () => {
-    setLoadingGoods(true);
+  const fetchTodayCash = useCallback(async () => {
+    setLoadingCash(true);
     try {
-      const res = await api.get('/goods-ledger/day', { params: { date: todayStr } });
-      if (res.data.ok) { setGoodsItems(res.data.items || []); setGoodsSummary(res.data.summary || null); }
+      const res = await api.get('/payment-approval/cash-ledger', {
+        params: { startDate: todayStr, endDate: todayStr, page: 1, limit: 100 }
+      });
+      if (res.data.ok) {
+        setCashEntries(res.data.ledger || []);
+      }
     } catch (_) {}
-    setLoadingGoods(false);
-  }, [todayStr]);
-
-  const fetchRmLedger = useCallback(async () => {
-    setLoadingRm(true);
-    try {
-      const res = await api.get('/raw-material-ledger/day', { params: { date: todayStr } });
-      if (res.data.ok) { setRmItems(res.data.items || []); setRmSummary(res.data.summary || null); }
-    } catch (_) {}
-    setLoadingRm(false);
+    setLoadingCash(false);
   }, [todayStr]);
 
   const fetchTasks = useCallback(async () => {
@@ -194,13 +187,24 @@ const Dashboard = () => {
     setLoadingHistory(false);
   };
 
+  const fetchMaintenanceDue = useCallback(async () => {
+    setLoadingDue(true);
+    try {
+      const res = await api.get('/maintenance/due-tracker');
+      if (res.data.ok) {
+        setMaintenanceDue(res.data.perMachineList || []);
+      }
+    } catch (_) {}
+    setLoadingDue(false);
+  }, []);
+
   useEffect(() => {
     fetchMeta();
     fetchTodayOrders();
-    fetchGoodsLedger();
-    fetchRmLedger();
+    fetchTodayCash();
     fetchTasks();
-  }, [fetchMeta, fetchTodayOrders, fetchGoodsLedger, fetchRmLedger, fetchTasks]);
+    fetchMaintenanceDue();
+  }, [fetchMeta, fetchTodayOrders, fetchTodayCash, fetchTasks, fetchMaintenanceDue]);
 
   // ── Task handlers ─────────────────────────────────────────────────────────────
 
@@ -260,6 +264,39 @@ const Dashboard = () => {
   const totalSales    = billingSummary ? billingSummary.totalBilled   : 0;
   const totalExpenses = expenseSummary ? expenseSummary.totalAmount   : 0;
   const netForToday   = totalSales - totalExpenses;
+
+  // Helper to extract the cash portion of split/mixed payments
+  const getCashPortion = (entry) => {
+    if (entry.payment_method && entry.cash_amount !== undefined && entry.cash_amount !== null) {
+      return parseFloat(entry.cash_amount) || 0;
+    }
+    return parseFloat(entry.amount) || 0;
+  };
+
+  // Filter for actual cash entries (no UPI or BANK, showing only cash entries)
+  const todayCashEntries = cashEntries.filter(entry => {
+    if (entry.payment_method) {
+      const pm = entry.payment_method.toLowerCase();
+      if (pm === 'upi' || pm === 'bank') return false;
+      if (entry.cash_amount !== undefined && parseFloat(entry.cash_amount) <= 0) {
+        if (parseFloat(entry.upi_amount) > 0 || parseFloat(entry.bank_amount) > 0) {
+          return false;
+        }
+      }
+    }
+    return true;
+  });
+
+  // Calculate stats for today's cash entries (taking only the cash portion of split transactions)
+  const totalCashIn = todayCashEntries
+    .filter(entry => entry.type === 'Cash In')
+    .reduce((sum, entry) => sum + getCashPortion(entry), 0);
+
+  const totalCashOut = todayCashEntries
+    .filter(entry => entry.type === 'Cash Out')
+    .reduce((sum, entry) => sum + getCashPortion(entry), 0);
+
+  const netCashChange = totalCashIn - totalCashOut;
 
   // ─────────────────────────────────────────────────────────────────────────────
 
@@ -586,123 +623,146 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* ── LIVE GOODS LEDGER ─────────────────────────────────────────────────── */}
+      {/* ── Upcoming Maintenance Due Dates ────────────────────────────────────── */}
       <div className="card-premium">
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
-            <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide">📦 Live Stock Position</h2>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Today's closing stock from Goods Ledger &mdash; {formatDateDDMMYYYY(todayStr)}</p>
-            </div>
+        <div className="flex items-center justify-between mb-4 pb-2 border-b border-slate-100">
+          <div>
+            <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+              <span>🔧</span> Upcoming Maintenance Due Dates
+            </h2>
+            <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+              Scheduled services and machine maintenance due dates
+            </p>
           </div>
-          <div className="flex items-center gap-3">
-            {goodsSummary && (
-              <div className="hidden md:flex items-center gap-2 text-[11px] font-bold">
-                <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg border border-emerald-100">IN: {goodsSummary.totalStockInToday}</span>
-                <span className="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100">OUT: {goodsSummary.totalStockOutToday}</span>
-                <span className="bg-primary/10 text-primary px-2.5 py-1 rounded-lg border border-primary/20">CLOSING: {goodsSummary.totalClosingStock}</span>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-2.5 py-1 rounded-md border border-slate-100">
+            {maintenanceDue.length} {maintenanceDue.length === 1 ? 'Machine' : 'Machines'}
+          </span>
+        </div>
+
+        {loadingDue ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2">
+            <span className="loading loading-spinner text-primary loading-sm"></span>
+            <span className="text-xs text-slate-400 font-medium">Loading upcoming maintenance...</span>
+          </div>
+        ) : maintenanceDue.length === 0 ? (
+          <div className="text-center py-8 text-slate-400 text-xs italic font-semibold">
+            No upcoming maintenance due dates
+          </div>
+        ) : (
+          <div className="flex gap-4 overflow-x-auto pb-3 pt-1 scrollbar-thin snap-x">
+            {maintenanceDue.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-sm min-w-[260px] max-w-[280px] flex-1 flex flex-col justify-between hover:shadow-md transition-shadow snap-start"
+              >
+                <div className="space-y-3">
+                  {/* Service Date */}
+                  <div>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Service Date</span>
+                    <span className="text-xs font-semibold text-slate-700">{formatDateDDMMYYYY(item.service_date)}</span>
+                  </div>
+
+                  {/* Particular Type */}
+                  <div>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Particular Type</span>
+                    <span className="text-sm font-extrabold text-slate-800">{item.particular}</span>
+                  </div>
+
+                  {/* Sub Detail / Company */}
+                  <div>
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Sub Detail / Company</span>
+                    <span className="text-xs text-slate-500 font-medium truncate block" title={`${item.sub_detail || ''} ${item.company ? `+ ${item.company}` : ''}`}>
+                      {item.sub_detail || '—'} {item.company ? `+ ${item.company}` : ''}
+                    </span>
+                  </div>
+
+                  {/* Next Due Date */}
+                  <div className="pt-2 border-t border-slate-100">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Next Due Date</span>
+                    <span className="text-xs font-black text-red-500">{formatDateDDMMYYYY(item.next_due_date)}</span>
+                  </div>
+                </div>
               </div>
-            )}
-            <button onClick={() => navigate('/goods-ledger')} className="text-[11px] font-bold text-primary bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 hover:text-blue-700 transition-colors">
-              View Full →
-            </button>
+            ))}
           </div>
-        </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-100">
-          <table className="table table-zebra w-full">
-            <thead className="bg-slate-50 border-b border-slate-100">
-              <tr className="text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                <th className="py-3 px-4 text-left">Product</th>
-                <th className="py-3 px-4 text-left">Category</th>
-                <th className="py-3 px-4 text-right">Opening</th>
-                <th className="py-3 px-4 text-right">Stock IN</th>
-                <th className="py-3 px-4 text-right">Stock OUT</th>
-                <th className="py-3 px-4 text-right">Closing</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loadingGoods ? (
-                <tr><td colSpan="6" className="py-10 text-center"><span className="loading loading-spinner text-primary loading-sm"></span></td></tr>
-              ) : goodsItems.length === 0 ? (
-                <tr><td colSpan="6" className="py-10 text-center text-slate-400 text-xs italic">No goods ledger data available for today.</td></tr>
-              ) : (
-                goodsItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-blue-50/30 transition-colors">
-                    <td className="py-2.5 px-4 text-[13px] font-bold text-slate-800">{item.product_name}</td>
-                    <td className="py-2.5 px-4"><span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">{item.category_name}</span></td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-semibold text-slate-600">{item.opening_stock}</td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-bold text-emerald-600">+{item.stock_in}</td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-bold text-red-500">-{item.stock_out}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      <span className={`text-[13px] font-black ${item.closing_stock < 0 ? 'text-red-600' : item.closing_stock < 10 ? 'text-amber-600' : 'text-primary'}`}>
-                        {item.closing_stock}
-                      </span>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        )}
       </div>
 
-      {/* ── RAW MATERIAL LEDGER ──────────────────────────────────────────────── */}
+      {/* ── TODAY'S CASH LEDGER ────────────────────────────────────────────────── */}
       <div className="card-premium">
-        <div className="flex items-center justify-between mb-5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
           <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></span>
+            <span className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
             <div>
-              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide">🪨 Raw Material Ledger</h2>
-              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Live stock for today &mdash; {formatDateDDMMYYYY(todayStr)}</p>
+              <h2 className="text-sm font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                <span>💵</span> Today's Cash Ledger
+              </h2>
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">Approved cash transactions for today &mdash; {formatDateDDMMYYYY(todayStr)}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            {rmSummary && (
-              <div className="hidden md:flex items-center gap-2 text-[11px] font-bold">
-                <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg border border-emerald-100">IN: {rmSummary.totalStockInToday}</span>
-                <span className="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100">OUT: {rmSummary.totalStockOutToday}</span>
-              </div>
-            )}
-            <button onClick={() => navigate('/raw-material-ledger')} className="text-[11px] font-bold text-primary bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 hover:text-blue-700 transition-colors">
-              View Full →
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 text-[11px] font-bold">
+              <span className="bg-emerald-50 text-emerald-600 px-2.5 py-1 rounded-lg border border-emerald-100">CASH IN: {formatINR(totalCashIn)}</span>
+              <span className="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg border border-red-100">CASH OUT: {formatINR(totalCashOut)}</span>
+              <span className={`px-2.5 py-1 rounded-lg border ${netCashChange >= 0 ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-600 border-red-100'}`}>
+                NET: {formatINR(netCashChange)}
+              </span>
+            </div>
+            <button onClick={() => navigate('/payment-approval')} className="text-[11px] font-bold text-primary bg-blue-50 border border-blue-100 rounded-lg px-3 py-1.5 hover:text-blue-700 transition-colors">
+              Manage Approvals →
             </button>
           </div>
         </div>
+
         <div className="overflow-x-auto rounded-xl border border-slate-100">
-          <table className="table table-zebra w-full">
+          <table className="table table-zebra w-full text-left">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr className="text-slate-500 text-[10px] font-black uppercase tracking-wider">
-                <th className="py-3 px-4 text-left">Material</th>
-                <th className="py-3 px-4 text-left">Category</th>
-                <th className="py-3 px-4 text-center">Unit</th>
-                <th className="py-3 px-4 text-right">Opening</th>
-                <th className="py-3 px-4 text-right">Stock IN</th>
-                <th className="py-3 px-4 text-right">Stock OUT</th>
-                <th className="py-3 px-4 text-right">Closing</th>
+                <th className="py-3 px-4">Time</th>
+                <th className="py-3 px-4">Reference</th>
+                <th className="py-3 px-4">Source</th>
+                <th className="py-3 px-4">Type</th>
+                <th className="py-3 px-4">Description</th>
+                <th className="py-3 px-4 text-right">Cash Amount</th>
+                <th className="py-3 px-4">Approved By</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
-              {loadingRm ? (
+            <tbody className="divide-y divide-slate-50 text-xs font-semibold">
+              {loadingCash ? (
                 <tr><td colSpan="7" className="py-10 text-center"><span className="loading loading-spinner text-primary loading-sm"></span></td></tr>
-              ) : rmItems.length === 0 ? (
-                <tr><td colSpan="7" className="py-10 text-center text-slate-400 text-xs italic">No raw material data available for today.</td></tr>
+              ) : todayCashEntries.length === 0 ? (
+                <tr><td colSpan="7" className="py-10 text-center text-slate-400 text-xs italic">No cash transactions recorded for today.</td></tr>
               ) : (
-                rmItems.map((item, idx) => (
-                  <tr key={idx} className="hover:bg-amber-50/30 transition-colors">
-                    <td className="py-2.5 px-4 text-[13px] font-bold text-slate-800">{item.sub_product_name}</td>
-                    <td className="py-2.5 px-4"><span className="text-[10px] bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-bold border border-amber-100">{item.category_name}</span></td>
-                    <td className="py-2.5 px-4 text-center"><span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">{item.unit}</span></td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-semibold text-slate-600">{item.opening_stock}</td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-bold text-emerald-600">+{item.stock_in}</td>
-                    <td className="py-2.5 px-4 text-right text-[13px] font-bold text-red-500">-{item.stock_out}</td>
-                    <td className="py-2.5 px-4 text-right">
-                      <span className={`text-[13px] font-black ${item.closing_stock < 0 ? 'text-red-600' : item.closing_stock < 5 ? 'text-amber-600' : 'text-slate-800'}`}>
-                        {item.closing_stock}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                todayCashEntries.map((item, idx) => {
+                  const cashPortion = getCashPortion(item);
+                  const isSplit = item.payment_method && item.payment_method.includes('+');
+                  return (
+                    <tr key={idx} className="hover:bg-slate-50/40 transition-colors">
+                      <td className="py-2.5 px-4 text-slate-500 font-bold">
+                        {item.approved_at_fmt ? item.approved_at_fmt.split(' ')[1] : '—'}
+                      </td>
+                      <td className="py-2.5 px-4 font-bold text-primary">{item.reference_no || item.approval_id}</td>
+                      <td className="py-2.5 px-4">
+                        <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-bold">
+                          {item.source_module}
+                        </span>
+                      </td>
+                      <td className={`py-2.5 px-4 font-extrabold ${item.type === 'Cash In' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {item.type}
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-600 max-w-xs truncate" title={item.description}>
+                        {item.description}
+                      </td>
+                      <td className={`py-2.5 px-4 text-right font-black ${item.type === 'Cash In' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {item.type === 'Cash In' ? '+' : '-'}{formatINR(cashPortion)}
+                        {isSplit && (
+                          <div className="text-[9px] text-slate-400 font-medium">Split (Total: {formatINR(item.amount)})</div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-4 text-slate-500">{item.approved_by}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
