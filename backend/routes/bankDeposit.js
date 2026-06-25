@@ -11,12 +11,12 @@ async function generateId(prefix, table, idColumn) {
   // Adjust to IST timezone (UTC+5:30)
   const istDate = new Date(now.getTime() + (330 + offset) * 60000);
   const yyyy = istDate.getFullYear();
-  
+
   const [rows] = await pool.query(
     `SELECT ${idColumn} FROM ${table} WHERE ${idColumn} LIKE ? ORDER BY ${idColumn} DESC LIMIT 1`,
     [`${prefix}-${yyyy}-%`]
   );
-  
+
   let seq = 1;
   if (rows.length) {
     const lastId = rows[0][idColumn];
@@ -25,7 +25,7 @@ async function generateId(prefix, table, idColumn) {
       seq = parseInt(match[1]) + 1;
     }
   }
-  
+
   return `${prefix}-${yyyy}-${String(seq).padStart(5, '0')}`;
 }
 
@@ -50,7 +50,7 @@ router.get('/accounts', async (req, res) => {
 router.post('/accounts', async (req, res) => {
   try {
     const { bankName, accountNumber, ifscCode, branch } = req.body;
-    
+
     const bankNameTrimmed = String(bankName || '').trim();
     const accountNumberTrimmed = String(accountNumber || '').trim();
     const ifscCodeTrimmed = String(ifscCode || '').trim();
@@ -129,24 +129,35 @@ router.get('/today', async (req, res) => {
         totalAmount: todayTotal,
         totalCount: todayCount
       }
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 // GET /api/bank-deposits - Get all deposits with search filter
 router.get('/', async (req, res) => {
   try {
     const { search = '' } = req.query;
-    
-    let baseQuery = 'SELECT id, deposit_date, bank_name, account_number, amount, notes, created_at FROM bank_deposits';
+
+    let baseQuery = `
+      SELECT d.id, DATE_FORMAT(d.deposit_date, '%Y-%m-%d') as deposit_date, d.bank_account_id, 
+             a.bank_name, a.account_number, d.amount, d.entered_by, d.notes, d.created_at 
+      FROM bank_deposits d
+      INNER JOIN bank_accounts a ON d.bank_account_id = a.id
+    `;
     let queryParams = [];
-    
+
     if (search.trim()) {
-      baseQuery += ' WHERE id LIKE ? OR bank_name LIKE ? OR account_number LIKE ? OR notes LIKE ?';
+      baseQuery += ' WHERE d.id LIKE ? OR a.bank_name LIKE ? OR a.account_number LIKE ? OR d.notes LIKE ? OR d.entered_by LIKE ?';
       const searchWild = `%${search.trim()}%`;
-      queryParams = [searchWild, searchWild, searchWild, searchWild];
+      queryParams = [searchWild, searchWild, searchWild, searchWild, searchWild];
     }
-    
-    baseQuery += ' ORDER BY deposit_date DESC, created_at DESC';
-    
+
+    baseQuery += ' ORDER BY d.deposit_date DESC, d.created_at DESC';
+
     const [rows] = await pool.query(baseQuery, queryParams);
-    
+
     res.json({
       ok: true,
       deposits: rows
@@ -219,91 +230,77 @@ router.get('/history', async (req, res) => {
       total,
       page,
       limit
-// POST /api/bank-deposits - Record a new deposit
-router.post('/', async (req, res) => {
-  try {
-    const { depositDate, bankName, accountNumber, amount, notes } = req.body;
-    
-    const bankNameTrimmed = String(bankName || '').trim();
-    const accountNumberTrimmed = String(accountNumber || '').trim();
-    const dateTrimmed = String(depositDate || '').trim();
-    const parsedAmount = parseFloat(amount);
-    
-    if (!dateTrimmed) {
-      throw new Error('Deposit Date is required.');
-    }
-    if (!bankNameTrimmed) {
-      throw new Error('Bank Name is required.');
-    }
-    if (!accountNumberTrimmed) {
-      throw new Error('Account Number is required.');
-    }
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      throw new Error('Valid deposit amount greater than 0 is required.');
-    }
-    
-    const id = await generateId('DEP', 'bank_deposits', 'id');
-    
-    await pool.query(
-      `INSERT INTO bank_deposits (id, deposit_date, bank_name, account_number, amount, notes, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        id,
-        dateTrimmed,
-        bankNameTrimmed,
-        accountNumberTrimmed,
-        parsedAmount,
-        String(notes || '').trim()
-      ]
-    );
-    
-    res.json({
-      ok: true,
-      id,
-      message: 'Bank deposit recorded successfully!'
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
   }
 });
 
-// POST /api/bank-deposits
-// Create new deposit record
+// POST /api/bank-deposits - Record a new deposit
 router.post('/', async (req, res) => {
   try {
-    const { depositDate, bankAccountId, amount, enteredBy, notes } = req.body;
-    
-    const enteredByTrimmed = String(enteredBy || '').trim();
-    const amountVal = parseFloat(amount);
-    const bankAccountIdInt = parseInt(bankAccountId, 10);
+    const { depositDate, bankName, accountNumber, bankAccountId, amount, enteredBy, notes } = req.body;
 
-    if (!depositDate) throw new Error('Date is required.');
-    if (isNaN(bankAccountIdInt)) throw new Error('Bank account selection is required.');
-    if (isNaN(amountVal) || amountVal <= 0) throw new Error('Amount must be a positive number.');
-    if (!enteredByTrimmed) throw new Error('Entered By name is required.');
+    const dateTrimmed = String(depositDate || '').trim();
+    const parsedAmount = parseFloat(amount);
+    const enteredByTrimmed = String(enteredBy || 'System').trim();
 
-    // Check if bank account exists
-    const [accCheck] = await pool.query('SELECT id FROM bank_accounts WHERE id = ? AND status = 1', [bankAccountIdInt]);
-    if (accCheck.length === 0) throw new Error('Selected bank account does not exist or is inactive.');
+    if (!dateTrimmed) {
+      throw new Error('Deposit Date is required.');
+    }
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      throw new Error('Valid deposit amount greater than 0 is required.');
+    }
+
+    let resolvedBankAccountId = bankAccountId ? parseInt(bankAccountId, 10) : null;
+
+    if (!resolvedBankAccountId) {
+      // Look up bank account by bankName and accountNumber
+      const bankNameTrimmed = String(bankName || '').trim();
+      const accountNumberTrimmed = String(accountNumber || '').trim();
+
+      if (!bankNameTrimmed || !accountNumberTrimmed) {
+        throw new Error('Bank account details or bank account selection is required.');
+      }
+
+      const [accCheck] = await pool.query(
+        'SELECT id FROM bank_accounts WHERE bank_name = ? AND account_number = ?',
+        [bankNameTrimmed, accountNumberTrimmed]
+      );
+      if (accCheck.length === 0) {
+        throw new Error('Selected bank account does not exist.');
+      }
+      resolvedBankAccountId = accCheck[0].id;
+    } else {
+      // Verify if bankAccountId exists
+      const [accCheck] = await pool.query(
+        'SELECT id FROM bank_accounts WHERE id = ? AND status = 1',
+        [resolvedBankAccountId]
+      );
+      if (accCheck.length === 0) {
+        throw new Error('Selected bank account does not exist or is inactive.');
+      }
+    }
 
     const id = await generateId('DEP', 'bank_deposits', 'id');
 
     await pool.query(
       `INSERT INTO bank_deposits (id, deposit_date, bank_account_id, amount, entered_by, notes, created_at) 
        VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [id, depositDate, bankAccountIdInt, amountVal, enteredByTrimmed, String(notes || '').trim()]
+      [
+        id,
+        dateTrimmed,
+        resolvedBankAccountId,
+        parsedAmount,
+        enteredByTrimmed,
+        String(notes || '').trim()
+      ]
     );
 
-    res.json({ ok: true, id, message: 'Bank deposit recorded successfully!' });
-// GET /api/bank-deposits/accounts - Get all bank accounts mapping
-router.get('/accounts', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      'SELECT id, bank_name, account_number, ifsc_code, created_at FROM bank_accounts ORDER BY bank_name ASC'
-    );
     res.json({
       ok: true,
-      accounts: rows
+      id,
+      message: 'Bank deposit recorded successfully!'
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
@@ -370,44 +367,8 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     const [result] = await pool.query('DELETE FROM bank_deposits WHERE id = ?', [id]);
     if (result.affectedRows === 0) throw new Error('Deposit record not found.');
-    
+
     res.json({ ok: true, message: 'Deposit record deleted successfully!' });
-// POST /api/bank-deposits/accounts - Create a new bank account mapping
-router.post('/accounts', async (req, res) => {
-  try {
-    const { bankName, accountNumber, ifscCode } = req.body;
-    
-    const bankNameTrimmed = String(bankName || '').trim();
-    const accountNumberTrimmed = String(accountNumber || '').trim();
-    const ifscTrimmed = String(ifscCode || '').trim();
-    
-    if (!bankNameTrimmed) {
-      throw new Error('Bank Name is required.');
-    }
-    if (!accountNumberTrimmed) {
-      throw new Error('Account Number is required.');
-    }
-    
-    // Check if account already exists
-    const [existing] = await pool.query(
-      'SELECT id FROM bank_accounts WHERE account_number = ?',
-      [accountNumberTrimmed]
-    );
-    
-    if (existing && existing.length > 0) {
-      throw new Error(`Bank Account Number ${accountNumberTrimmed} is already registered.`);
-    }
-    
-    const [result] = await pool.query(
-      'INSERT INTO bank_accounts (bank_name, account_number, ifsc_code) VALUES (?, ?, ?)',
-      [bankNameTrimmed, accountNumberTrimmed, ifscTrimmed]
-    );
-    
-    res.json({
-      ok: true,
-      id: result.insertId,
-      message: 'Bank account added successfully!'
-    });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
   }
