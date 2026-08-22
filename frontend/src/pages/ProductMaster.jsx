@@ -16,6 +16,9 @@ const ProductMaster = () => {
   const [searchRmQuery, setSearchRmQuery] = useState('');
   const [currentRmPage, setCurrentRmPage] = useState(1);
   const rmPageLimit = 10;
+  
+  // Custom pages tracker for grouped categories
+  const [rmCurrentPages, setRmCurrentPages] = useState({});
 
   const [isRmCategoryModalOpen, setIsRmCategoryModalOpen] = useState(false);
   const [newRmCategoryName, setNewRmCategoryName] = useState('');
@@ -30,7 +33,8 @@ const ProductMaster = () => {
   const [rmFormData, setRmFormData] = useState({
     categoryId: '',
     subProductName: '',
-    unit: 'KG'
+    unit: 'KG',
+    qtyInPcPerKg: ''
   });
   const [rmFormError, setRmFormError] = useState('');
   const [rmFormSuccess, setRmFormSuccess] = useState('');
@@ -72,6 +76,21 @@ const ProductMaster = () => {
   }, []);
 
   useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsRmCategoryModalOpen(false);
+        setIsFpCategoryModalOpen(false);
+        setIsRmDeleteModalOpen(false);
+        setDeletingRmMaterial(null);
+        setIsFpDeleteModalOpen(false);
+        setDeletingFpProduct(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (activeTab === 'raw-materials') {
       fetchRawMaterials();
     } else {
@@ -96,9 +115,10 @@ const ProductMaster = () => {
       setLoadingRm(true);
       const res = await api.get('/raw-materials', {
         params: {
-          page: currentRmPage,
-          limit: rmPageLimit,
-          search: searchRmQuery
+          page: 1,
+          limit: 1000, // Fetch all materials to support frontend grouping
+          search: searchRmQuery,
+          activeOnly: false
         }
       });
       if (res.data.ok) {
@@ -131,7 +151,8 @@ const ProductMaster = () => {
         params: {
           page: currentFpPage,
           limit: fpPageLimit,
-          search: searchFpQuery
+          search: searchFpQuery,
+          activeOnly: false
         }
       });
       if (res.data.ok) {
@@ -151,6 +172,7 @@ const ProductMaster = () => {
   const handleRmSearchChange = (e) => {
     setSearchRmQuery(e.target.value);
     setCurrentRmPage(1);
+    setRmCurrentPages({});
   };
 
   const handleRmInputChange = (e) => {
@@ -217,15 +239,20 @@ const ProductMaster = () => {
 
     setIsAddingRm(true);
     try {
+      const selectedCategory = rmCategories.find(c => String(c.id) === String(rmFormData.categoryId));
+      const selectedCategoryName = selectedCategory ? selectedCategory.name : '';
+      const showQtyPerKg = selectedCategoryName.toLowerCase() !== 'preforms' && rmFormData.unit === 'KG';
+
       const res = await api.post('/raw-materials', {
         categoryId: rmFormData.categoryId,
         subProductName: rmFormData.subProductName,
-        unit: rmFormData.unit
+        unit: rmFormData.unit,
+        qtyInPcPerKg: showQtyPerKg ? rmFormData.qtyInPcPerKg : null
       });
 
       if (res.data.ok) {
         setRmFormSuccess('Raw material added successfully!');
-        setRmFormData(prev => ({ ...prev, subProductName: '' }));
+        setRmFormData(prev => ({ ...prev, subProductName: '', qtyInPcPerKg: '' }));
         fetchRawMaterials();
         setTimeout(() => setRmFormSuccess(''), 2000);
       } else {
@@ -390,6 +417,46 @@ const ProductMaster = () => {
     } catch (err) {
       alert(`Delete failed: ${err.message}`);
     }
+  };
+
+  const getGroupedRawMaterials = () => {
+    const grouped = {};
+    rawMaterials.forEach(item => {
+      const catName = item.category_name || 'Uncategorized';
+      if (!grouped[catName]) {
+        grouped[catName] = [];
+      }
+      grouped[catName].push(item);
+    });
+
+    // Sort subproducts inside each category alphabetically (natural sort)
+    Object.keys(grouped).forEach(cat => {
+      grouped[cat].sort((a, b) => 
+        a.sub_product_name.localeCompare(b.sub_product_name, undefined, { numeric: true, sensitivity: 'base' })
+      );
+    });
+
+    // Custom order for main categories:
+    // Preforms, Labels, Box, Caps, then others alphabetically
+    const categoryOrder = {
+      'preforms': 1,
+      'labels': 2,
+      'box': 3,
+      'caps': 4
+    };
+
+    const sortedCategories = Object.keys(grouped).sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      const aOrder = categoryOrder[aLower] || 999;
+      const bOrder = categoryOrder[bLower] || 999;
+      if (aOrder !== bOrder) {
+        return aOrder - bOrder;
+      }
+      return a.localeCompare(b);
+    });
+
+    return { grouped, sortedCategories };
   };
 
   const totalRmPages = Math.ceil(totalRmCount / rmPageLimit) || 1;
@@ -697,6 +764,26 @@ const ProductMaster = () => {
                 </select>
               </div>
 
+              {/* Qty in PC (per KG) Input (conditional) */}
+              {(() => {
+                const selectedCategory = rmCategories.find(c => String(c.id) === String(rmFormData.categoryId));
+                const selectedCategoryName = selectedCategory ? selectedCategory.name : '';
+                const showQtyPerKg = selectedCategoryName.toLowerCase() !== 'preforms' && rmFormData.unit === 'KG';
+                if (!showQtyPerKg) return null;
+                return (
+                  <div className="flex-1 min-w-[200px]">
+                    <input
+                      type="number"
+                      name="qtyInPcPerKg"
+                      value={rmFormData.qtyInPcPerKg}
+                      onChange={handleRmInputChange}
+                      placeholder="Qty in pc (per kg) e.g. 100"
+                      className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400/80 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
+                    />
+                  </div>
+                );
+              })()}
+
               {/* Add Button */}
               <div>
                 <button
@@ -746,106 +833,151 @@ const ProductMaster = () => {
               </div>
             </div>
 
-            {/* Table listing */}
-            <div className="overflow-x-auto rounded-xl border border-slate-100">
-              <table className="table table-zebra w-full overflow-hidden">
-                <thead className="bg-[#0b1324] text-white border-b border-slate-100">
-                  <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Category</th>
-                    <th className="py-4 px-6 text-left">Sub Product</th>
-                    <th className="py-4 px-6 text-left">Unit</th>
-                    <th className="py-4 px-6 text-left">Status</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {loadingRm ? (
-                    <tr>
-                      <td colSpan="5" className="py-20 text-center">
-                        <div className="flex flex-col items-center gap-3">
-                           <span className="loading loading-spinner text-primary"></span>
-                           <span className="text-slate-400 text-sm font-medium">Fetching raw materials...</span>
+            {/* Accordion Layout with Pagination */}
+            <div className="space-y-4">
+              {loadingRm ? (
+                <div className="py-20 text-center">
+                  <span className="loading loading-spinner text-primary"></span>
+                  <span className="text-slate-400 text-sm font-medium block mt-2">Fetching raw materials...</span>
+                </div>
+              ) : rawMaterials.length === 0 ? (
+                <div className="py-20 text-center text-slate-400 font-medium italic border border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                  {searchRmQuery ? 'No raw materials found matching your search.' : 'No raw materials added yet.'}
+                </div>
+              ) : (() => {
+                const { grouped, sortedCategories } = getGroupedRawMaterials();
+                
+                return sortedCategories.map((categoryName, idx) => {
+                  const items = grouped[categoryName] || [];
+                  const catPage = rmCurrentPages[categoryName] || 1;
+                  const itemsPerPage = 5;
+                  const totalCatPages = Math.ceil(items.length / itemsPerPage) || 1;
+                  const activeCatPage = Math.min(catPage, totalCatPages);
+                  
+                  const indexOfLastItem = activeCatPage * itemsPerPage;
+                  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+                  const currentCatItems = items.slice(indexOfFirstItem, indexOfLastItem);
+                  
+                  return (
+                    <details 
+                      key={categoryName}
+                      className="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm pointer-events-auto"
+                      name="raw-materials-accordion"
+                      defaultOpen={idx === 0}
+                    >
+                      <summary className="collapse-title text-sm font-black text-slate-800 uppercase tracking-wide py-4 px-6 cursor-pointer flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          📁 {categoryName} <span className="text-xs text-slate-400 font-bold">({items.length} {items.length === 1 ? 'item' : 'items'})</span>
+                        </span>
+                      </summary>
+                      
+                      <div className="collapse-content px-6 pb-6 overflow-x-auto text-sm">
+                        <div className="overflow-x-auto rounded-xl border border-slate-100 mt-2 bg-white">
+                          <table className="table table-zebra w-full overflow-hidden">
+                            <thead className="bg-[#0b1324] text-white border-b border-slate-100">
+                              <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
+                                <th className="py-4 px-6 text-left">Sub Product</th>
+                                <th className="py-4 px-6 text-left">Unit</th>
+                                <th className="py-4 px-6 text-left">Qty in PC (per KG)</th>
+                                <th className="py-4 px-6 text-left">Status</th>
+                                <th className="py-4 px-6 text-center">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-50">
+                              {currentCatItems.map((item) => (
+                                <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
+                                  <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.sub_product_name}</td>
+                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500 uppercase">{item.unit}</td>
+                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500">
+                                    {item.qty_in_pc_per_kg !== null && item.qty_in_pc_per_kg !== undefined ? `${item.qty_in_pc_per_kg} pcs` : '—'}
+                                  </td>
+                                  <td className="py-4 px-6">
+                                    {item.status === 1 ? (
+                                      <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
+                                        Active
+                                      </span>
+                                    ) : (
+                                      <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
+                                        Disabled
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-4 px-6">
+                                    <div className="flex items-center justify-center gap-3">
+                                      <button 
+                                        type="button"
+                                        onClick={() => handleToggleRmStatus(item)}
+                                        className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
+                                          item.status === 1 
+                                            ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
+                                            : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
+                                        }`}
+                                      >
+                                        {item.status === 1 ? 'Disable' : 'Enable'}
+                                      </button>
+                                      <button 
+                                        type="button"
+                                        onClick={() => confirmRmDelete(item)}
+                                        className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
+                                      >
+                                        <span>🗑️</span> Delete
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
                         </div>
-                      </td>
-                    </tr>
-                  ) : rawMaterials.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="py-20 text-center text-slate-400 font-medium italic">
-                        {searchRmQuery ? 'No raw materials found matching your search.' : 'No raw materials added yet.'}
-                      </td>
-                    </tr>
-                  ) : (
-                    rawMaterials.map((item) => (
-                      <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
-                        <td className="py-4 px-6">
-                          <span className="bg-blue-50 text-blue-600 rounded-lg px-2.5 py-1 text-xs font-bold border border-blue-100/50">
-                            {item.category_name}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.sub_product_name}</td>
-                        <td className="py-4 px-6 text-[13px] font-bold text-slate-500 uppercase">{item.unit}</td>
-                        <td className="py-4 px-6">
-                          {item.status === 1 ? (
-                            <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
-                              Active
+                        
+                        {/* Pagination within Category */}
+                        {totalCatPages > 1 && (
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-100">
+                            <span className="text-xs text-slate-500 font-semibold">
+                              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, items.length)} of {items.length} records
                             </span>
-                          ) : (
-                            <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
-                              Disabled
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="flex items-center justify-center gap-3">
-                            <button 
-                              onClick={() => handleToggleRmStatus(item)}
-                              className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
-                                item.status === 1 
-                                  ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
-                                  : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
-                              }`}
-                            >
-                              {item.status === 1 ? 'Disable' : 'Enable'}
-                            </button>
-                            <button 
-                              onClick={() => confirmRmDelete(item)}
-                              className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
-                            >
-                              <span>🗑️</span> Delete
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={activeCatPage === 1}
+                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage - 1 }))}
+                                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              >
+                                ← Prev
+                              </button>
+                              
+                              {Array.from({ length: totalCatPages }, (_, i) => i + 1).map(pageNum => (
+                                <button
+                                  key={pageNum}
+                                  type="button"
+                                  onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: pageNum }))}
+                                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                    activeCatPage === pageNum
+                                      ? 'bg-primary border-primary text-white'
+                                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                                  }`}
+                                >
+                                  {pageNum}
+                                </button>
+                              ))}
+                              
+                              <button
+                                type="button"
+                                disabled={activeCatPage === totalCatPages}
+                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage + 1 }))}
+                                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                              >
+                                Next →
+                              </button>
+                            </div>
                           </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                        )}
+                      </div>
+                    </details>
+                  );
+                });
+              })()}
             </div>
-
-            {/* PAGINATION CONTROLS */}
-            {!loadingRm && totalRmCount > 0 && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-                <div className="text-[12px] font-bold text-slate-400 uppercase">
-                  Page {currentRmPage} of {totalRmPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentRmPage === 1}
-                    onClick={() => setCurrentRmPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentRmPage === totalRmPages}
-                    onClick={() => setCurrentRmPage(prev => Math.min(totalRmPages, prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -856,8 +988,14 @@ const ProductMaster = () => {
 
       {/* CREATE RM CATEGORY MODAL */}
       {isRmCategoryModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 animate-fade-in pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => setIsRmCategoryModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>➕</span> Add New RM Category
@@ -914,8 +1052,14 @@ const ProductMaster = () => {
 
       {/* CREATE FP CATEGORY MODAL */}
       {isFpCategoryModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 animate-fade-in pointer-events-auto">
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => setIsFpCategoryModalOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[420px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
                 <span>➕</span> Add New FP Category
@@ -972,66 +1116,143 @@ const ProductMaster = () => {
 
       {/* RM DELETE CONFIRMATION MODAL */}
       {isRmDeleteModalOpen && (
-        <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
-            <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-              ⚠️
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
+            >
+              ✕
+            </button>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                🗑️ Delete Raw Material
+              </h3>
             </div>
-            <h3 className="text-xl font-black text-center text-slate-800">Confirm Deletion</h3>
-            <p className="text-center text-slate-500 mt-2 text-sm">
-              Are you sure you want to delete raw material <b>{deletingRmMaterial?.sub_product_name}</b>?
-              <br/>This action cannot be undone.
+
+            {/* Material details preview card */}
+            <div className="border border-slate-200 p-5 rounded-2xl space-y-3 bg-slate-50/50 text-xs font-semibold text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-400 block text-[10px] uppercase">Category</span>
+                <span className="font-extrabold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-100/30">
+                  {deletingRmMaterial?.category_name}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-100 pt-2">
+                <span className="text-slate-400 block text-[10px] uppercase">Sub Product</span>
+                <span className="font-black text-slate-800">{deletingRmMaterial?.sub_product_name}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-100 pt-2">
+                <span className="text-slate-400 block text-[10px] uppercase">Unit</span>
+                <span className="font-extrabold text-slate-800 uppercase">{deletingRmMaterial?.unit}</span>
+              </div>
+              {deletingRmMaterial?.qty_in_pc_per_kg !== null && deletingRmMaterial?.qty_in_pc_per_kg !== undefined && (
+                <div className="flex justify-between border-t border-slate-100 pt-2">
+                  <span className="text-slate-400 block text-[10px] uppercase">Qty in PC (per KG)</span>
+                  <span className="font-extrabold text-slate-800">{deletingRmMaterial?.qty_in_pc_per_kg} pcs</span>
+                </div>
+              )}
+              <div className="flex justify-between border-t border-slate-100 pt-2">
+                <span className="text-slate-400 block text-[10px] uppercase">Status</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${deletingRmMaterial?.status === 1 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                  {deletingRmMaterial?.status === 1 ? 'ACTIVE' : 'DISABLED'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-slate-500 text-xs font-semibold leading-relaxed">
+              ⚠️ Warning: Are you sure you want to delete this raw material? This action will permanently remove the record from all database ledgers.
             </p>
-            <div className="flex flex-col gap-2 mt-8">
+
+            <div className="flex justify-between gap-3 mt-2">
               <button 
                 onClick={handleRmDelete}
-                className="btn-premium bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-200"
+                className="px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-all uppercase tracking-wider shadow-md shadow-rose-100 flex-1"
               >
-                Yes, Delete Material
+                Yes, Delete
               </button>
               <button 
-                onClick={() => setIsRmDeleteModalOpen(false)}
-                className="btn-premium bg-slate-100 text-slate-600 hover:bg-slate-200"
+                onClick={() => { setIsRmDeleteModalOpen(false); setDeletingRmMaterial(null); }}
+                className="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition-all uppercase tracking-wider flex-1"
               >
-                No, Keep Record
+                Cancel
               </button>
             </div>
           </div>
-          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsRmDeleteModalOpen(false)}></div>
         </div>
       )}
 
       {/* FP DELETE CONFIRMATION MODAL */}
       {isFpDeleteModalOpen && (
-        <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
-            <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
-              ⚠️
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-6 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
+              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
+            >
+              ✕
+            </button>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-1.5">
+                🗑️ Delete Finished Product
+              </h3>
             </div>
-            <h3 className="text-xl font-black text-center text-slate-800">Confirm Deletion</h3>
-            <p className="text-center text-slate-500 mt-2 text-sm">
-              Are you sure you want to delete finished product <b>{deletingFpProduct?.name}</b>?
-              <br/>This action cannot be undone.
+
+            {/* Product details preview card */}
+            <div className="border border-slate-200 p-5 rounded-2xl space-y-3 bg-slate-50/50 text-xs font-semibold text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-400 block text-[10px] uppercase">Category</span>
+                <span className="font-extrabold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded border border-blue-100/50">
+                  {deletingFpProduct?.category_name || 'Uncategorized'}
+                </span>
+              </div>
+              <div className="flex justify-between border-t border-slate-100 pt-2">
+                <span className="text-slate-400 block text-[10px] uppercase">Product Name</span>
+                <span className="font-black text-slate-800">{deletingFpProduct?.name}</span>
+              </div>
+              <div className="flex justify-between border-t border-slate-100 pt-2">
+                <span className="text-slate-400 block text-[10px] uppercase">Status</span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${deletingFpProduct?.status === 1 ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'}`}>
+                  {deletingFpProduct?.status === 1 ? 'ACTIVE' : 'INACTIVE'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-slate-500 text-xs font-semibold leading-relaxed">
+              ⚠️ Warning: Are you sure you want to delete this finished product? This action will permanently remove the record from all database ledgers.
             </p>
-            <div className="flex flex-col gap-2 mt-8">
+
+            <div className="flex justify-between gap-3 mt-2">
               <button 
                 onClick={handleFpDelete}
-                className="btn-premium bg-red-500 hover:bg-red-600 text-white shadow-lg shadow-red-200"
+                className="px-5 py-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black transition-all uppercase tracking-wider shadow-md shadow-rose-100 flex-1"
               >
-                Yes, Delete Product
+                Yes, Delete
               </button>
               <button 
-                onClick={() => setIsFpDeleteModalOpen(false)}
-                className="btn-premium bg-slate-100 text-slate-600 hover:bg-slate-200"
+                onClick={() => { setIsFpDeleteModalOpen(false); setDeletingFpProduct(null); }}
+                className="px-5 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-black transition-all uppercase tracking-wider flex-1"
               >
-                No, Keep Record
+                Cancel
               </button>
             </div>
           </div>
-          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsFpDeleteModalOpen(false)}></div>
         </div>
       )}
-
     </div>
   );
 };

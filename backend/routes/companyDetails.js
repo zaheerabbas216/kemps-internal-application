@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
     // Get paginated rows
     queryParams.push(limit, offset);
     const [rows] = await pool.query(
-      `SELECT id, company_name, phone_number, gst_number, bank_name, account_number, ifsc_code, created_at 
+      `SELECT id, company_name, phone_number, gst_number, address, bank_name, account_number, ifsc_code, created_at 
        FROM company_details${baseWhere} 
        ORDER BY created_at DESC 
        LIMIT ? OFFSET ?`,
@@ -83,7 +83,7 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const [rows] = await pool.query(
-      `SELECT id, company_name, phone_number, gst_number, bank_name, account_number, ifsc_code, created_at 
+      `SELECT id, company_name, phone_number, gst_number, address, bank_name, account_number, ifsc_code, created_at 
        FROM company_details WHERE id = ?`,
       [id]
     );
@@ -116,7 +116,7 @@ router.delete('/:id', async (req, res) => {
 // Save a new company
 router.post('/', async (req, res) => {
   try {
-    const { companyName, phoneNumber, gstNumber, bankName, accountNumber, ifscCode } = req.body;
+    const { companyName, phoneNumber, gstNumber, address, bankName, accountNumber, ifscCode } = req.body;
     
     const companyNameTrimmed = String(companyName || '').trim();
     if (!companyNameTrimmed) {
@@ -126,13 +126,14 @@ router.post('/', async (req, res) => {
     const id = await generateId('COMP', 'company_details', 'id');
     
     await pool.query(
-      `INSERT INTO company_details (id, company_name, phone_number, gst_number, bank_name, account_number, ifsc_code, created_at) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      `INSERT INTO company_details (id, company_name, phone_number, gst_number, address, bank_name, account_number, ifsc_code, created_at) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         id, 
         companyNameTrimmed, 
         String(phoneNumber || '').trim(), 
         String(gstNumber || '').trim(), 
+        String(address || '').trim(),
         String(bankName || '').trim(), 
         String(accountNumber || '').trim(), 
         String(ifscCode || '').trim()
@@ -149,7 +150,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { companyName, phoneNumber, gstNumber, bankName, accountNumber, ifscCode } = req.body;
+    const { companyName, phoneNumber, gstNumber, address, bankName, accountNumber, ifscCode } = req.body;
     
     const companyNameTrimmed = String(companyName || '').trim();
     if (!companyNameTrimmed) {
@@ -166,6 +167,7 @@ router.put('/:id', async (req, res) => {
         company_name = ?, 
         phone_number = ?, 
         gst_number = ?, 
+        address = ?,
         bank_name = ?, 
         account_number = ?, 
         ifsc_code = ? 
@@ -174,6 +176,7 @@ router.put('/:id', async (req, res) => {
         companyNameTrimmed, 
         String(phoneNumber || '').trim(), 
         String(gstNumber || '').trim(), 
+        String(address || '').trim(),
         String(bankName || '').trim(), 
         String(accountNumber || '').trim(), 
         String(ifscCode || '').trim(),

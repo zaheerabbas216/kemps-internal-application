@@ -12,14 +12,18 @@ const CompanyDetails = () => {
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [editingCompany, setEditingCompany] = useState(null); // null means Create mode
+  const [editingCompany, setEditingCompany] = useState(null);
   const [deletingCompany, setDeletingCompany] = useState(null);
+
+  // Bank details toggle
+  const [showBankDetails, setShowBankDetails] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
     companyName: '',
     phoneNumber: '',
     gstNumber: '',
+    address: '',
     bankName: '',
     accountNumber: '',
     ifscCode: ''
@@ -54,10 +58,19 @@ const CompanyDetails = () => {
     }
   };
 
-  // Reset page number on search input change
   const handleSearchChange = (e) => {
     setSearchQuery(e.target.value);
     setCurrentPage(1);
+  };
+
+  const emptyForm = {
+    companyName: '',
+    phoneNumber: '',
+    gstNumber: '',
+    address: '',
+    bankName: '',
+    accountNumber: '',
+    ifscCode: ''
   };
 
   const handleOpenForm = (company = null) => {
@@ -65,24 +78,21 @@ const CompanyDetails = () => {
     setFormSuccess('');
     if (company) {
       setEditingCompany(company);
+      const hasBankDetails = !!(company.bank_name || company.account_number || company.ifsc_code);
+      setShowBankDetails(hasBankDetails);
       setFormData({
         companyName: company.company_name || '',
         phoneNumber: company.phone_number || '',
         gstNumber: company.gst_number || '',
+        address: company.address || '',
         bankName: company.bank_name || '',
         accountNumber: company.account_number || '',
         ifscCode: company.ifsc_code || ''
       });
     } else {
       setEditingCompany(null);
-      setFormData({
-        companyName: '',
-        phoneNumber: '',
-        gstNumber: '',
-        bankName: '',
-        accountNumber: '',
-        ifscCode: ''
-      });
+      setShowBankDetails(false);
+      setFormData(emptyForm);
     }
     setIsFormModalOpen(true);
   };
@@ -90,14 +100,8 @@ const CompanyDetails = () => {
   const handleCloseForm = () => {
     setIsFormModalOpen(false);
     setEditingCompany(null);
-    setFormData({
-      companyName: '',
-      phoneNumber: '',
-      gstNumber: '',
-      bankName: '',
-      accountNumber: '',
-      ifscCode: ''
-    });
+    setShowBankDetails(false);
+    setFormData(emptyForm);
   };
 
   const handleInputChange = (e) => {
@@ -110,6 +114,16 @@ const CompanyDetails = () => {
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
+  };
+
+  const handleToggleBankDetails = () => {
+    setShowBankDetails(prev => {
+      if (prev) {
+        // Clearing bank details when hiding
+        setFormData(fd => ({ ...fd, bankName: '', accountNumber: '', ifscCode: '' }));
+      }
+      return !prev;
+    });
   };
 
   const handleSave = async (e) => {
@@ -135,10 +149,8 @@ const CompanyDetails = () => {
     try {
       let response;
       if (editingCompany) {
-        // Edit Mode
         response = await api.put(`/company-details/${editingCompany.id}`, formData);
       } else {
-        // Create Mode
         response = await api.post('/company-details', formData);
       }
 
@@ -224,6 +236,7 @@ const CompanyDetails = () => {
                 <th className="py-4 px-6 text-left">Company Name</th>
                 <th className="py-4 px-6 text-left">Phone Number</th>
                 <th className="py-4 px-6 text-left">GSTIN</th>
+                <th className="py-4 px-6 text-left">Address</th>
                 <th className="py-4 px-6 text-left">Bank Name</th>
                 <th className="py-4 px-6 text-center">Actions</th>
               </tr>
@@ -231,7 +244,7 @@ const CompanyDetails = () => {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="6" className="py-20 text-center">
+                  <td colSpan="7" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                        <span className="loading loading-spinner text-primary"></span>
                        <span className="text-slate-400 text-sm font-medium">Fetching companies...</span>
@@ -240,7 +253,7 @@ const CompanyDetails = () => {
                 </tr>
               ) : companies.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="7" className="py-20 text-center text-slate-400 font-medium italic">
                     {searchQuery ? 'No companies found matching your search.' : 'No companies registered yet.'}
                   </td>
                 </tr>
@@ -251,7 +264,8 @@ const CompanyDetails = () => {
                     <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{c.company_name}</td>
                     <td className="py-4 px-6 text-[14px] font-medium text-slate-600">{c.phone_number || '—'}</td>
                     <td className="py-4 px-6 text-[13px] text-slate-400">{c.gst_number || '—'}</td>
-                    <td className="py-4 px-6 text-[14px] text-slate-650 font-medium text-slate-500">{c.bank_name || '—'}</td>
+                    <td className="py-4 px-6 text-[13px] text-slate-500 max-w-[160px] truncate" title={c.address || ''}>{c.address || '—'}</td>
+                    <td className="py-4 px-6 text-[14px] font-medium text-slate-500">{c.bank_name || '—'}</td>
                     <td className="py-4 px-6">
                       <div className="flex items-center justify-center gap-2">
                         <button 
@@ -303,8 +317,8 @@ const CompanyDetails = () => {
 
       {/* FORM MODAL */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center pt-0 bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] h-[650px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[680px] max-h-[90vh] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             
             {/* Header - Fixed at top */}
             <div className="bg-[#0b1324] p-7 text-white shrink-0 relative">
@@ -323,8 +337,8 @@ const CompanyDetails = () => {
             </div>
 
             {/* Scrollable Form Content */}
-            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-6">
-              <form id="companyForm" onSubmit={handleSave} className="space-y-6">
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-5">
+              <form id="companyForm" onSubmit={handleSave} className="space-y-5">
                 
                 {/* Company Information Area */}
                 <div className="border border-slate-200/80 rounded-2xl bg-white overflow-hidden">
@@ -384,75 +398,115 @@ const CompanyDetails = () => {
                         name="gstNumber"
                         value={formData.gstNumber}
                         onChange={handleInputChange}
-                        placeholder="Enter GST number" 
+                        placeholder="Enter GST number (15 characters)" 
                         className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400/80 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
+                      />
+                    </div>
+
+                    {/* Address */}
+                    <div className="space-y-1.5">
+                      <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Address
+                      </label>
+                      <textarea
+                        name="address"
+                        value={formData.address}
+                        onChange={handleInputChange}
+                        placeholder="Enter full address"
+                        rows={3}
+                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400/80 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium resize-none"
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Bank Details Area (Dark Navy Background) */}
-                <div className="bg-[#0b1324] rounded-2xl p-6 text-slate-100 space-y-4 shadow-xl border border-[#1e293b]/30">
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-                      <span>🏦</span> BANK DETAILS
+                {/* Bank Details Toggle Button */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleToggleBankDetails}
+                    className={`w-full flex items-center justify-between px-5 py-3.5 rounded-2xl border-2 transition-all duration-300 font-bold text-sm ${
+                      showBankDetails
+                        ? 'bg-[#0b1324] border-[#1e293b] text-white'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-primary/40 hover:bg-primary/5'
+                    }`}
+                  >
+                    <span className="flex items-center gap-2.5">
+                      <span className="text-lg">🏦</span>
+                      {showBankDetails ? 'BANK DETAILS ADDED' : 'ADD BANK DETAILS'}
                     </span>
-                  </div>
-
-                  <div className="space-y-4 pt-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      
-                      {/* Bank Name */}
-                      <div className="space-y-1.5">
-                        <label className="text-[12px] font-bold text-slate-450 block uppercase tracking-wider text-slate-400">
-                          Bank Name
-                        </label>
-                        <input 
-                          type="text" 
-                          name="bankName"
-                          value={formData.bankName}
-                          onChange={handleInputChange}
-                          placeholder="Enter bank name" 
-                          className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-650 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
-                        />
-                      </div>
-
-                      {/* Account Number */}
-                      <div className="space-y-1.5">
-                        <label className="text-[12px] font-bold text-slate-450 block uppercase tracking-wider text-slate-400">
-                          Account Number
-                        </label>
-                        <input 
-                          type="text" 
-                          name="accountNumber"
-                          value={formData.accountNumber}
-                          onChange={handleInputChange}
-                          placeholder="Enter account number" 
-                          className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-650 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    {/* IFSC Code */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                      <div className="space-y-1.5">
-                        <label className="text-[12px] font-bold text-slate-450 block uppercase tracking-wider text-slate-400">
-                          IFSC Code
-                        </label>
-                        <input 
-                          type="text" 
-                          name="ifscCode"
-                          value={formData.ifscCode}
-                          onChange={handleInputChange}
-                          placeholder="Enter IFSC code" 
-                          className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-650 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
-                        />
-                      </div>
-                      
-                      <div className="hidden md:block"></div>
-                    </div>
-                  </div>
+                    <span className={`text-xs font-black transition-all duration-200 ${showBankDetails ? 'rotate-45 text-red-400' : 'text-primary'}`}>
+                      {showBankDetails ? '✕' : '+'}
+                    </span>
+                  </button>
+                  <p className="text-[11px] text-slate-400 font-medium mt-1.5 ml-1">
+                    {showBankDetails ? 'Click to remove bank details from this company.' : 'Optional — companies can be saved without bank details.'}
+                  </p>
                 </div>
+
+                {/* Bank Details Area - Collapsible */}
+                {showBankDetails && (
+                  <div className="bg-[#0b1324] rounded-2xl p-6 text-slate-100 space-y-4 shadow-xl border border-[#1e293b]/30 animate-fade-in">
+                    <div className="flex items-center gap-2 pb-2 border-b border-slate-800/80">
+                      <span className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                        <span>🏦</span> BANK DETAILS
+                      </span>
+                    </div>
+
+                    <div className="space-y-4 pt-1">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        
+                        {/* Bank Name */}
+                        <div className="space-y-1.5">
+                          <label className="text-[12px] font-bold block uppercase tracking-wider text-slate-400">
+                            Bank Name
+                          </label>
+                          <input 
+                            type="text" 
+                            name="bankName"
+                            value={formData.bankName}
+                            onChange={handleInputChange}
+                            placeholder="Enter bank name" 
+                            className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-600 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
+                          />
+                        </div>
+
+                        {/* Account Number */}
+                        <div className="space-y-1.5">
+                          <label className="text-[12px] font-bold block uppercase tracking-wider text-slate-400">
+                            Account Number
+                          </label>
+                          <input 
+                            type="text" 
+                            name="accountNumber"
+                            value={formData.accountNumber}
+                            onChange={handleInputChange}
+                            placeholder="Enter account number" 
+                            className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-600 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
+                          />
+                        </div>
+                      </div>
+
+                      {/* IFSC Code */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                        <div className="space-y-1.5">
+                          <label className="text-[12px] font-bold block uppercase tracking-wider text-slate-400">
+                            IFSC Code
+                          </label>
+                          <input 
+                            type="text" 
+                            name="ifscCode"
+                            value={formData.ifscCode}
+                            onChange={handleInputChange}
+                            placeholder="Enter IFSC code" 
+                            className="w-full h-11 px-4 rounded-xl border border-slate-800/80 bg-[#162032]/60 text-slate-100 placeholder-slate-600 focus:bg-[#162032]/90 focus:border-primary/80 focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
+                          />
+                        </div>
+                        <div className="hidden md:block"></div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Feedback Messages inside Scroll */}
                 {formError && (
@@ -496,7 +550,7 @@ const CompanyDetails = () => {
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && (
         <div className="modal modal-open">
-          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl">
+          <div className="modal-box rounded-2xl p-8 max-w-sm border border-slate-200 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="w-14 h-14 bg-red-50 text-red-500 rounded-full flex items-center justify-center text-2xl mx-auto mb-4">
               ⚠️
             </div>

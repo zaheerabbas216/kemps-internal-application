@@ -49,26 +49,36 @@ router.post('/categories', async (req, res) => {
 });
 
 // GET /api/raw-materials
-// Fetch all raw materials with pagination and search
+// Fetch raw materials with pagination and search.
+// Pass ?activeOnly=true to return only active (status=1) materials (used by all operational modules).
+// Without activeOnly, all materials are returned (used by Product Master admin view).
 router.get('/', async (req, res) => {
   try {
-    let { page = 1, limit = 10, search = '' } = req.query;
+    let { page = 1, limit = 10, search = '', activeOnly = '' } = req.query;
     page = parseInt(page, 10);
     limit = parseInt(limit, 10);
     if (isNaN(page) || page < 1) page = 1;
     if (isNaN(limit) || limit < 1) limit = 10;
+
+    // Default to activeOnly = true, unless activeOnly is explicitly 'false' or '0'
+    const filterActive = activeOnly !== 'false' && activeOnly !== '0';
     
     const offset = (page - 1) * limit;
     let queryParams = [];
     let countParams = [];
     
-    let baseWhere = '';
-    if (search.trim()) {
-      baseWhere = ' WHERE rm.sub_product_name LIKE ? OR rmc.name LIKE ?';
-      const wildSearch = `%${search.trim()}%`;
-      queryParams = [wildSearch, wildSearch];
-      countParams = [wildSearch, wildSearch];
+    // Build WHERE clauses
+    const whereParts = [];
+    if (filterActive) {
+      whereParts.push('rm.status = 1');
     }
+    if (search.trim()) {
+      whereParts.push('(rm.sub_product_name LIKE ? OR rmc.name LIKE ?)');
+      const wildSearch = `%${search.trim()}%`;
+      queryParams.push(wildSearch, wildSearch);
+      countParams.push(wildSearch, wildSearch);
+    }
+    const baseWhere = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
     
     // Get total count
     const [countRows] = await pool.query(
@@ -83,7 +93,7 @@ router.get('/', async (req, res) => {
     // Get paginated materials
     queryParams.push(limit, offset);
     const [rows] = await pool.query(
-      `SELECT rm.id, rm.category_id, rmc.name AS category_name, rm.sub_product_name, rm.unit, rm.status, rm.created_at
+      `SELECT rm.id, rm.category_id, rmc.name AS category_name, rm.sub_product_name, rm.unit, rm.qty_in_pc_per_kg, rm.status, rm.created_at
        FROM raw_materials rm
        JOIN raw_material_categories rmc ON rm.category_id = rmc.id
        ${baseWhere}
@@ -108,10 +118,11 @@ router.get('/', async (req, res) => {
 // Create a new raw material
 router.post('/', async (req, res) => {
   try {
-    const { categoryId, subProductName, unit } = req.body;
+    const { categoryId, subProductName, unit, qtyInPcPerKg } = req.body;
     
     const subProductNameTrimmed = String(subProductName || '').trim();
     const unitTrimmed = String(unit || '').trim();
+    const qtyInPcPerKgParsed = (qtyInPcPerKg !== undefined && qtyInPcPerKg !== null && qtyInPcPerKg !== '') ? parseFloat(qtyInPcPerKg) : null;
     
     if (!categoryId) {
       throw new Error('Category is required.');
@@ -133,8 +144,8 @@ router.post('/', async (req, res) => {
     }
     
     const [result] = await pool.query(
-      'INSERT INTO raw_materials (category_id, sub_product_name, unit, status) VALUES (?, ?, ?, 1)',
-      [categoryId, subProductNameTrimmed, unitTrimmed]
+      'INSERT INTO raw_materials (category_id, sub_product_name, unit, qty_in_pc_per_kg, status) VALUES (?, ?, ?, ?, 1)',
+      [categoryId, subProductNameTrimmed, unitTrimmed, qtyInPcPerKgParsed]
     );
     
     res.json({
@@ -152,7 +163,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { categoryId, subProductName, unit, status } = req.body;
+    const { categoryId, subProductName, unit, qtyInPcPerKg, status } = req.body;
     
     // Check if raw material exists
     const [existing] = await pool.query('SELECT * FROM raw_materials WHERE id = ?', [id]);
@@ -192,6 +203,12 @@ router.put('/:id', async (req, res) => {
       }
       updates.push('unit = ?');
       values.push(unitTrimmed);
+    }
+
+    if (qtyInPcPerKg !== undefined) {
+      const qtyInPcPerKgParsed = (qtyInPcPerKg !== null && qtyInPcPerKg !== '') ? parseFloat(qtyInPcPerKg) : null;
+      updates.push('qty_in_pc_per_kg = ?');
+      values.push(qtyInPcPerKgParsed);
     }
     
     if (status !== undefined) {
