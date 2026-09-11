@@ -1583,7 +1583,8 @@ export async function runMigration(shouldExit = false) {
         );
 
         // 2. Insert downpayment / immediate cash paid (debit - reduces payables)
-        const amtPaid = bill.payment_method !== 'Credit' ? bill.grand_total : bill.advance_paid;
+        const isCredit = String(bill.payment_method).trim().toLowerCase() === 'credit';
+        const amtPaid = !isCredit ? bill.grand_total : bill.advance_paid;
         if (parseFloat(amtPaid) > 0) {
           await connection.query(
             `INSERT INTO supplier_ledger (date, supplier_id, entry_type, reference_no, particular, debit, credit, balance, created_at)
@@ -1960,6 +1961,136 @@ export async function runMigration(shouldExit = false) {
     if (cpCols.length === 0) {
       await connection.query(`ALTER TABLE customer_payments ADD COLUMN company VARCHAR(200) NULL AFTER bill_id`);
       console.log('Added company column to customer_payments table.');
+    }
+
+    // 53. Create maintenance_particulars & maintenance_sub_products tables if not exists
+    console.log('Creating maintenance_particulars table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS maintenance_particulars (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        name VARCHAR(100) NOT NULL UNIQUE,
+        description TEXT NULL,
+        status TINYINT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating maintenance_sub_products table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS maintenance_sub_products (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        particular_id INT NOT NULL,
+        name VARCHAR(150) NOT NULL,
+        description TEXT NULL,
+        status TINYINT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_mnt_particular (particular_id),
+        FOREIGN KEY (particular_id) REFERENCES maintenance_particulars(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Seed default maintenance particulars and sub products if empty
+    const [mntCount] = await connection.query('SELECT COUNT(*) as count FROM maintenance_particulars');
+    if (mntCount[0].count === 0) {
+      console.log('Seeding default maintenance particulars and sub-products...');
+      const defaultData = [
+        {
+          name: 'Filters',
+          subs: ['20 Micron', '5 Micron', '10 Micron', 'Sand Filter', 'Carbon Filter']
+        },
+        {
+          name: 'Cleaning',
+          subs: ['Chemical Cleaning', 'CIP Washing', 'Storage Tank Wash', 'Area Sanitization']
+        },
+        {
+          name: 'Compressor',
+          subs: ['Oil Replacement', 'Air Filter', 'Oil Separator', 'Belt Check']
+        },
+        {
+          name: 'RO Plant',
+          subs: ['Membrane Washing', 'High Pressure Pump', 'Dosing Pump']
+        },
+        {
+          name: 'Others',
+          subs: ['General Greasing', 'Electrical Check', 'Motor Service']
+        }
+      ];
+
+      for (const item of defaultData) {
+        const [res] = await connection.query(
+          'INSERT INTO maintenance_particulars (name, description, status) VALUES (?, ?, 1)',
+          [item.name, `Default ${item.name} maintenance particular`]
+        );
+        const particularId = res.insertId;
+        for (const sub of item.subs) {
+          await connection.query(
+            'INSERT INTO maintenance_sub_products (particular_id, name, description, status) VALUES (?, ?, ?, 1)',
+            [particularId, sub, `${sub} under ${item.name}`]
+          );
+        }
+      }
+      console.log('Default maintenance particulars and sub-products seeded.');
+    }
+
+    // Step 64. Create machines & machine_sessions tables for Timer module if not exists
+    console.log('Creating machines table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS machines (
+        id VARCHAR(20) PRIMARY KEY,
+        machine_name VARCHAR(100) NOT NULL,
+        machine_type VARCHAR(50) NOT NULL,
+        working_start_time TIME NOT NULL DEFAULT '08:00:00',
+        working_end_time TIME NOT NULL DEFAULT '17:00:00',
+        active TINYINT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating machine_sessions table if not exists...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS machine_sessions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        machine_id VARCHAR(20) NOT NULL,
+        session_date DATE NOT NULL,
+        start_time DATETIME NOT NULL,
+        stop_time DATETIME NULL,
+        duration_seconds INT DEFAULT 0,
+        status VARCHAR(20) NOT NULL DEFAULT 'RUNNING',
+        stop_reason VARCHAR(100) NULL,
+        notes TEXT NULL,
+        created_by VARCHAR(100) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_ms_machine_date (machine_id, session_date),
+        INDEX idx_ms_machine_status (machine_id, status),
+        INDEX idx_ms_date (session_date),
+        FOREIGN KEY (machine_id) REFERENCES machines(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Seed default 5 machines if empty
+    const [machCount] = await connection.query('SELECT COUNT(*) as count FROM machines');
+    if (machCount[0].count === 0) {
+      console.log('Seeding default 5 machines...');
+      const defaultMachines = [
+        { id: 'PROD-01', machine_name: 'Production Machine 1', machine_type: 'Production', working_start_time: '08:00:00', working_end_time: '18:00:00' },
+        { id: 'PROD-02', machine_name: 'Production Machine 2', machine_type: 'Production', working_start_time: '09:00:00', working_end_time: '19:00:00' },
+        { id: 'PET-01', machine_name: 'PET Bottle Machine 1', machine_type: 'PET Bottle', working_start_time: '08:00:00', working_end_time: '17:00:00' },
+        { id: 'PET-02', machine_name: 'PET Bottle Machine 2', machine_type: 'PET Bottle', working_start_time: '08:30:00', working_end_time: '18:30:00' },
+        { id: 'PET-03', machine_name: 'PET Bottle Machine 3', machine_type: 'PET Bottle', working_start_time: '10:00:00', working_end_time: '20:00:00' }
+      ];
+
+      for (const m of defaultMachines) {
+        await connection.query(
+          `INSERT INTO machines (id, machine_name, machine_type, working_start_time, working_end_time, active)
+           VALUES (?, ?, ?, ?, ?, 1)`,
+          [m.id, m.machine_name, m.machine_type, m.working_start_time, m.working_end_time]
+        );
+      }
+      console.log('Default 5 machines seeded.');
     }
 
     // Seed default admin if no admins exist

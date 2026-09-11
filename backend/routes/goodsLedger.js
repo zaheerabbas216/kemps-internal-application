@@ -1,112 +1,14 @@
 import express from 'express';
 import pool from '../config/db.js';
 import authMiddleware from '../middleware/auth.js';
+import {
+  autoClosePendingDays,
+  calculateDynamicRow,
+  getTodayISTStr,
+  addDays
+} from '../services/goodsLedgerAutoCloseService.js';
 
 const router = express.Router();
-
-// Helper: Calculate ledger row for a specific finished product dynamically
-async function calculateDynamicRow(connection, product, targetDate) {
-  // 1. Find the latest manual opening stock set by admin
-  const [manualRows] = await connection.query(
-    `SELECT DATE_FORMAT(ledger_date, '%Y-%m-%d') as ledger_date, quantity 
-     FROM finished_goods_ledger_manual_opening 
-     WHERE finished_product_id = ? AND ledger_date <= ? 
-     ORDER BY ledger_date DESC LIMIT 1`,
-    [product.id, targetDate]
-  );
-
-  // 2. Find the latest closed date before targetDate
-  const [closedRows] = await connection.query(
-    `SELECT DATE_FORMAT(ledger_date, '%Y-%m-%d') as ledger_date 
-     FROM finished_goods_ledger_closings 
-     WHERE ledger_date < ? 
-     ORDER BY ledger_date DESC LIMIT 1`,
-    [targetDate]
-  );
-
-  let openingStock = 0;
-  let startQueryDate = null;
-
-  const hasManual = manualRows.length > 0;
-  const hasClosed = closedRows.length > 0;
-
-  if (hasClosed && (!hasManual || closedRows[0].ledger_date >= manualRows[0].ledger_date)) {
-    const dClosed = closedRows[0].ledger_date;
-    const [snapRows] = await connection.query(
-      `SELECT closing_stock FROM finished_goods_ledger_snapshots 
-       WHERE finished_product_id = ? AND ledger_date = ?`,
-      [product.id, dClosed]
-    );
-    openingStock = snapRows.length > 0 ? parseFloat(snapRows[0].closing_stock) : 0;
-    
-    const nextDay = new Date(dClosed);
-    nextDay.setDate(nextDay.getDate() + 1);
-    startQueryDate = nextDay.toISOString().split('T')[0];
-  } else if (hasManual) {
-    openingStock = parseFloat(manualRows[0].quantity) || 0;
-    startQueryDate = manualRows[0].ledger_date;
-  }
-
-  // 3. Get transactions up to targetDate (Production IN, Loading OUT, Sales Return)
-  let prodIn = 0;
-  let loadOut = 0;
-  let returnsTotal = 0;
-
-  let pWhere = ['finished_product_id = ?', 'production_date <= ?'];
-  let pParams = [product.id, targetDate];
-  let lWhere = ['lti.finished_product_id = ?', 'ls.loading_date <= ?'];
-  let lParams = [product.id, targetDate];
-  let rWhere = ['sri.finished_product_id = ?', "sr.status != 'Rejected'", 'sr.return_date <= ?'];
-  let rParams = [product.id, targetDate];
-
-  if (startQueryDate) {
-    pWhere.push('production_date >= ?');
-    pParams.push(startQueryDate);
-
-    lWhere.push('ls.loading_date >= ?');
-    lParams.push(startQueryDate);
-
-    rWhere.push('sr.return_date >= ?');
-    rParams.push(startQueryDate);
-  }
-
-  const [pRow] = await connection.query(
-    `SELECT COALESCE(SUM(production_boxes), 0) AS count FROM production_batches 
-     WHERE ${pWhere.join(' AND ')}`,
-    pParams
-  );
-  prodIn = parseFloat(pRow[0].count) || 0;
-
-  const [lRow] = await connection.query(
-    `SELECT COALESCE(SUM(lti.quantity), 0) AS count FROM loading_trip_items lti
-     JOIN loading_trips lt ON lti.trip_id = lt.id
-     JOIN loading_sessions ls ON lt.session_id = ls.id
-     WHERE ${lWhere.join(' AND ')}`,
-    lParams
-  );
-  loadOut = parseFloat(lRow[0].count) || 0;
-
-  const [rRow] = await connection.query(
-    `SELECT COALESCE(SUM(sri.quantity), 0) AS count FROM sales_return_items sri
-     JOIN sales_returns sr ON sri.sales_return_id = sr.id
-     WHERE ${rWhere.join(' AND ')}`,
-    rParams
-  );
-  returnsTotal = parseFloat(rRow[0].count) || 0;
-
-  const closingStock = openingStock + prodIn - loadOut + returnsTotal;
-
-  return {
-    finished_product_id: product.id,
-    product_name: product.name,
-    category_name: product.category_name || 'Others',
-    opening_stock: parseFloat(openingStock.toFixed(2)),
-    stock_in: parseFloat(prodIn.toFixed(2)),
-    stock_out: parseFloat(loadOut.toFixed(2)),
-    stock_return: parseFloat(returnsTotal.toFixed(2)),
-    closing_stock: parseFloat(closingStock.toFixed(2))
-  };
-}
 
 // GET /api/goods-ledger/day
 // Fetches opening, IN, OUT, closing for finished products on selected date
@@ -115,6 +17,9 @@ router.get('/day', authMiddleware, async (req, res) => {
   try {
     const { date } = req.query;
     if (!date) throw new Error('Date parameter is required.');
+
+    // Ensure all prior unclosed days are automatically caught up and closed
+    await autoClosePendingDays(connection);
 
     // 1. Check if the day is closed
     const [closedRows] = await connection.query(
@@ -197,6 +102,142 @@ router.get('/day', authMiddleware, async (req, res) => {
         totalStockReturnToday: parseFloat(totalStockReturnToday.toFixed(2)),
         totalClosingStock: parseFloat(totalClosingStock.toFixed(2))
       }
+    });
+
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
+  }
+});
+
+// GET /api/goods-ledger/history
+// Returns all closed days with their stock snapshots and summary statistics
+router.get('/history', authMiddleware, async (req, res) => {
+  const connection = await pool.getConnection();
+  try {
+    // Ensure all pending prior days are caught up and closed
+    await autoClosePendingDays(connection);
+
+    const { startDate, endDate, date, search } = req.query;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+    const offset = (page - 1) * limit;
+
+    let whereConditions = [];
+    let params = [];
+
+    if (date) {
+      whereConditions.push('c.ledger_date = ?');
+      params.push(date);
+    } else {
+      if (startDate) {
+        whereConditions.push('c.ledger_date >= ?');
+        params.push(startDate);
+      }
+      if (endDate) {
+        whereConditions.push('c.ledger_date <= ?');
+        params.push(endDate);
+      }
+    }
+
+    const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+    // Count total closed days
+    const [countRows] = await connection.query(
+      `SELECT COUNT(*) as totalCount FROM finished_goods_ledger_closings c ${whereClause}`,
+      params
+    );
+    const total = countRows[0]?.totalCount || 0;
+    const totalPages = Math.ceil(total / limit) || 1;
+
+    // Fetch closed days ordered newest to oldest
+    const [closedDays] = await connection.query(
+      `SELECT 
+         DATE_FORMAT(c.ledger_date, '%Y-%m-%d') AS ledger_date, 
+         c.closed_by, 
+         DATE_FORMAT(c.closed_at, '%Y-%m-%d %h:%i %p') AS closed_at
+       FROM finished_goods_ledger_closings c
+       ${whereClause}
+       ORDER BY c.ledger_date DESC
+       LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    );
+
+    const history = [];
+
+    for (const day of closedDays) {
+      let itemQuery = `
+        SELECT 
+          fgs.finished_product_id, 
+          fgs.opening_stock, 
+          fgs.stock_in, 
+          fgs.stock_out, 
+          fgs.stock_return,
+          fgs.closing_stock,
+          fp.name AS product_name, 
+          fpc.name AS category_name
+        FROM finished_goods_ledger_snapshots fgs 
+        JOIN finished_products fp ON fgs.finished_product_id = fp.id 
+        LEFT JOIN finished_product_categories fpc ON fp.category_id = fpc.id 
+        WHERE fgs.ledger_date = ?
+      `;
+      const itemParams = [day.ledger_date];
+
+      if (search) {
+        itemQuery += ' AND (fp.name LIKE ? OR fpc.name LIKE ?)';
+        itemParams.push(`%${search}%`, `%${search}%`);
+      }
+
+      const [snapRows] = await connection.query(itemQuery, itemParams);
+
+      const items = snapRows.map(row => ({
+        finished_product_id: row.finished_product_id,
+        product_name: row.product_name,
+        category_name: row.category_name || 'Others',
+        opening_stock: parseFloat(row.opening_stock),
+        stock_in: parseFloat(row.stock_in),
+        stock_out: parseFloat(row.stock_out),
+        stock_return: parseFloat(row.stock_return || 0),
+        closing_stock: parseFloat(row.closing_stock)
+      }));
+
+      // Calculate summary for this closed day
+      let totalStockInToday = 0;
+      let totalStockOutToday = 0;
+      let totalStockReturnToday = 0;
+      let totalClosingStock = 0;
+
+      items.forEach(item => {
+        totalStockInToday += item.stock_in;
+        totalStockOutToday += item.stock_out;
+        totalStockReturnToday += item.stock_return || 0;
+        totalClosingStock += item.closing_stock;
+      });
+
+      history.push({
+        ledger_date: day.ledger_date,
+        closed_by: day.closed_by,
+        closed_at: day.closed_at,
+        items,
+        summary: {
+          totalCategories: new Set(items.map(i => i.category_name)).size,
+          totalProducts: items.length,
+          totalStockInToday: parseFloat(totalStockInToday.toFixed(2)),
+          totalStockOutToday: parseFloat(totalStockOutToday.toFixed(2)),
+          totalStockReturnToday: parseFloat(totalStockReturnToday.toFixed(2)),
+          totalClosingStock: parseFloat(totalClosingStock.toFixed(2))
+        }
+      });
+    }
+
+    res.json({
+      ok: true,
+      history,
+      total,
+      page,
+      limit,
+      totalPages
     });
 
   } catch (error) {
@@ -503,10 +544,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
             [product.id, dClosed]
           );
           checkpointStock = snapRows.length > 0 ? parseFloat(snapRows[0].closing_stock) : 0;
-          
-          const nextDay = new Date(dClosed);
-          nextDay.setDate(nextDay.getDate() + 1);
-          startQueryDate = nextDay.toISOString().split('T')[0];
+          startQueryDate = addDays(dClosed, 1);
           checkpointDesc = `Closed day closing stock snapshot on ${dClosed}`;
         }
       } else if (hasManual) {
@@ -522,10 +560,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
           [product.id, checkpointDate]
         );
         checkpointStock = snapRows.length > 0 ? parseFloat(snapRows[0].closing_stock) : 0;
-        
-        const nextDay = new Date(checkpointDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        startQueryDate = nextDay.toISOString().split('T')[0];
+        startQueryDate = addDays(checkpointDate, 1);
         checkpointDesc = `Closed day closing stock snapshot on ${checkpointDate}`;
       } else {
         checkpointDesc = 'Initial opening stock';
@@ -541,9 +576,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
         type: 'Opening Baseline'
       });
 
-      const yesterday = new Date(date);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      const yesterdayStr = addDays(date, -1);
 
       if (!startQueryDate || startQueryDate <= yesterdayStr) {
         const priorProd = startQueryDate 
@@ -604,10 +637,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
             [product.id, dClosed]
           );
           checkpointStock = snapRows.length > 0 ? parseFloat(snapRows[0].closing_stock) : 0;
-          
-          const nextDay = new Date(dClosed);
-          nextDay.setDate(nextDay.getDate() + 1);
-          startQueryDate = nextDay.toISOString().split('T')[0];
+          startQueryDate = addDays(dClosed, 1);
           checkpointDesc = `Closed day closing stock snapshot on ${dClosed}`;
         }
       } else if (hasManual) {
@@ -623,10 +653,7 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
           [product.id, checkpointDate]
         );
         checkpointStock = snapRows.length > 0 ? parseFloat(snapRows[0].closing_stock) : 0;
-        
-        const nextDay = new Date(checkpointDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        startQueryDate = nextDay.toISOString().split('T')[0];
+        startQueryDate = addDays(checkpointDate, 1);
         checkpointDesc = `Closed day closing stock snapshot on ${checkpointDate}`;
       } else {
         checkpointDesc = 'Initial opening stock';

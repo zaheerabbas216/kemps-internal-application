@@ -215,16 +215,58 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/finished-products/:id
 // Delete a finished product
 router.delete('/:id', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const { id } = req.params;
-    const [result] = await pool.query('DELETE FROM finished_products WHERE id = ?', [id]);
-    if (result.affectedRows > 0) {
-      res.json({ ok: true, message: 'Finished product deleted successfully!' });
-    } else {
-      res.status(404).json({ ok: false, error: 'Finished product not found.' });
+
+    // Check if product exists
+    const [pRows] = await connection.query('SELECT id, name FROM finished_products WHERE id = ?', [id]);
+    if (pRows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Finished product not found.' });
     }
+    const product = pRows[0];
+
+    // Check for operational business transactions
+    const [bills] = await connection.query('SELECT COUNT(*) as c FROM customer_bill_items WHERE finished_product_id = ?', [id]);
+    const [prods] = await connection.query('SELECT COUNT(*) as c FROM production_batches WHERE finished_product_id = ?', [id]);
+    const [loads] = await connection.query('SELECT COUNT(*) as c FROM loading_trip_items WHERE finished_product_id = ?', [id]);
+    const [returns] = await connection.query('SELECT COUNT(*) as c FROM sales_return_items WHERE finished_product_id = ?', [id]);
+    const [orders] = await connection.query('SELECT COUNT(*) as c FROM customer_order_items WHERE finished_product_id = ?', [id]);
+    const [loadReturns] = await connection.query('SELECT COUNT(*) as c FROM loading_returns WHERE finished_product_id = ?', [id]);
+
+    const txCount = bills[0].c + prods[0].c + loads[0].c + returns[0].c + orders[0].c + loadReturns[0].c;
+
+    if (txCount > 0) {
+      const reasons = [];
+      if (bills[0].c > 0) reasons.push(`${bills[0].c} customer invoice(s)`);
+      if (prods[0].c > 0) reasons.push(`${prods[0].c} production batch(es)`);
+      if (loads[0].c > 0) reasons.push(`${loads[0].c} loading trip(s)`);
+      if (returns[0].c > 0) reasons.push(`${returns[0].c} sales return(s)`);
+      if (orders[0].c > 0) reasons.push(`${orders[0].c} customer order(s)`);
+
+      return res.status(400).json({
+        ok: false,
+        hasTransactions: true,
+        error: `Cannot permanently delete "${product.name}" because it is linked to existing transactions (${reasons.join(', ')}). Please toggle its status to "Inactive / Disabled" instead to hide it without breaking historical accounting records.`
+      });
+    }
+
+    // No operational transactions: clean up snapshots, manual opening, recipes and delete product
+    await connection.beginTransaction();
+
+    await connection.query('DELETE FROM finished_goods_ledger_snapshots WHERE finished_product_id = ?', [id]);
+    await connection.query('DELETE FROM finished_goods_ledger_manual_opening WHERE finished_product_id = ?', [id]);
+    await connection.query('DELETE FROM cost_sheet_history WHERE finished_product_id = ?', [id]);
+    await connection.query('DELETE FROM cost_sheets WHERE finished_product_id = ?', [id]);
+    await connection.query('DELETE FROM finished_products WHERE id = ?', [id]);
+
+    await connection.commit();
+    res.json({ ok: true, message: `Finished product "${product.name}" deleted successfully!` });
   } catch (error) {
+    await connection.rollback();
     res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
   }
 });
 

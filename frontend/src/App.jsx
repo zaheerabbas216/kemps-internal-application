@@ -26,21 +26,27 @@ const Login = lazy(() => import('./pages/Login'));
 const Loading = lazy(() => import('./pages/Loading'));
 const SalesReturn = lazy(() => import('./pages/SalesReturn'));
 const Orders = lazy(() => import('./pages/Orders'));
+const OrderDetails = lazy(() => import('./pages/OrderDetails'));
 const DistributionOrder = lazy(() => import('./pages/DistributionOrder'));
 const RawMaterialLedger = lazy(() => import('./pages/RawMaterialLedger'));
+const RawMaterialHistory = lazy(() => import('./pages/RawMaterialHistory'));
 const GoodsLedger = lazy(() => import('./pages/GoodsLedger'));
+const GoodsHistory = lazy(() => import('./pages/GoodsHistory'));
 const CanSupply = lazy(() => import('./pages/CanSupply'));
 const CanDepositLedger = lazy(() => import('./pages/CanDepositLedger'));
 const BankDeposit = lazy(() => import('./pages/BankDeposit'));
 const BankDepositHistory = lazy(() => import('./pages/BankDepositHistory'));
 const MaintenanceForm = lazy(() => import('./pages/MaintenanceForm'));
 const MaintenanceHistory = lazy(() => import('./pages/MaintenanceHistory'));
+const MaintenanceMaster = lazy(() => import('./pages/MaintenanceMaster'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const TotalSales = lazy(() => import('./pages/TotalSales'));
 const UserAuthentication = lazy(() => import('./pages/UserAuthentication'));
 const AccountsLedger = lazy(() => import('./pages/AccountsLedger'));
 const SupplierLedger = lazy(() => import('./pages/SupplierLedger'));
 const CashLedger = lazy(() => import('./pages/CashLedger'));
+const Timer = lazy(() => import('./pages/Timer'));
+const TimerHistory = lazy(() => import('./pages/TimerHistory'));
 
 // Route guard for authenticated pages
 const ProtectedRoute = () => {
@@ -101,16 +107,22 @@ function App() {
               <Route path="/loading" element={<Loading />} />
               <Route path="/sales-return" element={<SalesReturn />} />
               <Route path="/orders" element={<Orders />} />
+              <Route path="/order-details" element={<OrderDetails />} />
               <Route path="/distribution-order" element={<DistributionOrder />} />
               <Route path="/do-order-view" element={<DistributionOrder />} />
               <Route path="/raw-material-ledger" element={<RawMaterialLedger />} />
+              <Route path="/raw-material-history" element={<RawMaterialHistory />} />
               <Route path="/goods-ledger" element={<GoodsLedger />} />
+              <Route path="/goods-history" element={<GoodsHistory />} />
               <Route path="/can-supply" element={<CanSupply />} />
               <Route path="/can-deposit" element={<CanDepositLedger />} />
               <Route path="/bank-deposit" element={<BankDeposit />} />
               <Route path="/bank-deposit-history" element={<BankDepositHistory />} />
               <Route path="/maintenance-form" element={<MaintenanceForm />} />
               <Route path="/maintenance-history" element={<MaintenanceHistory />} />
+              <Route path="/maintenance-master" element={<MaintenanceMaster />} />
+              <Route path="/timer" element={<Timer />} />
+              <Route path="/timer-history" element={<TimerHistory />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/total-sales" element={<TotalSales />} />
 

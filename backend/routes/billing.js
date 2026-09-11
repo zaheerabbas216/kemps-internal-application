@@ -1,6 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
-import { addLedgerEntry, deleteLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
+import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
 
 const router = express.Router();
 
@@ -419,7 +419,14 @@ router.post('/', async (req, res) => {
 
     if (existingCust.length > 0) {
       customerId = existingCust[0].id;
-      customerCreditBalance = parseFloat(existingCust[0].credit_balance || 0.00);
+      // Ensure customer ledger balance is up-to-date with any advance payments
+      await recalculateLedgerBalances(connection, customerId);
+      const [refreshedCust] = await connection.query(
+        `SELECT credit_balance FROM customers WHERE id = ?`,
+        [customerId]
+      );
+      customerCreditBalance = parseFloat(refreshedCust[0]?.credit_balance || 0.00);
+
       // Soft update existing customer details
       await connection.query(
         `UPDATE customers SET name = ?, gstin = ?, address = ? WHERE id = ?`,

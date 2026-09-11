@@ -143,40 +143,35 @@ const BillingForm = () => {
     const todayFormatted = `${yyyy}-${mm}-${dd}`;
 
     const o = preload.order;
-    const orderItems = preload.items;
-
-    let cashPaid = '0';
-    let upiPaid = '0';
-    let bankPaid = '0';
+    const orderItems = preload.items || [];
     const advance = parseFloat(o.advance_amount) || 0;
-    const mode = String(o.payment_mode || '').toLowerCase();
-    if (mode.includes('cash')) {
-      cashPaid = String(advance);
-    } else if (mode.includes('upi')) {
-      upiPaid = String(advance);
-    } else if (mode.includes('bank')) {
-      bankPaid = String(advance);
+
+    // Advance received for this order is already recorded in Accounts Ledger as customer advance / credit.
+    // In Billing, we apply this advance as Credit Balance rather than collecting cash at billing.
+    if (advance > 0) {
+      setApplyCredit(true);
+      setAvailableCredit(prev => Math.max(prev, advance));
     } else {
-      cashPaid = String(advance);
+      setApplyCredit(false);
     }
 
     setBillingInfo({
       billingDate: todayFormatted,
       company: 'Kempannavar Industries',
-      customerType: o.customer_type === 'Distributor' ? 'Distributor' : 'Function Order',
+      customerType: o.customer_type === 'Distributor' ? 'Distributor' : (o.customer_type || 'General Customer'),
       customerId: o.customer_id || '',
       customerName: o.customer_name,
       customerPhone: o.customer_phone,
       customerGstin: o.customer_gstin || '',
       customerAddress: o.customer_address || '',
-      paymentMode: o.payment_mode || 'Cash',
-      amountPaid: String(advance),
+      paymentMode: advance > 0 ? 'Credit Balance' : (o.payment_mode || 'Cash'),
+      amountPaid: '0',
       dueAmount: 0,
       grandTotal: 0,
-      cashPaid,
-      upiPaid,
-      bankPaid,
-      remarks: '',
+      cashPaid: '0',
+      upiPaid: '0',
+      bankPaid: '0',
+      remarks: o.notes ? `Order #${o.id} - ${o.notes}` : `Order #${o.id}`,
       orderId: o.id
     });
 

@@ -23,6 +23,7 @@ import canSupplyRoutes from './routes/canSupply.js';
 import canDepositRoutes from './routes/canDeposit.js';
 import bankDepositRoutes from './routes/bankDeposit.js';
 import maintenanceRoutes from './routes/maintenance.js';
+import maintenanceMasterRoutes from './routes/maintenanceMaster.js';
 import taskRoutes from './routes/tasks.js';
 import salesReportRoutes from './routes/salesReport.js';
 import paymentApprovalRoutes from './routes/paymentApproval.js';
@@ -30,6 +31,7 @@ import stockCorrectionsRoutes from './routes/stockCorrections.js';
 import accountsLedgerRoutes from './routes/accountsLedger.js';
 import supplierLedgerRoutes from './routes/supplierLedger.js';
 import cashLedgerRoutes from './routes/cashLedger.js';
+import timerRoutes from './routes/timer.js';
 import authMiddleware from './middleware/auth.js';
 
 const app = express();
@@ -100,6 +102,7 @@ app.use('/api/can-supply', authMiddleware, canSupplyRoutes);
 app.use('/api/can-deposit', authMiddleware, canDepositRoutes);
 app.use('/api/bank-deposits', authMiddleware, bankDepositRoutes);
 app.use('/api/maintenance', authMiddleware, maintenanceRoutes);
+app.use('/api/maintenance-master', authMiddleware, maintenanceMasterRoutes);
 app.use('/api/tasks', authMiddleware, taskRoutes);
 app.use('/api/sales-report', authMiddleware, salesReportRoutes);
 app.use('/api/payment-approval', authMiddleware, paymentApprovalRoutes);
@@ -107,6 +110,7 @@ app.use('/api/stock-corrections', authMiddleware, stockCorrectionsRoutes);
 app.use('/api/accounts-ledger', authMiddleware, accountsLedgerRoutes);
 app.use('/api/supplier-ledger', authMiddleware, supplierLedgerRoutes);
 app.use('/api/cash-ledger', authMiddleware, cashLedgerRoutes);
+app.use('/api/timer', authMiddleware, timerRoutes);
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

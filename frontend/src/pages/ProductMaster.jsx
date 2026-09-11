@@ -296,7 +296,7 @@ const ProductMaster = () => {
         alert(res.data.error || 'Failed to delete raw material.');
       }
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      alert(err.response?.data?.error || `Delete failed: ${err.message}`);
     }
   };
 
@@ -415,7 +415,7 @@ const ProductMaster = () => {
         alert(res.data.error || 'Failed to delete finished product.');
       }
     } catch (err) {
-      alert(`Delete failed: ${err.message}`);
+      alert(err.response?.data?.error || `Delete failed: ${err.message}`);
     }
   };
 

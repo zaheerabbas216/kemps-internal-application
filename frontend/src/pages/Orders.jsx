@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
@@ -9,6 +9,11 @@ const Orders = () => {
   const [activeTab, setActiveTab] = useState('upcoming');
   // History Sub-tabs: 'supplied' | 'cancelled' | 'all'
   const [historyTab, setHistoryTab] = useState('all');
+
+  // Status Filter Tabs: 'PENDING' | 'SUPPLIED' | 'CANCELLED' | 'ALL'
+  const [statusFilterTab, setStatusFilterTab] = useState('PENDING');
+  const [productRequirements, setProductRequirements] = useState([]);
+  const [isRequirementCollapsed, setIsRequirementCollapsed] = useState(false);
 
   // Master lists
   const [finishedProducts, setFinishedProducts] = useState([]);
@@ -103,7 +108,7 @@ const Orders = () => {
 
   useEffect(() => {
     fetchOrdersList();
-  }, [activeTab, historyTab, currentPage, filterSearch, filterStartDate, filterEndDate, filterStatus, filterProductId, filterDeliveryArea]);
+  }, [statusFilterTab, currentPage, filterSearch, filterStartDate, filterEndDate, filterProductId, filterDeliveryArea, activeTab]);
 
   const fetchDropdownMasters = async () => {
     try {
@@ -149,22 +154,17 @@ const Orders = () => {
         excludeCustomerType: 'Distributor'
       };
 
-      if (activeTab === 'upcoming') {
-        params.upcoming = 'true';
-      } else if (activeTab === 'history') {
-        if (historyTab === 'supplied') {
-          params.status = 'SUPPLIED';
-        } else if (historyTab === 'cancelled') {
-          params.status = 'CANCELLED';
-        } else {
-          params.status = filterStatus; // Allow status filtering in All tab
-        }
+      if (statusFilterTab === 'ALL') {
+        params.status = '';
+      } else {
+        params.status = statusFilterTab;
       }
 
       const res = await api.get('/orders', { params });
       if (res.data.ok) {
-        setOrders(res.data.orders);
-        setTotalCount(res.data.total);
+        setOrders(res.data.orders || []);
+        setTotalCount(res.data.total || 0);
+        setProductRequirements(res.data.productRequirements || []);
       }
     } catch (err) {
       console.error(err);
@@ -172,6 +172,11 @@ const Orders = () => {
       setLoadingList(false);
     }
   };
+
+  // Calculate total required product quantity across all filtered orders
+  const totalRequiredQuantity = useMemo(() => {
+    return productRequirements.reduce((sum, item) => sum + (parseInt(item.totalQuantity, 10) || 0), 0);
+  }, [productRequirements]);
 
   // ==========================================
   // AUTOCOMPLETE LOOKUPS
@@ -527,6 +532,21 @@ const Orders = () => {
     return dateStr;
   };
 
+  const formatTime12Hour = (timeStr) => {
+    if (!timeStr) return '—';
+    const parts = String(timeStr).trim().split(':');
+    if (parts.length >= 2) {
+      let hours = parseInt(parts[0], 10);
+      const minutes = parts[1].padStart(2, '0');
+      if (isNaN(hours)) return timeStr;
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      return `${hours}:${minutes} ${ampm}`;
+    }
+    return timeStr;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
       
@@ -624,65 +644,62 @@ const Orders = () => {
             </div>
 
             {/* Selection Lookup row */}
-            {!isEditing && (
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100 relative">
-                <div className="md:col-span-5 space-y-1.5 relative">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Search Customer *</label>
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-slate-50/50 p-4 rounded-xl border border-slate-100 relative">
+              <div className="md:col-span-5 space-y-1.5 relative">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Search Customer *</label>
+                <input 
+                  type="text"
+                  placeholder="Type name to lookup..."
+                  value={nameSearchText}
+                  onChange={handleNameSearchChange}
+                  onFocus={() => { if (nameSearchText.trim()) setShowSuggestions(true); }}
+                  className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                />
+                {showSuggestions && filteredCustomers.length > 0 && (
+                  <ul className="absolute z-20 w-full left-0 mt-1.5 bg-white border border-slate-200 rounded-xl max-h-48 overflow-y-auto shadow-lg divide-y divide-slate-100">
+                    {filteredCustomers.map(c => (
+                      <li 
+                        key={c.id} 
+                        onClick={() => handleSelectSuggestion(c)}
+                        className="px-4 py-2.5 text-xs text-slate-750 hover:bg-slate-50 cursor-pointer flex justify-between font-bold"
+                      >
+                        <span>{c.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">{c.phone}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              <div className="md:col-span-1 text-center text-[10px] font-black text-slate-450 py-2">OR</div>
+
+              <div className="md:col-span-6 flex gap-2 items-end">
+                <div className="space-y-1.5 flex-1">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Lookup Phone</label>
                   <input 
                     type="text"
-                    placeholder="Type name to lookup..."
-                    value={nameSearchText}
-                    onChange={handleNameSearchChange}
-                    onFocus={() => { if (nameSearchText.trim()) setShowSuggestions(true); }}
+                    placeholder="e.g. 9876543210"
+                    value={phoneSearchText}
+                    onChange={(e) => setPhoneSearchText(e.target.value)}
                     className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                    required
                   />
-                  {showSuggestions && filteredCustomers.length > 0 && (
-                    <ul className="absolute z-20 w-full left-0 mt-1.5 bg-white border border-slate-200 rounded-xl max-h-48 overflow-y-auto shadow-lg divide-y divide-slate-100">
-                      {filteredCustomers.map(c => (
-                        <li 
-                          key={c.id} 
-                          onClick={() => handleSelectSuggestion(c)}
-                          className="px-4 py-2.5 text-xs text-slate-750 hover:bg-slate-50 cursor-pointer flex justify-between font-bold"
-                        >
-                          <span>{c.name}</span>
-                          <span className="text-[10px] text-slate-400 font-mono">{c.phone}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
                 </div>
-
-                <div className="md:col-span-1 text-center text-[10px] font-black text-slate-450 py-2">OR</div>
-
-                <div className="md:col-span-6 flex gap-2 items-end">
-                  <div className="space-y-1.5 flex-1">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Lookup Phone</label>
-                    <input 
-                      type="text"
-                      placeholder="e.g. 9876543210"
-                      value={phoneSearchText}
-                      onChange={(e) => setPhoneSearchText(e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handlePhoneSearchSubmit}
-                    className="px-4 h-11 bg-primary hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow transition-all shrink-0"
-                  >
-                    🔍 Search
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleClearCustomer}
-                    className="px-3 py-11 h-11 bg-white border border-slate-200 text-slate-500 hover:bg-slate-55 rounded-xl shrink-0 text-xs font-bold"
-                  >
-                    Clear
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={handlePhoneSearchSubmit}
+                  className="px-4 h-11 bg-primary hover:bg-blue-600 text-white font-bold text-xs rounded-xl shadow transition-all shrink-0"
+                >
+                  🔍 Search
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearCustomer}
+                  className="px-3 py-11 h-11 bg-white border border-slate-200 text-slate-500 hover:bg-slate-55 rounded-xl shrink-0 text-xs font-bold"
+                >
+                  Clear
+                </button>
               </div>
-            )}
+            </div>
 
             {/* Profile fields grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-slate-100 pt-4">
@@ -698,7 +715,6 @@ const Orders = () => {
                   placeholder="Enter customer name"
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                   required
-                  disabled={isEditing}
                 />
               </div>
 
@@ -714,7 +730,6 @@ const Orders = () => {
                   placeholder="10 digit number"
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                   required
-                  disabled={isEditing}
                 />
               </div>
 
@@ -725,7 +740,6 @@ const Orders = () => {
                   onChange={(e) => setOrderInfo(prev => ({ ...prev, customerType: e.target.value }))}
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-semibold"
                   required
-                  disabled={isEditing}
                 >
                   <option value="General Customer">General Customer</option>
                   <option value="Wholesaler">Wholesaler</option>
@@ -740,7 +754,6 @@ const Orders = () => {
                   onChange={(e) => setOrderInfo(prev => ({ ...prev, customerGstin: e.target.value }))}
                   placeholder="GST Number"
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                  disabled={isEditing}
                 />
               </div>
 
@@ -752,7 +765,6 @@ const Orders = () => {
                   onChange={(e) => setOrderInfo(prev => ({ ...prev, customerAddress: e.target.value }))}
                   placeholder="Customer billing address"
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                  disabled={isEditing}
                 />
               </div>
             </div>
@@ -1049,6 +1061,161 @@ const Orders = () => {
       {activeTab !== 'new-order' && (
         <div className="space-y-6">
           
+          {/* ========================================================================= */}
+          {/* STATUS TABS NAVIGATION */}
+          {/* ========================================================================= */}
+          <div className="flex items-center gap-1.5 bg-slate-200/70 p-1 rounded-xl border border-slate-300/60 w-fit overflow-x-auto">
+            {[
+              { id: 'PENDING', label: 'Pending / Active' },
+              { id: 'SUPPLIED', label: 'Supplied' },
+              { id: 'CANCELLED', label: 'Cancelled' },
+              { id: 'ALL', label: 'All Orders' }
+            ].map((tab) => {
+              const isActive = statusFilterTab === tab.id;
+              let activeClass = 'bg-slate-900 text-white shadow-sm';
+              if (tab.id === 'PENDING') {
+                activeClass = 'bg-[#1e3a8a] text-white shadow-md shadow-blue-900/30 ring-2 ring-[#172554] font-black';
+              } else if (tab.id === 'SUPPLIED') {
+                activeClass = 'bg-emerald-700 text-white shadow-md font-bold';
+              } else if (tab.id === 'CANCELLED') {
+                activeClass = 'bg-rose-700 text-white shadow-md font-bold';
+              }
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setStatusFilterTab(tab.id);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap ${
+                    isActive
+                      ? activeClass
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/60'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* REQUIRED PRODUCT QUANTITY DEMAND SUMMARY TABLE */}
+          {/* ========================================================================= */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50 via-white to-blue-50/30">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-blue-600/10 text-blue-700 flex items-center justify-center text-lg font-bold">
+                  📦
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
+                      Total Product Quantities Required
+                    </h2>
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                      {productRequirements.length} Product Types
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Calculated demand across all matching orders for <span className="font-semibold text-slate-700">{statusFilterTab === 'ALL' ? 'All Orders' : statusFilterTab === 'PENDING' ? 'Pending / Active' : statusFilterTab}</span> (Order Management)
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="bg-[#1e3a8a] text-white px-4 py-1.5 rounded-xl shadow-sm text-right">
+                  <span className="text-[10px] uppercase font-bold text-blue-200 tracking-wider block">Total Required Qty</span>
+                  <span className="text-base font-black tracking-tight">{totalRequiredQuantity.toLocaleString('en-IN')} Units</span>
+                </div>
+                <button
+                  onClick={() => setIsRequirementCollapsed(!isRequirementCollapsed)}
+                  className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-all flex items-center gap-1.5"
+                >
+                  <span>{isRequirementCollapsed ? '▼ Show Table' : '▲ Hide'}</span>
+                </button>
+              </div>
+            </div>
+
+            {!isRequirementCollapsed && (
+              <div>
+                {productRequirements.length === 0 ? (
+                  <div className="py-8 text-center text-slate-400 text-xs font-medium">
+                    No product demand found for the currently selected filters.
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          <th className="py-3 px-4 w-12">#</th>
+                          <th className="py-3 px-4">Product Name</th>
+                          <th className="py-3 px-4 text-center">Orders Count</th>
+                          <th className="py-3 px-4 text-center">Packaging / Unit</th>
+                          <th className="py-3 px-4 text-right">Required Quantity</th>
+                          <th className="py-3 px-4 text-right">Demand Share</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {productRequirements.map((prod, idx) => {
+                          const qty = parseInt(prod.totalQuantity, 10) || 0;
+                          const percentage = totalRequiredQuantity > 0 ? ((qty / totalRequiredQuantity) * 100).toFixed(1) : '0';
+                          return (
+                            <tr key={prod.productId || idx} className="hover:bg-blue-50/30 transition-colors">
+                              <td className="py-3 px-4 text-slate-400 font-bold">{idx + 1}</td>
+                              <td className="py-3 px-4 font-bold text-slate-900 flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0"></span>
+                                <span>{prod.productName}</span>
+                              </td>
+                              <td className="py-3 px-4 text-center">
+                                <span className="inline-block px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-slate-100 text-slate-700">
+                                  {prod.orderCount} {prod.orderCount === 1 ? 'Order' : 'Orders'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-center text-slate-500 font-medium">
+                                {prod.productUnit || 'Qty'}
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <span className="inline-block px-3.5 py-1 rounded-lg text-xs font-black bg-blue-50 text-[#1e3a8a] border border-blue-200 shadow-2xs">
+                                  {qty.toLocaleString('en-IN')} {prod.productUnit || 'Qty'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <div className="w-20 bg-slate-100 rounded-full h-2 overflow-hidden border border-slate-200">
+                                    <div
+                                      className="bg-[#1e3a8a] h-full rounded-full"
+                                      style={{ width: `${Math.min(100, parseFloat(percentage))}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="font-extrabold text-slate-700 w-10 text-right">{percentage}%</span>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50/90 font-extrabold text-slate-900 border-t border-slate-200">
+                          <td colSpan="4" className="py-3.5 px-4 uppercase text-[11px] tracking-wider text-slate-500 text-right">
+                            Total Combined Required Quantity:
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-sm text-[#1e3a8a] font-black">
+                            {totalRequiredQuantity.toLocaleString('en-IN')} Qty
+                          </td>
+                          <td className="py-3.5 px-4 text-right text-xs text-slate-600">
+                            100%
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          
           {/* SEARCH & FILTERS CONTAINER */}
           <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3 items-end bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm">
             <div className="space-y-1.5">
@@ -1156,20 +1323,21 @@ const Orders = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                    <th className="py-4 px-5">Order No</th>
-                    <th className="py-4 px-5">Customer details</th>
-                    <th className="py-4 px-5">Supply Date & Time</th>
-                    <th className="py-4 px-5">Delivery Area</th>
-                    <th className="py-4 px-5 text-right">Order Amount</th>
-                    <th className="py-4 px-5 text-center">Payment Status</th>
-                    <th className="py-4 px-5 text-center">Order Status</th>
-                    <th className="py-4 px-5 text-center">Actions</th>
+                    <th className="py-4 px-4">Order No</th>
+                    <th className="py-4 px-4">Customer details</th>
+                    <th className="py-4 px-4 text-blue-600 font-black">Supply Date</th>
+                    <th className="py-4 px-4 text-blue-600 font-black">Supply Time</th>
+                    <th className="py-4 px-4">Delivery Area</th>
+                    <th className="py-4 px-4 text-right">Order Amount</th>
+                    <th className="py-4 px-4 text-center">Payment Status</th>
+                    <th className="py-4 px-4 text-center">Order Status</th>
+                    <th className="py-4 px-4 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
                   {loadingList ? (
                     <tr>
-                      <td colSpan="8" className="py-24 text-center">
+                      <td colSpan="9" className="py-24 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <span className="loading loading-spinner text-primary"></span>
                           <span className="text-slate-400 text-sm font-medium">Fetching orders list...</span>
@@ -1178,7 +1346,7 @@ const Orders = () => {
                     </tr>
                   ) : orders.length === 0 ? (
                     <tr>
-                      <td colSpan="8" className="py-16 text-center text-slate-400 font-semibold text-xs bg-slate-50/20">
+                      <td colSpan="9" className="py-16 text-center text-slate-400 font-semibold text-xs bg-slate-50/20">
                         No customer orders scheduled or logged.
                       </td>
                     </tr>
@@ -1187,29 +1355,31 @@ const Orders = () => {
                       const bal = parseFloat(order.pending_amount) || 0;
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/30 transition-colors">
-                          <td className="py-4 px-5 font-bold text-slate-600">{order.id}</td>
-                          <td className="py-4 px-5">
+                          <td className="py-4 px-4 font-bold text-slate-600">{order.id}</td>
+                          <td className="py-4 px-4">
                             <div className="font-extrabold text-slate-800">{order.customer_name}</div>
                             <div className="text-[10px] font-bold text-slate-400 mt-0.5">{order.customer_phone}</div>
                           </td>
-                          <td className="py-4 px-5">
-                            <div className="text-slate-850 font-bold">{formatDateDDMMYYYY(order.supply_date)}</div>
-                            <div className="text-[10px] font-bold text-slate-450 mt-0.5">⏱ {order.supply_time}</div>
+                          <td className="py-4 px-4 font-bold text-blue-600 whitespace-nowrap">
+                            📅 {formatDateDDMMYYYY(order.supply_date)}
                           </td>
-                          <td className="py-4 px-5 max-w-[150px] truncate" title={order.delivery_address}>
+                          <td className="py-4 px-4 font-bold text-blue-600 whitespace-nowrap">
+                            ⏱ {formatTime12Hour(order.supply_time)}
+                          </td>
+                          <td className="py-4 px-4 max-w-[150px] truncate" title={order.delivery_address}>
                             {order.delivery_address || '—'}
                           </td>
-                          <td className="py-4 px-5 text-right font-black text-slate-800">
+                          <td className="py-4 px-4 text-right font-black text-slate-800">
                             ₹{(parseFloat(order.grand_total) || 0).toFixed(2)}
                           </td>
-                          <td className="py-4 px-5 text-center">
+                          <td className="py-4 px-4 text-center">
                             {bal === 0 ? (
                               <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-100 text-emerald-600">Cleared</span>
                             ) : (
                               <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-50 border border-amber-100 text-amber-600" title={`Pending: ₹${bal.toFixed(2)}`}>Due: ₹{bal.toFixed(0)}</span>
                             )}
                           </td>
-                          <td className="py-4 px-5 text-center">
+                          <td className="py-4 px-4 text-center">
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
                               order.status === 'PENDING' ? 'bg-amber-50 border-amber-100 text-amber-600' :
                               order.status === 'SUPPLIED' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
@@ -1218,7 +1388,7 @@ const Orders = () => {
                               {order.status}
                             </span>
                           </td>
-                          <td className="py-4 px-5">
+                          <td className="py-4 px-4">
                             <div className="flex justify-center">
                               <button 
                                 onClick={() => handleOpenOrderDetail(order.id)}
@@ -1288,7 +1458,7 @@ const Orders = () => {
                   <div>
                     <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Order Details: {orderDetail.order.id}</h3>
                     <p className="text-slate-500 text-xs font-bold mt-0.5">
-                      Supply Schedule: <span className="font-extrabold text-slate-750">{formatDateDDMMYYYY(orderDetail.order.supply_date)}</span> at <span className="font-extrabold text-slate-750">{orderDetail.order.supply_time}</span>
+                      Supply Schedule: <span className="font-extrabold text-blue-600">{formatDateDDMMYYYY(orderDetail.order.supply_date)}</span> at <span className="font-extrabold text-blue-600">{formatTime12Hour(orderDetail.order.supply_time)}</span>
                     </p>
                   </div>
                   <span className={`px-3 py-1 rounded text-xs font-extrabold uppercase border ${

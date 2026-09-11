@@ -39,6 +39,7 @@ const navGroups = [
       { name: 'Billing', path: '/billing' },
       { name: 'Credit Balance', path: '/credit-balance' },
       { name: 'Order Management', path: '/orders' },
+      { name: 'Order Details', path: '/order-details' },
       { name: 'Total Sales', path: '/total-sales' },
       { name: 'Sales Return / Credit Note', path: '/sales-return' },
     ]
@@ -66,6 +67,17 @@ const navGroups = [
     items: [
       { name: 'Production Form', path: '/production-form' },
       { name: 'Goods Ledger', path: '/goods-ledger' },
+      { name: 'Goods History', path: '/goods-history' },
+    ]
+  },
+  {
+    type: 'group',
+    title: 'Machine Timer',
+    id: 'grpTimer',
+    icon: '⏱️',
+    items: [
+      { name: 'Timer Dashboard', path: '/timer' },
+      { name: 'Timer History', path: '/timer-history' },
     ]
   },
   {
@@ -77,6 +89,12 @@ const navGroups = [
   {
     type: 'section',
     title: 'Orders'
+  },
+  {
+    type: 'button',
+    name: 'Order Details',
+    path: '/order-details',
+    icon: '📋'
   },
   {
     type: 'group',
@@ -121,6 +139,8 @@ const navGroups = [
     icon: '🗂️',
     items: [
       { name: 'Maintenance Form', path: '/maintenance-form' },
+      { name: 'Maintenance Master', path: '/maintenance-master' },
+      { name: 'Maintenance History', path: '/maintenance-history' },
     ]
   },
   {

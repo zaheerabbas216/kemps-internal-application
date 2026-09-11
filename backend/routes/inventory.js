@@ -93,11 +93,16 @@ router.post('/', async (req, res) => {
     // Generate Bill ID
     const billId = await generateId('BILL', 'inventory_bills', 'id');
 
+    const isCredit = String(paymentMethod).trim().toLowerCase() === 'credit';
+    const status = isCredit ? 'PENDING' : 'SETTLED';
+    const advancePaid = parseFloat(req.body.advancePaid) || 0.00;
+    const creditNote = parseFloat(req.body.creditNote) || 0.00;
+
     // 1. Insert into inventory_bills (Bill Header)
     await connection.query(
       `INSERT INTO inventory_bills 
-       (id, bill_date, supplier_id, billed_to, bill_number, payment_method, sub_total, total_tax, additional_expenses, grand_total, remarks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, bill_date, supplier_id, billed_to, bill_number, payment_method, sub_total, total_tax, additional_expenses, grand_total, remarks, status, advance_paid, credit_note, is_manual, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         billId,
         billDate,
@@ -109,7 +114,10 @@ router.post('/', async (req, res) => {
         totalTax || 0,
         additionalExpenses || 0,
         grandTotal || 0,
-        remarks || ''
+        remarks || '',
+        status,
+        advancePaid,
+        creditNote
       ]
     );
 
@@ -170,14 +178,14 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // 3. Accounting: Create Expense entry if additional expenses were logged
+    // 3. Accounting: Create Expense entry if additional expenses were logged (always treated as Cash expense)
     if (parseFloat(additionalExpenses) > 0) {
       const expenseId = await generateId('EXP', 'expenses', 'id');
       const createdBy = req.admin?.name || req.admin?.username || 'Admin';
       await connection.query(
         `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
           payment_status, approved_amount, pending_amount, rejected_amount, category, payment_method, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', ?, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', 'Cash', NOW())`,
         [
           expenseId,
           billDate,
@@ -185,8 +193,7 @@ router.post('/', async (req, res) => {
           parseFloat(additionalExpenses),
           createdBy,
           `Additional expenses for inventory bill: ${billId}`,
-          parseFloat(additionalExpenses),
-          paymentMethod || 'Cash'
+          parseFloat(additionalExpenses)
         ]
       );
     }
@@ -202,8 +209,8 @@ router.post('/', async (req, res) => {
       credit: parseFloat(grandTotal) || 0.00
     });
 
-    // Supplier Ledger Hook: PAYMENT debit if paid immediately
-    if (paymentMethod !== 'Credit') {
+    // Supplier Ledger Hook: PAYMENT debit if paid immediately (non-Credit)
+    if (!isCredit) {
       await addSupplierLedgerEntry(connection, {
         date: billDate,
         supplierId: supplierId,
@@ -213,6 +220,29 @@ router.post('/', async (req, res) => {
         debit: parseFloat(grandTotal) || 0.00,
         credit: 0.00
       });
+    } else {
+      if (advancePaid > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: billDate,
+          supplierId: supplierId,
+          entryType: 'PAYMENT',
+          referenceNo: billId,
+          particular: `Payment Made (At Purchase Creation)`,
+          debit: advancePaid,
+          credit: 0.00
+        });
+      }
+      if (creditNote > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: billDate,
+          supplierId: supplierId,
+          entryType: 'PAYMENT',
+          referenceNo: billId,
+          particular: `Credit Note Applied`,
+          debit: creditNote,
+          credit: 0.00
+        });
+      }
     }
 
     await connection.commit();
@@ -566,11 +596,25 @@ router.put('/:id', async (req, res) => {
       }
     }
 
+    const isCredit = String(paymentMethod).trim().toLowerCase() === 'credit';
+    const advancePaid = parseFloat(req.body.advancePaid) || 0.00;
+    const creditNote = parseFloat(req.body.creditNote) || 0.00;
+
+    // Fetch existing approved payments for this bill if any
+    const [payRows] = await connection.query(
+      `SELECT COALESCE(SUM(amount), 0) AS paid FROM supplier_payments WHERE bill_id = ? AND payment_status = 'Approved'`,
+      [id]
+    );
+    const totalPaid = parseFloat(payRows[0].paid) || 0;
+    const remainingBalance = parseFloat(grandTotal) - advancePaid - creditNote - totalPaid;
+    const status = isCredit ? (remainingBalance <= 0 ? 'SETTLED' : 'PENDING') : 'SETTLED';
+
     // 1. Update bill header
     await connection.query(
       `UPDATE inventory_bills 
        SET bill_date = ?, supplier_id = ?, billed_to = ?, bill_number = ?, payment_method = ?, 
-           sub_total = ?, total_tax = ?, additional_expenses = ?, grand_total = ?, remarks = ?
+           sub_total = ?, total_tax = ?, additional_expenses = ?, grand_total = ?, remarks = ?, status = ?,
+           advance_paid = ?, credit_note = ?
        WHERE id = ?`,
       [
         billDate,
@@ -583,6 +627,9 @@ router.put('/:id', async (req, res) => {
         additionalExpenses || 0,
         grandTotal || 0,
         remarks || '',
+        status,
+        advancePaid,
+        creditNote,
         id
       ]
     );
@@ -660,7 +707,7 @@ router.put('/:id', async (req, res) => {
       await connection.query(
         `INSERT INTO expenses (id, expense_date, particulars, amount, entered_by, remarks, 
           payment_status, approved_amount, pending_amount, rejected_amount, category, payment_method, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', ?, NOW())`,
+         VALUES (?, ?, ?, ?, ?, ?, 'Approved', ?, 0.00, 0.00, 'Raw Material', 'Cash', NOW())`,
         [
           expenseId,
           billDate,
@@ -668,10 +715,57 @@ router.put('/:id', async (req, res) => {
           parseFloat(additionalExpenses),
           createdBy,
           `Additional expenses for inventory bill: ${id}`,
-          parseFloat(additionalExpenses),
-          paymentMethod || 'Cash'
+          parseFloat(additionalExpenses)
         ]
       );
+    }
+
+    // 5. Sync Supplier Ledger
+    await deleteSupplierLedgerEntriesForReference(connection, id);
+
+    await addSupplierLedgerEntry(connection, {
+      date: billDate,
+      supplierId: supplierId,
+      entryType: 'PURCHASE',
+      referenceNo: id,
+      particular: `Purchase Invoice ${id}`,
+      debit: 0.00,
+      credit: parseFloat(grandTotal) || 0.00
+    });
+
+    if (!isCredit) {
+      await addSupplierLedgerEntry(connection, {
+        date: billDate,
+        supplierId: supplierId,
+        entryType: 'PAYMENT',
+        referenceNo: id,
+        particular: `Payment Made (At Purchase Creation)`,
+        debit: parseFloat(grandTotal) || 0.00,
+        credit: 0.00
+      });
+    } else {
+      if (advancePaid > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: billDate,
+          supplierId: supplierId,
+          entryType: 'PAYMENT',
+          referenceNo: id,
+          particular: `Payment Made (At Purchase Creation)`,
+          debit: advancePaid,
+          credit: 0.00
+        });
+      }
+      if (creditNote > 0) {
+        await addSupplierLedgerEntry(connection, {
+          date: billDate,
+          supplierId: supplierId,
+          entryType: 'PAYMENT',
+          referenceNo: id,
+          particular: `Credit Note Applied`,
+          debit: creditNote,
+          credit: 0.00
+        });
+      }
     }
 
     await connection.commit();

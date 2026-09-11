@@ -234,16 +234,56 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/raw-materials/:id
 // Delete a raw material
 router.delete('/:id', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const { id } = req.params;
-    const [result] = await pool.query('DELETE FROM raw_materials WHERE id = ?', [id]);
-    if (result.affectedRows > 0) {
-      res.json({ ok: true, message: 'Raw material deleted successfully!' });
-    } else {
-      res.status(404).json({ ok: false, error: 'Raw material not found.' });
+
+    // Check if raw material exists
+    const [rmRows] = await connection.query('SELECT id, sub_product_name FROM raw_materials WHERE id = ?', [id]);
+    if (rmRows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Raw material not found.' });
     }
+    const rm = rmRows[0];
+
+    // Check for operational business transactions
+    const [invBills] = await connection.query('SELECT COUNT(*) as c FROM inventory_bill_items WHERE raw_material_id = ?', [id]);
+    const [petBatches] = await connection.query('SELECT COUNT(*) as c FROM pet_bottle_batches WHERE raw_material_id = ? OR finished_product_id = ?', [id, id]);
+    const [prodUsages] = await connection.query('SELECT COUNT(*) as c FROM production_material_usages WHERE raw_material_id = ?', [id]);
+    const [corrections] = await connection.query('SELECT COUNT(*) as c FROM stock_corrections WHERE raw_material_id = ?', [id]);
+    const [regRows] = await connection.query("SELECT COUNT(*) as c FROM stock_register WHERE item_type = 'RAW_MATERIAL' AND item_id = ?", [id]);
+
+    const txCount = invBills[0].c + petBatches[0].c + prodUsages[0].c + corrections[0].c + regRows[0].c;
+
+    if (txCount > 0) {
+      const reasons = [];
+      if (invBills[0].c > 0) reasons.push(`${invBills[0].c} inventory purchase bill(s)`);
+      if (petBatches[0].c > 0) reasons.push(`${petBatches[0].c} PET bottle batch(es)`);
+      if (prodUsages[0].c > 0) reasons.push(`${prodUsages[0].c} production usage(s)`);
+      if (corrections[0].c > 0) reasons.push(`${corrections[0].c} stock correction(s)`);
+
+      return res.status(400).json({
+        ok: false,
+        hasTransactions: true,
+        error: `Cannot permanently delete raw material "${rm.sub_product_name}" because it is linked to existing transactions (${reasons.join(', ')}). Please toggle its status to "Disabled" instead to hide it without breaking historical records.`
+      });
+    }
+
+    // No operational transactions: clean up snapshots, manual opening, costs and delete raw material
+    await connection.beginTransaction();
+
+    await connection.query('DELETE FROM raw_material_ledger_snapshots WHERE raw_material_id = ?', [id]);
+    await connection.query('DELETE FROM raw_material_ledger_manual_opening WHERE raw_material_id = ?', [id]);
+    await connection.query('DELETE FROM raw_material_costs WHERE raw_material_id = ?', [id]);
+    await connection.query('DELETE FROM cost_sheet_items WHERE raw_material_id = ?', [id]);
+    await connection.query('DELETE FROM raw_materials WHERE id = ?', [id]);
+
+    await connection.commit();
+    res.json({ ok: true, message: `Raw material "${rm.sub_product_name}" deleted successfully!` });
   } catch (error) {
+    await connection.rollback();
     res.status(400).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
   }
 });
 

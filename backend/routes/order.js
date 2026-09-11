@@ -40,8 +40,8 @@ async function syncOrderAdvancePayment(connection, { orderId, customerId, advanc
   
   // Find any existing advance payment for this order
   const [existingPay] = await connection.query(
-    `SELECT id FROM customer_payments WHERE remarks LIKE ? AND customer_id = ?`,
-    [`%Order #${orderId}%`, customerId]
+    `SELECT id FROM customer_payments WHERE remarks LIKE ?`,
+    [`%Order #${orderId}%`]
   );
 
   if (existingPay.length > 0) {
@@ -143,14 +143,14 @@ router.post('/', async (req, res) => {
     if (existingCust.length > 0) {
       customerDbId = existingCust[0].id;
       await connection.query(
-        `UPDATE customers SET name = ?, gstin = ?, address = ? WHERE id = ?`,
-        [cleanName, cleanGst, cleanAddress, customerDbId]
+        `UPDATE customers SET name = ?, gstin = ?, address = ?, customer_type = COALESCE(NULLIF(customer_type, ''), ?) WHERE id = ?`,
+        [cleanName, cleanGst, cleanAddress, customerType, customerDbId]
       );
     } else {
       customerDbId = await generateId('CUST', 'customers', 'id', connection);
       await connection.query(
-        `INSERT INTO customers (id, name, phone, gstin, address) VALUES (?, ?, ?, ?, ?)`,
-        [customerDbId, cleanName, cleanPhone, cleanGst, cleanAddress]
+        `INSERT INTO customers (id, name, phone, gstin, address, customer_type, created_at) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+        [customerDbId, cleanName, cleanPhone, cleanGst, cleanAddress, customerType]
       );
     }
 
@@ -302,7 +302,8 @@ router.get('/', async (req, res) => {
       deliveryArea = '',
       upcoming = '',
       customerType = '',
-      excludeCustomerType = ''
+      excludeCustomerType = '',
+      dateType = 'supply_date'
     } = req.query;
 
     page = parseInt(page, 10);
@@ -320,12 +321,16 @@ router.get('/', async (req, res) => {
       queryParams.push(wild, wild, wild);
     }
 
+    const dateField = (dateType === 'created_at' || dateType === 'order_date')
+      ? 'DATE(co.created_at)'
+      : 'co.supply_date';
+
     if (startDate) {
-      whereClauses.push('co.supply_date >= ?');
+      whereClauses.push(`${dateField} >= ?`);
       queryParams.push(startDate);
     }
     if (endDate) {
-      whereClauses.push('co.supply_date <= ?');
+      whereClauses.push(`${dateField} <= ?`);
       queryParams.push(endDate);
     }
 
@@ -431,12 +436,31 @@ router.get('/', async (req, res) => {
       });
     }
 
+    // Aggregated product requirement summary across all filtered orders
+    const [productRequirements] = await pool.query(
+      `SELECT 
+         coi.finished_product_id AS productId,
+         fp.name AS productName,
+         'Qty' AS productUnit,
+         SUM(coi.quantity) AS totalQuantity,
+         COUNT(DISTINCT co.id) AS orderCount,
+         SUM(coi.amount) AS totalAmount
+       FROM customer_order_items coi
+       JOIN customer_orders co ON coi.order_id = co.id
+       JOIN finished_products fp ON coi.finished_product_id = fp.id
+       ${whereStr}
+       GROUP BY coi.finished_product_id, fp.name
+       ORDER BY totalQuantity DESC`,
+      queryParams
+    );
+
     res.json({
       ok: true,
       orders: ordersWithItems,
       total,
       page,
-      limit
+      limit,
+      productRequirements: productRequirements || []
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });
@@ -522,11 +546,17 @@ router.put('/:id', async (req, res) => {
 
     const { id } = req.params;
     const {
+      customerId,
+      customerName,
+      customerPhone,
+      customerGstin = '',
+      customerAddress = '',
+      customerType = 'General Customer',
+      alternatePhone = '',
       supplyDate,
       supplyTime,
-      deliveryAddress,
+      deliveryAddress = '',
       deliveryInstructions = '',
-      alternatePhone = '',
       subTotal = 0.00,
       discount = 0.00,
       tax = 0.00,
@@ -539,9 +569,9 @@ router.put('/:id', async (req, res) => {
 
     const editedBy = req.admin?.name || req.admin?.username || 'Admin';
 
-    // Verify current status
+    // Verify current status and fetch existing order
     const [existing] = await connection.query(
-      `SELECT status FROM customer_orders WHERE id = ?`,
+      `SELECT * FROM customer_orders WHERE id = ?`,
       [id]
     );
 
@@ -556,19 +586,51 @@ router.put('/:id', async (req, res) => {
     if (!supplyTime) throw new Error('Supply Time is required.');
     if (items.length === 0) throw new Error('At least one product line is required.');
 
+    const cleanPhone = customerPhone ? normalizePhone10(customerPhone) : existing[0].customer_phone;
+    const cleanName = customerName ? String(customerName).trim() : existing[0].customer_name;
+    const cleanGst = customerGstin !== undefined ? String(customerGstin).trim() : (existing[0].customer_gstin || '');
+    const cleanAddress = customerAddress !== undefined ? String(customerAddress).trim() : (existing[0].customer_address || '');
+
+    // Resolve or Update Customer
+    let customerDbId = customerId || existing[0].customer_id || null;
+    if (cleanPhone) {
+      const [existingCust] = await connection.query(
+        `SELECT id FROM customers WHERE phone = ?`,
+        [cleanPhone]
+      );
+
+      if (existingCust.length > 0) {
+        customerDbId = existingCust[0].id;
+        await connection.query(
+          `UPDATE customers SET name = ?, gstin = ?, address = ? WHERE id = ?`,
+          [cleanName, cleanGst, cleanAddress, customerDbId]
+        );
+      } else if (!customerDbId) {
+        customerDbId = await generateId('CUST', 'customers', 'id', connection);
+        await connection.query(
+          `INSERT INTO customers (id, name, phone, gstin, address) VALUES (?, ?, ?, ?, ?)`,
+          [customerDbId, cleanName, cleanPhone, cleanGst, cleanAddress]
+        );
+      }
+    }
+
     const pendingAmount = Math.max(0, parseFloat(grandTotal) - parseFloat(advanceAmount || 0));
 
     // 1. Update Order Metadata
     await connection.query(
       `UPDATE customer_orders SET 
+        customer_id = ?, customer_name = ?, customer_phone = ?, customer_gstin = ?, 
+        customer_address = ?, customer_type = ?, alternate_phone = ?,
         supply_date = ?, supply_time = ?, delivery_address = ?, delivery_instructions = ?, 
-        alternate_phone = ?, sub_total = ?, discount = ?, tax = ?, grand_total = ?, 
+        sub_total = ?, discount = ?, tax = ?, grand_total = ?, 
         payment_mode = ?, advance_amount = ?, pending_amount = ?, notes = ?, 
         edited_by = ?, edited_at = NOW()
        WHERE id = ?`,
       [
-        supplyDate, supplyTime, deliveryAddress, deliveryInstructions,
-        alternatePhone, subTotal, discount, tax, grandTotal,
+        customerDbId, cleanName, cleanPhone, cleanGst,
+        cleanAddress, customerType || existing[0].customer_type, alternatePhone,
+        supplyDate, supplyTime, deliveryAddress || cleanAddress, deliveryInstructions,
+        subTotal, discount, tax, grandTotal,
         paymentMode, advanceAmount, pendingAmount, notes,
         editedBy, id
       ]
@@ -609,12 +671,14 @@ router.put('/:id', async (req, res) => {
     }
 
     // Sync updated advance payment as Customer Credit Balance in Accounts Ledger
-    await syncOrderAdvancePayment(connection, {
-      orderId: id,
-      customerId: existing[0].customer_id,
-      advanceAmount,
-      paymentMode
-    });
+    if (customerDbId) {
+      await syncOrderAdvancePayment(connection, {
+        orderId: id,
+        customerId: customerDbId,
+        advanceAmount,
+        paymentMode
+      });
+    }
 
     await connection.commit();
     res.json({

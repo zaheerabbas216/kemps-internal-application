@@ -10,7 +10,10 @@ const GoodsLedger = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset();
     const istDate = new Date(now.getTime() + (330 + offset) * 60000);
-    return istDate.toISOString().split('T')[0];
+    const yyyy = istDate.getFullYear();
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
   const [ledgerDate, setLedgerDate] = useState(getTodayISTStr());
@@ -44,6 +47,32 @@ const GoodsLedger = () => {
   useEffect(() => {
     fetchLedger();
   }, [ledgerDate]);
+
+  // Midnight date rollover detector
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const today = getTodayISTStr();
+      const storedToday = sessionStorage.getItem('kemps_goods_today');
+      if (storedToday && storedToday !== today) {
+        sessionStorage.setItem('kemps_goods_today', today);
+        fetchLedger();
+      } else if (!storedToday) {
+        sessionStorage.setItem('kemps_goods_today', today);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [ledgerDate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setIsDrillOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchLedger = async () => {
     if (!ledgerDate) {
@@ -98,27 +127,6 @@ const GoodsLedger = () => {
       groups[cat].push(item);
     });
     return groups;
-  };
-
-  // Close Day operation
-  const handleCloseDay = async () => {
-    if (!ledgerDate) {
-      alert('Please select a valid date first.');
-      return;
-    }
-    if (window.confirm(`Are you sure you want to CLOSE and LOCK the finished goods ledger for ${formatDateDDMMYYYY(ledgerDate)}?\nOnce locked, Opening, IN, OUT, and Closing quantities cannot be modified.`)) {
-      try {
-        setLoading(true);
-        const res = await api.post('/goods-ledger/close', { date: ledgerDate });
-        if (res.data.ok) {
-          alert(res.data.message);
-          fetchLedger();
-        }
-      } catch (err) {
-        alert(err.response?.data?.error || 'Failed to close day.');
-        setLoading(false);
-      }
-    }
   };
 
   // Set Opening handlers
@@ -179,6 +187,18 @@ const GoodsLedger = () => {
     if (name.includes('juice') || name.includes('mango')) return '🥭';
     if (name.includes('soft') || name.includes('soda') || name.includes('drink')) return '🥤';
     return '📦';
+  };
+
+  // Helper: Extract product size / prefix group to visually separate sizes (e.g. 2L, 1L, 500ml, 300ml, 250ml, 20L)
+  const getProductSizeGroup = (name) => {
+    if (!name) return '';
+    const trimmed = name.trim();
+    const match = trimmed.match(/^(\d+(?:\.\d+)?\s*(?:l|ltr|litre|litres|ml|gm|kg|gal)?)\b/i);
+    if (match && match[1]) {
+      return match[1].toLowerCase().replace(/\s+/g, '').replace('ltr', 'l').replace('litre', 'l');
+    }
+    const words = trimmed.split(' ');
+    return words[0].toLowerCase();
   };
 
   // Open drilldown details modal
@@ -259,6 +279,7 @@ const GoodsLedger = () => {
 
   const grandTotals = calculateGrandTotals();
   const groupedItems = getGroupedItems();
+  const isToday = ledgerDate === getTodayISTStr();
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
@@ -271,11 +292,22 @@ const GoodsLedger = () => {
           >
             ← Back
           </button>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
-            GOODS LEDGER
-          </h1>
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
+              GOODS LEDGER
+            </h1>
+            <p className="text-slate-500 text-xs font-semibold mt-0.5">
+              Daily live stock tracking &bull; Closes automatically at midnight (12:00 AM)
+            </p>
+          </div>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/goods-history')}
+            className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            📜 History
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -311,9 +343,16 @@ const GoodsLedger = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           {/* Ledger Date Picker */}
           <div className="md:col-span-1 space-y-1.5">
-            <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-              Ledger Date
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                Ledger Date
+              </label>
+              {isToday && (
+                <span className="text-[10px] bg-emerald-100 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full">
+                  Today (Active)
+                </span>
+              )}
+            </div>
             <input
               type="date"
               value={ledgerDate}
@@ -325,10 +364,12 @@ const GoodsLedger = () => {
           {/* Action Buttons Row */}
           <div className="md:col-span-2 flex flex-wrap gap-3">
             <button
-              onClick={handleRefresh}
-              className="btn-premium bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 px-5 rounded-xl transition-all shadow-md flex items-center gap-1.5 text-xs"
+              onClick={() => setLedgerDate(getTodayISTStr())}
+              className={`btn-premium font-bold h-11 px-4 rounded-xl transition-all shadow-sm text-xs flex items-center gap-1.5 ${
+                isToday ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-primary text-white hover:bg-primary/90'
+              }`}
             >
-              🔄 Refresh
+              📅 Jump to Today
             </button>
             <button
               onClick={handleStartEditOpening}
@@ -342,15 +383,10 @@ const GoodsLedger = () => {
               ✏️ Set Opening
             </button>
             <button
-              onClick={handleCloseDay}
-              disabled={isClosed}
-              className={`btn-premium font-bold h-11 px-5 rounded-xl transition-all text-xs flex items-center gap-1.5 shadow-md ${
-                isClosed
-                  ? 'bg-emerald-100 text-emerald-600 cursor-not-allowed font-black'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-              }`}
+              onClick={() => navigate('/goods-history')}
+              className="btn-premium bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-5 rounded-xl transition-all shadow-md flex items-center gap-1.5 text-xs"
             >
-              {isClosed ? '🔒 DAY CLOSED' : '🔒 Close Day'}
+              📜 View Closed History
             </button>
           </div>
         </div>
@@ -360,7 +396,7 @@ const GoodsLedger = () => {
           <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 flex items-center gap-2 text-xs font-semibold text-emerald-800">
             <span>🔒</span>
             <span>
-              This day's ledger has been locked and snapshot by <b>{closedBy}</b> on <b>{closedAt}</b>. Quantities cannot be modified.
+              This day's ledger has been automatically closed and saved to History ({closedBy || 'System'} on {closedAt || 'Midnight'}).
             </span>
           </div>
         )}
@@ -389,27 +425,38 @@ const GoodsLedger = () => {
                     <span>{getCategoryEmoji(catName)}</span> {catName}
                   </h4>
                   <div className="space-y-1.5">
-                    {items.map(item => (
-                      <div key={item.finished_product_id} className="grid grid-cols-[1fr_180px_130px] items-center gap-4 py-2 border-b border-amber-100/10 hover:bg-amber-50/10 px-2 rounded-lg transition-colors">
-                        <div className="text-slate-700 font-bold text-sm">
-                          {item.product_name}
-                        </div>
-                        <div className="flex justify-center">
-                          <span className="bg-blue-50/70 text-slate-500 rounded-lg px-2.5 py-1 text-[11px] font-bold border border-slate-200/40">
-                            {item.category_name}
-                          </span>
-                        </div>
-                        <div>
-                          <input
-                            type="number"
-                            step="any"
-                            value={openingStocks[item.finished_product_id] ?? '0'}
-                            onChange={(e) => handleStockChange(item, e.target.value)}
-                            className="w-full h-10 border border-amber-300 bg-white text-center font-black rounded-xl text-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
-                          />
-                        </div>
-                      </div>
-                    ))}
+                    {items.map((item, idx) => {
+                      const currentGroup = getProductSizeGroup(item.product_name);
+                      const prevGroup = idx > 0 ? getProductSizeGroup(items[idx - 1].product_name) : null;
+                      const isNewGroup = idx > 0 && currentGroup !== prevGroup;
+
+                      return (
+                        <React.Fragment key={item.finished_product_id}>
+                          {isNewGroup && (
+                            <div className="h-2 border-b-2 border-amber-200/60 my-1 bg-amber-100/30 rounded"></div>
+                          )}
+                          <div className="grid grid-cols-[1fr_180px_130px] items-center gap-4 py-2 border-b border-amber-100/10 hover:bg-amber-50/10 px-2 rounded-lg transition-colors">
+                            <div className="text-slate-700 font-bold text-sm">
+                              {item.product_name}
+                            </div>
+                            <div className="flex justify-center">
+                              <span className="bg-blue-50/70 text-slate-500 rounded-lg px-2.5 py-1 text-[11px] font-bold border border-slate-200/40">
+                                {item.category_name}
+                              </span>
+                            </div>
+                            <div>
+                              <input
+                                type="number"
+                                step="any"
+                                value={openingStocks[item.finished_product_id] ?? '0'}
+                                onChange={(e) => handleStockChange(item, e.target.value)}
+                                className="w-full h-10 border border-amber-300 bg-white text-center font-black rounded-xl text-slate-700 focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all outline-none text-sm"
+                              />
+                            </div>
+                          </div>
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
                 </div>
               );
@@ -569,58 +616,71 @@ const GoodsLedger = () => {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-medium">
-                          {groupItems.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/40 transition-colors">
-                              <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
-                                {item.product_name}
-                              </td>
-                              <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
-                                BOXES
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'OPENING')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.opening_stock.toLocaleString('en-IN')}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'IN')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.stock_in === 0 ? (
-                                  <span className="text-emerald-500 font-bold">—</span>
-                                ) : (
-                                  <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
+                          {groupItems.map((item, idx) => {
+                            const currentGroup = getProductSizeGroup(item.product_name);
+                            const prevGroup = idx > 0 ? getProductSizeGroup(groupItems[idx - 1].product_name) : null;
+                            const isNewGroup = idx > 0 && currentGroup !== prevGroup;
+
+                            return (
+                              <React.Fragment key={idx}>
+                                {isNewGroup && (
+                                  <tr className="bg-blue-50 border-y border-blue-200/80 h-3.5 select-none">
+                                    <td colSpan={7} className="py-1 px-5 bg-blue-100/50"></td>
+                                  </tr>
                                 )}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'OUT')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.stock_out === 0 ? (
-                                  <span className="text-rose-500 font-bold">—</span>
-                                ) : (
-                                  <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
-                                )}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'RETURN')}
-                                className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.stock_return === 0 ? (
-                                  <span className="text-amber-500 font-bold">—</span>
-                                ) : (
-                                  <span className="text-amber-600">+{item.stock_return.toLocaleString('en-IN')}</span>
-                                )}
-                              </td>
-                              <td 
-                                onClick={() => handleDrilldown(item, 'CLOSING')}
-                                className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
-                              >
-                                {item.closing_stock.toLocaleString('en-IN')}
-                              </td>
-                            </tr>
-                          ))}
+                                <tr className="hover:bg-slate-50/40 transition-colors">
+                                  <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
+                                    {item.product_name}
+                                  </td>
+                                  <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
+                                    BOXES
+                                  </td>
+                                  <td 
+                                    onClick={() => handleDrilldown(item, 'OPENING')}
+                                    className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {item.opening_stock.toLocaleString('en-IN')}
+                                  </td>
+                                  <td 
+                                    onClick={() => handleDrilldown(item, 'IN')}
+                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {item.stock_in === 0 ? (
+                                      <span className="text-emerald-500 font-bold">—</span>
+                                    ) : (
+                                      <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
+                                    )}
+                                  </td>
+                                  <td 
+                                    onClick={() => handleDrilldown(item, 'OUT')}
+                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {item.stock_out === 0 ? (
+                                      <span className="text-rose-500 font-bold">—</span>
+                                    ) : (
+                                      <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
+                                    )}
+                                  </td>
+                                  <td 
+                                    onClick={() => handleDrilldown(item, 'RETURN')}
+                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {item.stock_return === 0 ? (
+                                      <span className="text-amber-500 font-bold">—</span>
+                                    ) : (
+                                      <span className="text-amber-600">+{item.stock_return.toLocaleString('en-IN')}</span>
+                                    )}
+                                  </td>
+                                  <td 
+                                    onClick={() => handleDrilldown(item, 'CLOSING')}
+                                    className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
+                                  >
+                                    {item.closing_stock.toLocaleString('en-IN')}
+                                  </td>
+                                </tr>
+                              </React.Fragment>
+                            );
+                          })}
                         </tbody>
 
                         {/* Group Totals Row */}

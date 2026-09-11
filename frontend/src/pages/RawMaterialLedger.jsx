@@ -10,7 +10,10 @@ const RawMaterialLedger = () => {
     const now = new Date();
     const offset = now.getTimezoneOffset();
     const istDate = new Date(now.getTime() + (330 + offset) * 60000);
-    return istDate.toISOString().split('T')[0];
+    const yyyy = istDate.getFullYear();
+    const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(istDate.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   };
 
   const [ledgerDate, setLedgerDate] = useState(getTodayISTStr());
@@ -45,6 +48,23 @@ const RawMaterialLedger = () => {
   useEffect(() => {
     fetchLedger();
     setRmCurrentPages({});
+  }, [ledgerDate]);
+
+  // Midnight date rollover detector
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const today = getTodayISTStr();
+      // If user was viewing yesterday and midnight passed, optionally keep in sync
+      const storedToday = sessionStorage.getItem('kemps_rm_today');
+      if (storedToday && storedToday !== today) {
+        sessionStorage.setItem('kemps_rm_today', today);
+        fetchLedger();
+      } else if (!storedToday) {
+        sessionStorage.setItem('kemps_rm_today', today);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
   }, [ledgerDate]);
 
   useEffect(() => {
@@ -110,27 +130,6 @@ const RawMaterialLedger = () => {
       groups[cat].push(item);
     });
     return groups;
-  };
-
-  // Close Day operation
-  const handleCloseDay = async () => {
-    if (!ledgerDate) {
-      alert('Please select a valid date first.');
-      return;
-    }
-    if (window.confirm(`Are you sure you want to CLOSE and LOCK the ledger for ${formatDateDDMMYYYY(ledgerDate)}?\nOnce locked, Opening, IN, OUT, and Closing quantities cannot be modified.`)) {
-      try {
-        setLoading(true);
-        const res = await api.post('/raw-material-ledger/close', { date: ledgerDate });
-        if (res.data.ok) {
-          alert(res.data.message);
-          fetchLedger();
-        }
-      } catch (err) {
-        alert(err.response?.data?.error || 'Failed to close day.');
-        setLoading(false);
-      }
-    }
   };
 
   // Set Opening handlers
@@ -261,26 +260,6 @@ const RawMaterialLedger = () => {
     return dateStr;
   };
 
-  // Dynamic lists of unique materials for the "Set Opening" dropdown
-  const getUniqueMaterialsForDropdown = () => {
-    const list = [];
-    const ids = new Set();
-    (ledgerData.items || []).forEach(item => {
-      if (!ids.has(item.raw_material_id)) {
-        ids.add(item.raw_material_id);
-        list.push({
-          id: item.raw_material_id,
-          name: item.sub_product_name,
-          category: item.category_name,
-          defaultUnit: item.unit
-        });
-      }
-    });
-    return list;
-  };
-
-  const uniqueMaterials = getUniqueMaterialsForDropdown();
-
   // Helper: calculate totals for a specific group
   const calculateGroupTotals = (groupItems) => {
     let opening = 0;
@@ -313,6 +292,7 @@ const RawMaterialLedger = () => {
 
   const grandTotals = calculateGrandTotals();
   const groupedItems = getGroupedItems();
+  const isToday = ledgerDate === getTodayISTStr();
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
@@ -325,11 +305,22 @@ const RawMaterialLedger = () => {
           >
             ← Back
           </button>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
-            RAW MATERIAL LEDGER
-          </h1>
+          <div>
+            <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">
+              RAW MATERIAL LEDGER
+            </h1>
+            <p className="text-slate-500 text-xs font-semibold mt-0.5">
+              Daily live stock tracking &bull; Closes automatically at midnight (12:00 AM)
+            </p>
+          </div>
         </div>
-        <div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/raw-material-history')}
+            className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+          >
+            📜 History
+          </button>
           <button
             onClick={handleRefresh}
             disabled={refreshing}
@@ -363,9 +354,16 @@ const RawMaterialLedger = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           {/* Ledger Date Picker */}
           <div className="md:col-span-1 space-y-1.5">
-            <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-              Ledger Date
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                Ledger Date
+              </label>
+              {isToday && (
+                <span className="text-[10px] bg-emerald-100 text-emerald-700 font-extrabold px-2 py-0.5 rounded-full">
+                  Today (Active)
+                </span>
+              )}
+            </div>
             <input
               type="date"
               value={ledgerDate}
@@ -377,10 +375,12 @@ const RawMaterialLedger = () => {
           {/* Action Buttons Row */}
           <div className="md:col-span-2 flex flex-wrap gap-3">
             <button
-              onClick={handleRefresh}
-              className="btn-premium bg-blue-600 hover:bg-blue-700 text-white font-bold h-11 px-5 rounded-xl transition-all shadow-md flex items-center gap-1.5 text-xs"
+              onClick={() => setLedgerDate(getTodayISTStr())}
+              className={`btn-premium font-bold h-11 px-4 rounded-xl transition-all shadow-sm text-xs flex items-center gap-1.5 ${
+                isToday ? 'bg-slate-100 text-slate-500 border border-slate-200' : 'bg-primary text-white hover:bg-primary/90'
+              }`}
             >
-              🔄 Refresh
+              📅 Jump to Today
             </button>
             <button
               onClick={handleStartEditOpening}
@@ -394,15 +394,10 @@ const RawMaterialLedger = () => {
               ✏️ Set Opening
             </button>
             <button
-              onClick={handleCloseDay}
-              disabled={isClosed}
-              className={`btn-premium font-bold h-11 px-5 rounded-xl transition-all text-xs flex items-center gap-1.5 shadow-md ${
-                isClosed
-                  ? 'bg-emerald-100 text-emerald-600 cursor-not-allowed font-black'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-              }`}
+              onClick={() => navigate('/raw-material-history')}
+              className="btn-premium bg-slate-800 hover:bg-slate-900 text-white font-bold h-11 px-5 rounded-xl transition-all shadow-md flex items-center gap-1.5 text-xs"
             >
-              {isClosed ? '🔒 DAY CLOSED' : '🔒 Close Day'}
+              📜 View Closed History
             </button>
           </div>
         </div>
@@ -412,7 +407,7 @@ const RawMaterialLedger = () => {
           <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3.5 flex items-center gap-2 text-xs font-semibold text-emerald-800">
             <span>🔒</span>
             <span>
-              This day's ledger has been locked and snapshot by <b>{closedBy}</b> on <b>{closedAt}</b>. Quantities cannot be modified.
+              This day's ledger has been automatically closed and saved to History ({closedBy || 'System'} on {closedAt || 'Midnight'}).
             </span>
           </div>
         )}
@@ -707,7 +702,7 @@ const RawMaterialLedger = () => {
                                   activeCatPage === pageNum
                                     ? 'bg-primary border-primary text-white'
                                     : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                }`}
+                                  }`}
                               >
                                 {pageNum}
                               </button>
@@ -843,7 +838,7 @@ const RawMaterialLedger = () => {
             {/* Total Footer inside modal */}
             {!loadingDrill && drillData.transactions.length > 0 && (
               <div className="bg-[#f8fafc] border border-slate-100 rounded-2xl p-4 mt-6 flex justify-between items-center text-xs font-bold shrink-0">
-                <span className="text-slate-550 uppercase tracking-wider">Summary Balance:</span>
+                <span className="text-slate-555 uppercase tracking-wider">Summary Balance:</span>
                 <span className="font-black text-sm text-slate-800">
                   {drillData.transactions.reduce((sum, tx) => {
                     const q = parseFloat(tx.quantity) || 0;

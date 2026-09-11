@@ -443,19 +443,13 @@ router.post('/receive', async (req, res) => {
        SET amount_paid = ?, 
            due_amount = ?, 
            payment_status = ?,
-           approved_amount = approved_amount + ?,
-           cash_paid = cash_paid + ?,
-           upi_paid = upi_paid + ?,
-           bank_paid = bank_paid + ?
+           approved_amount = approved_amount + ?
        WHERE id = ?`,
       [
         newAmountPaid,
         newDueAmount,
         newPaymentStatus,
         amt,
-        cashVal,
-        upiVal,
-        bankVal,
         billId
       ]
     );

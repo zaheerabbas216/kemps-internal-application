@@ -4,6 +4,8 @@ dotenv.config();
 import app from './app.js';
 import pool from './config/db.js';
 import { runMigration } from './migrate.js';
+import { startRawMaterialAutoCloseScheduler } from './services/rawMaterialAutoCloseService.js';
+import { startGoodsLedgerAutoCloseScheduler } from './services/goodsLedgerAutoCloseService.js';
 
 import { execSync } from 'child_process';
 
@@ -33,6 +35,8 @@ async function startServer() {
 
     const server = app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      startRawMaterialAutoCloseScheduler();
+      startGoodsLedgerAutoCloseScheduler();
     });
 
     // Graceful shutdown handling (closes Express server and MySQL connection pool)

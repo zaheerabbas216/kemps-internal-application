@@ -868,31 +868,6 @@ const InventoryHistory = () => {
                         >
                           View
                         </button>
-                        <button 
-                          onClick={() => handleOpenForm(bill)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => confirmDelete(bill)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
-                        <button 
-                          onClick={async () => {
-                            try {
-                              const res = await api.get(`/inventory/${bill.id}`);
-                              if (res.data.ok) handlePrintBill(res.data);
-                            } catch (err) {
-                              alert('Failed to print bill.');
-                            }
-                          }}
-                          className="btn btn-ghost btn-xs text-slate-650 hover:bg-slate-100 rounded-lg px-2"
-                        >
-                          Print
-                        </button>
                       </div>
                     </td>
                   </tr>

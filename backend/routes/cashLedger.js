@@ -99,6 +99,25 @@ const initTable = async () => {
         SET cp.customer_id = cb.customer_id
         WHERE cp.customer_id IS NULL
       `);
+      // Safe historical reconciliation: ensure customer_bills.cash_paid only contains initial counter cash
+      await pool.query(`
+        UPDATE customer_bills cb
+        JOIN (
+          SELECT bill_id,
+                 SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                 SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                 SUM(COALESCE(bank_paid, 0)) AS sub_bank
+          FROM customer_payments
+          WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+          GROUP BY bill_id
+        ) sub ON cb.id = sub.bill_id
+        SET cb.cash_paid = GREATEST(0, cb.cash_paid - sub.sub_cash),
+            cb.upi_paid = GREATEST(0, cb.upi_paid - sub.sub_upi),
+            cb.bank_paid = GREATEST(0, cb.bank_paid - sub.sub_bank)
+        WHERE (cb.cash_paid >= sub.sub_cash AND sub.sub_cash > 0)
+           OR (cb.upi_paid >= sub.sub_upi AND sub.sub_upi > 0)
+           OR (cb.bank_paid >= sub.sub_bank AND sub.sub_bank > 0)
+      `);
     } catch (e) { /* ignore */ }
   } catch (err) {
     console.error('Failed to init cash ledger tables:', err);
@@ -107,7 +126,7 @@ const initTable = async () => {
 initTable();
 
 // Helper to compute itemized daily ledger summary for any target date
-const computeDailyLedger = async (targetDate) => {
+export const computeDailyLedger = async (targetDate) => {
   // 1. Opening balance
   const [opRows] = await pool.query(
     `SELECT cash_amount, upi_amount, bank_amount, remarks FROM cash_ledger_opening WHERE entry_date = ?`,
@@ -118,31 +137,92 @@ const computeDailyLedger = async (targetDate) => {
   let openingBank  = opRows.length ? parseFloat(opRows[0].bank_amount || 0) : 0;
   let totalOpening = openingCash + openingUpi + openingBank;
 
-  // 2. Billing
+  // Total Credit Balance Adjusted on targetDate across all bills on targetDate
+  const [creditAdjRows] = await pool.query(
+    `SELECT
+       COALESCE(SUM(
+         GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+         ))
+       ), 0) AS total_credit_adjusted
+     FROM customer_bills cb
+     LEFT JOIN (
+       SELECT bill_id,
+              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+              SUM(COALESCE(amount_received, 0)) AS sub_total
+       FROM customer_payments
+       WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+       GROUP BY bill_id
+     ) sub ON cb.id = sub.bill_id
+     WHERE cb.billing_date = ?
+       AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`,
+    [targetDate]
+  );
+  const totalCreditAdjusted = parseFloat(creditAdjRows[0]?.total_credit_adjusted || 0);
+
+  // 2. Billing — ONLY actual cash/UPI/Bank collected at billing counter at invoice creation time
   const [bRows] = await pool.query(
     `SELECT
        cb.id AS ref_id,
        DATE_FORMAT(cb.billing_date,'%Y-%m-%d') AS txn_date,
        cb.customer_name AS party,
-       cb.payment_mode AS method,
-       cb.cash_paid AS cash_amt,
-       cb.upi_paid AS upi_amt,
-       cb.bank_paid AS bank_amt,
-       GREATEST(0, cb.amount_paid - (cb.cash_paid + cb.upi_paid + cb.bank_paid)) AS credit_adjusted_amt,
-       cb.amount_paid AS amount,
+       cb.company AS branch,
+       CASE
+         WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 AND GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'Cash + UPI'
+         WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 AND GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Cash + Bank'
+         WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 AND GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'UPI + Bank'
+         WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
+         WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
+         WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
+         ELSE cb.payment_mode
+       END AS method,
+       GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
+       GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) AS upi_amt,
+       GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) AS bank_amt,
+       GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+         GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+         GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+       )) AS credit_adjusted_amt,
+       (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+        GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+        GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
        'in' AS flow,
        'Billing' AS source_module,
        CONCAT('Sales Invoice — ', cb.customer_name, 
          CASE 
-           WHEN (cb.amount_paid - (cb.cash_paid + cb.upi_paid + cb.bank_paid)) > 0 
+           WHEN ((cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+             GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+             GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+           )) > 0 
            THEN ' (Credit Balance Adjusted)' 
            ELSE '' 
          END) AS description
      FROM customer_bills cb
-     WHERE (cb.amount_paid > 0 OR cb.cash_paid > 0 OR cb.upi_paid > 0 OR cb.bank_paid > 0)
+     LEFT JOIN (
+       SELECT bill_id,
+              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+              SUM(COALESCE(amount_received, 0)) AS sub_total
+       FROM customer_payments
+       WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+       GROUP BY bill_id
+     ) sub ON cb.id = sub.bill_id
+     WHERE cb.billing_date = ?
+       AND (
+         GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
+         GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
+         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0
+       )
        AND cb.payment_mode != 'Credit'
-       AND cb.billing_date = ?
-       AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`,
+       AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))
+     ORDER BY cb.created_at DESC`,
     [targetDate]
   );
 
@@ -157,18 +237,13 @@ const computeDailyLedger = async (targetDate) => {
        COALESCE(cp.cash_paid, 0) AS cash_amt,
        COALESCE(cp.upi_paid, 0) AS upi_amt,
        COALESCE(cp.bank_paid, 0) AS bank_amt,
-       GREATEST(0, cp.amount_received - (COALESCE(cp.cash_paid, 0) + COALESCE(cp.upi_paid, 0) + COALESCE(cp.bank_paid, 0))) AS credit_adjusted_amt,
+       0 AS credit_adjusted_amt,
        cp.amount_received AS amount,
        'in' AS flow,
        'Credit Payment' AS source_module,
        CASE 
          WHEN cp.bill_id IS NULL OR cp.bill_id = '' THEN CONCAT('Advance credit payment received — ', COALESCE(NULLIF(TRIM(cb.customer_name), ''), cust.name, 'Customer'))
-         ELSE CONCAT('Credit collected for ', cp.bill_id,
-           CASE 
-             WHEN cp.payment_method LIKE '%Credit Balance%' 
-             THEN ' (Credit Balance Adjusted)' 
-             ELSE '' 
-           END)
+         ELSE CONCAT('Credit collected for ', cp.bill_id)
        END AS description,
        cp.bill_id AS invoice_no,
        cp.remarks AS notes
@@ -177,7 +252,11 @@ const computeDailyLedger = async (targetDate) => {
      LEFT JOIN customer_ledger cl ON (cl.reference_no = cp.id AND cl.entry_type = 'PAYMENT')
      LEFT JOIN customers cust ON cust.id = COALESCE(cp.customer_id, cl.customer_id)
      LEFT JOIN customers cust2 ON cust2.id = cb.customer_id
-     WHERE cp.payment_status = 'Approved' AND cp.payment_date = ?`,
+     WHERE cp.payment_status = 'Approved' 
+       AND (COALESCE(cp.cash_paid, 0) > 0 OR COALESCE(cp.upi_paid, 0) > 0 OR COALESCE(cp.bank_paid, 0) > 0 OR cp.amount_received > 0)
+       AND cp.payment_method NOT LIKE '%Credit Balance%'
+       AND cp.payment_date = ?
+     ORDER BY cp.created_at DESC`,
     [targetDate]
   );
 
@@ -228,8 +307,10 @@ const computeDailyLedger = async (targetDate) => {
        id AS ref_id,
        DATE_FORMAT(expense_date,'%Y-%m-%d') AS txn_date,
        entered_by AS party,
-       payment_method AS method,
-       0 AS cash_amt, 0 AS upi_amt, 0 AS bank_amt,
+       CASE WHEN particulars LIKE '%Inventory Purchase Expense%' THEN 'Cash' ELSE payment_method END AS method,
+       CASE WHEN payment_method LIKE '%Cash%' OR particulars LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS cash_amt,
+       CASE WHEN payment_method LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS upi_amt,
+       CASE WHEN payment_method NOT LIKE '%Cash%' AND payment_method NOT LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS bank_amt,
        0 AS credit_adjusted_amt,
        amount AS amount,
        'out' AS flow,
@@ -303,13 +384,9 @@ const computeDailyLedger = async (targetDate) => {
 
   let cashIn = 0, upiIn = 0, bankIn = 0;
   let cashOut = 0, upiOut = 0, bankOut = 0;
-  let totalCreditAdjusted = 0;
 
   for (const r of txns) {
     const amt = r.amount;
-    const creditAdj = parseFloat(r.credit_adjusted_amt || 0);
-    totalCreditAdjusted += creditAdj;
-
     const meth = String(r.method || '').toLowerCase();
     const rCash = parseFloat(r.cash_amt || 0);
     const rUpi  = parseFloat(r.upi_amt  || 0);
@@ -321,14 +398,13 @@ const computeDailyLedger = async (targetDate) => {
       cash = rCash;
       upi  = rUpi;
       bank = rBank;
-    } else if (meth !== 'credit balance' && meth !== 'credit adjust' && (amt - creditAdj) > 0) {
-      const netPaid = Math.max(0, amt - creditAdj);
+    } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
       if (meth.includes('cash')) {
-        cash = netPaid;
+        cash = amt;
       } else if (meth.includes('upi')) {
-        upi = netPaid;
+        upi = amt;
       } else {
-        bank = netPaid;
+        bank = amt;
       }
     }
 
@@ -889,12 +965,50 @@ router.get('/', async (req, res) => {
       }
     }
 
-    // ── 1. Billing — direct payments on billing_date
+    // ── Total Credit Adjusted across all bills in date range ──
+    let totalCreditAdjusted = 0;
+    {
+      let w = [`cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`];
+      let p = [];
+      if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
+      if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
+      const whereStr = w.length ? `WHERE ${w.join(' AND ')}` : '';
+      const [creditAdjRows] = await pool.query(
+        `SELECT
+           COALESCE(SUM(
+             GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+               GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+               GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+               GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+             ))
+           ), 0) AS total_credit_adjusted
+         FROM customer_bills cb
+         LEFT JOIN (
+           SELECT bill_id,
+                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+                  SUM(COALESCE(amount_received, 0)) AS sub_total
+           FROM customer_payments
+           WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+           GROUP BY bill_id
+         ) sub ON cb.id = sub.bill_id
+         ${whereStr}`,
+        p
+      );
+      totalCreditAdjusted = parseFloat(creditAdjRows[0]?.total_credit_adjusted || 0);
+    }
+
+    // ── 1. Billing — direct counter cash/UPI/Bank on billing_date
     const billingRows = [];
     if (type !== 'out') {
-      let w = ['(cb.amount_paid > 0 OR cb.cash_paid > 0 OR cb.upi_paid > 0 OR cb.bank_paid > 0)',
-               `cb.payment_mode != 'Credit'`,
-               `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`];
+      let w = [
+        `(GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
+          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
+          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0)`,
+        `cb.payment_mode != 'Credit'`,
+        `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`
+      ];
       let p = [];
       if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
       if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
@@ -906,17 +1020,17 @@ router.get('/', async (req, res) => {
       
       if (method && method !== 'All') {
         if (method === 'Cash') {
-          w.push('(cb.cash_paid > 0 OR cb.payment_mode LIKE ?)');
-          p.push('%Cash%');
+          w.push('GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0');
         } else if (method === 'UPI') {
-          w.push('(cb.upi_paid > 0 OR cb.payment_mode LIKE ?)');
-          p.push('%UPI%');
+          w.push('GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0');
         } else if (method === 'Bank') {
-          w.push('(cb.bank_paid > 0 OR cb.payment_mode LIKE ? OR cb.payment_mode LIKE ? OR cb.payment_mode LIKE ?)');
-          p.push('%Bank%', '%Online%', '%Cheque%');
+          w.push('GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0');
         } else if (method === 'Credit Balance') {
-          w.push('(cb.payment_mode LIKE ? OR cb.payment_mode LIKE ?)');
-          p.push('%Credit Balance%', '%Credit Adjust%');
+          w.push(`GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+            GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+            GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+          )) > 0`);
         }
       }
 
@@ -926,21 +1040,49 @@ router.get('/', async (req, res) => {
            DATE_FORMAT(cb.billing_date,'%Y-%m-%d') AS txn_date,
            cb.customer_name AS party,
            cb.company       AS branch,
-           cb.payment_mode  AS method,
-           cb.cash_paid     AS cash_amt,
-           cb.upi_paid      AS upi_amt,
-           cb.bank_paid     AS bank_amt,
-           GREATEST(0, cb.amount_paid - (cb.cash_paid + cb.upi_paid + cb.bank_paid)) AS credit_adjusted_amt,
-           cb.amount_paid   AS amount,
+           CASE
+             WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 AND GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'Cash + UPI'
+             WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 AND GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Cash + Bank'
+             WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 AND GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'UPI + Bank'
+             WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
+             WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
+             WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
+             ELSE cb.payment_mode
+           END AS method,
+           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
+           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) AS upi_amt,
+           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) AS bank_amt,
+           GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+             GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+             GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+           )) AS credit_adjusted_amt,
+           (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+            GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
            'in'             AS flow,
            'Billing'        AS source_module,
            CONCAT('Sales Invoice — ', cb.customer_name,
              CASE 
-               WHEN (cb.amount_paid - (cb.cash_paid + cb.upi_paid + cb.bank_paid)) > 0 
+               WHEN ((cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+                 GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+                 GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+                 GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+               )) > 0 
                THEN ' (Credit Balance Adjusted)' 
                ELSE '' 
              END) AS description
          FROM customer_bills cb
+         LEFT JOIN (
+           SELECT bill_id,
+                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+                  SUM(COALESCE(amount_received, 0)) AS sub_total
+           FROM customer_payments
+           WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+           GROUP BY bill_id
+         ) sub ON cb.id = sub.bill_id
          WHERE ${w.join(' AND ')}
          ORDER BY cb.billing_date DESC, cb.created_at DESC`,
         p
@@ -951,7 +1093,11 @@ router.get('/', async (req, res) => {
     // ── 2. Credit payments
     const cpRows = [];
     if (type !== 'out') {
-      let w = ["cp.payment_status = 'Approved'"];
+      let w = [
+        "cp.payment_status = 'Approved'",
+        "(COALESCE(cp.cash_paid, 0) > 0 OR COALESCE(cp.upi_paid, 0) > 0 OR COALESCE(cp.bank_paid, 0) > 0 OR cp.amount_received > 0)",
+        "cp.payment_method NOT LIKE '%Credit Balance%'"
+      ];
       let p = [];
       if (startDate) { w.push('cp.payment_date >= ?'); p.push(startDate); }
       if (endDate)   { w.push('cp.payment_date <= ?'); p.push(endDate); }
@@ -960,8 +1106,18 @@ router.get('/', async (req, res) => {
         w.push('(cb.customer_name LIKE ? OR cust.name LIKE ? OR cp.bill_id LIKE ? OR cp.id LIKE ?)');
         p.push(s, s, s, s);
       }
-      const mf = methodFilter('cp.payment_method');
-      if (mf) { w.push(mf.clause); p.push(...mf.params); }
+      if (method && method !== 'All') {
+        if (method === 'Cash') {
+          w.push('(cp.cash_paid > 0 OR cp.payment_method LIKE ?)');
+          p.push('%Cash%');
+        } else if (method === 'UPI') {
+          w.push('(cp.upi_paid > 0 OR cp.payment_method LIKE ?)');
+          p.push('%UPI%');
+        } else if (method === 'Bank') {
+          w.push('(cp.bank_paid > 0 OR cp.payment_method LIKE ? OR cp.payment_method LIKE ? OR cp.payment_method LIKE ?)');
+          p.push('%Bank%', '%Online%', '%Cheque%');
+        }
+      }
       const [rows] = await pool.query(
         `SELECT
            cp.id              AS ref_id,
@@ -972,18 +1128,13 @@ router.get('/', async (req, res) => {
            COALESCE(cp.cash_paid, 0)  AS cash_amt,
            COALESCE(cp.upi_paid, 0)   AS upi_amt,
            COALESCE(cp.bank_paid, 0)  AS bank_amt,
-           GREATEST(0, cp.amount_received - (COALESCE(cp.cash_paid, 0) + COALESCE(cp.upi_paid, 0) + COALESCE(cp.bank_paid, 0))) AS credit_adjusted_amt,
+           0                  AS credit_adjusted_amt,
            cp.amount_received AS amount,
            'in'               AS flow,
            'Credit Payment'   AS source_module,
            CASE 
              WHEN cp.bill_id IS NULL OR cp.bill_id = '' THEN CONCAT('Advance credit payment received — ', COALESCE(NULLIF(TRIM(cb.customer_name), ''), cust.name, 'Customer'))
-             ELSE CONCAT('Credit collected for ', cp.bill_id,
-               CASE 
-                 WHEN cp.payment_method LIKE '%Credit Balance%' 
-                 THEN ' (Credit Balance Adjusted)' 
-                 ELSE '' 
-               END)
+             ELSE CONCAT('Credit collected for ', cp.bill_id)
            END AS description,
            cp.bill_id         AS invoice_no,
            cp.remarks         AS notes
@@ -1099,10 +1250,10 @@ router.get('/', async (req, res) => {
            DATE_FORMAT(expense_date,'%Y-%m-%d')     AS txn_date,
            entered_by                               AS party,
            ''                                       AS branch,
-           payment_method                           AS method,
-           0                                        AS cash_amt,
-           0                                        AS upi_amt,
-           0                                        AS bank_amt,
+           CASE WHEN particulars LIKE '%Inventory Purchase Expense%' THEN 'Cash' ELSE payment_method END AS method,
+           CASE WHEN payment_method LIKE '%Cash%' OR particulars LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS cash_amt,
+           CASE WHEN payment_method LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS upi_amt,
+           CASE WHEN payment_method NOT LIKE '%Cash%' AND payment_method NOT LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS bank_amt,
            amount                                   AS amount,
            'out'                                    AS flow,
            'Expense'                                AS source_module,
@@ -1223,13 +1374,9 @@ router.get('/', async (req, res) => {
     // ── Summary totals ─────────────────────────────────────────────────────────
     let totalCashIn  = 0, totalUpiIn  = 0, totalBankIn  = 0;
     let totalCashOut = 0, totalUpiOut = 0, totalBankOut = 0;
-    let totalCreditAdjusted = 0;
 
     for (const r of all) {
       const amt   = r.amount;
-      const creditAdj = parseFloat(r.credit_adjusted_amt || 0);
-      totalCreditAdjusted += creditAdj;
-
       const meth  = String(r.method || '').toLowerCase();
       const rCash = parseFloat(r.cash_amt || 0);
       const rUpi  = parseFloat(r.upi_amt  || 0);
@@ -1241,14 +1388,13 @@ router.get('/', async (req, res) => {
         cash = rCash;
         upi  = rUpi;
         bank = rBank;
-      } else if (meth !== 'credit balance' && meth !== 'credit adjust' && (amt - creditAdj) > 0) {
-        const netPaid = Math.max(0, amt - creditAdj);
+      } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
         if (meth.includes('cash')) {
-          cash = netPaid;
+          cash = amt;
         } else if (meth.includes('upi')) {
-          upi = netPaid;
+          upi = amt;
         } else {
-          bank = netPaid;
+          bank = amt;
         }
       }
 

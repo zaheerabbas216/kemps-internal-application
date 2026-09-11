@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 
-const particularOptions = ['filters', 'CLEANING', 'Others'];
-
 const MaintenanceHistory = () => {
   const navigate = useNavigate();
 
@@ -43,31 +41,30 @@ const MaintenanceHistory = () => {
   const [formSuccess, setFormSuccess] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
-  // Raw materials master list for dropdown linking
-  const [rawMaterials, setRawMaterials] = useState([]);
+  // Maintenance Master tree list for dropdown linking
+  const [maintenanceMasterTree, setMaintenanceMasterTree] = useState([]);
 
   useEffect(() => {
-    fetchRawMaterials();
+    fetchMaintenanceMaster();
   }, []);
 
-  const fetchRawMaterials = async () => {
+  const fetchMaintenanceMaster = async () => {
     try {
-      const res = await api.get('/raw-materials', {
-        params: { page: 1, limit: 1000, activeOnly: true }
-      });
+      const res = await api.get('/maintenance-master/all');
       if (res.data.ok) {
-        setRawMaterials(res.data.materials || []);
+        setMaintenanceMasterTree(res.data.tree || []);
       }
     } catch (err) {
-      console.error('Failed to fetch raw materials:', err);
+      console.error('Failed to fetch maintenance master:', err);
     }
   };
 
-  const getSubProducts = (selectedCategory) => {
-    if (!selectedCategory) return [];
-    const list = rawMaterials
-      .filter(item => (item.category_name || '').toLowerCase() === selectedCategory.toLowerCase())
-      .map(item => item.sub_product_name);
+  const getSubProducts = (selectedParticular) => {
+    if (!selectedParticular) return [];
+    const item = maintenanceMasterTree.find(
+      p => (p.name || '').toLowerCase() === selectedParticular.toLowerCase()
+    );
+    const list = item && item.subProducts ? item.subProducts.map(s => s.name) : [];
     
     // Add existing editing value if not in list
     if (formData.subDetail && !list.includes(formData.subDetail)) {
@@ -321,6 +318,11 @@ const MaintenanceHistory = () => {
 
   const totalPages = Math.ceil(totalRecords / limit) || 1;
 
+  const particularOptions = Array.from(new Set([
+    ...maintenanceMasterTree.map(p => p.name),
+    ...records.map(r => r.particular)
+  ].filter(Boolean))).sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="space-y-6 animate-fade-in">
 
@@ -339,10 +341,17 @@ const MaintenanceHistory = () => {
         
         <div className="flex gap-3">
           <button 
-            onClick={handleExportPDF}
-            className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
+            onClick={() => navigate('/maintenance-master')}
+            className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12 flex items-center gap-1.5"
+            title="Configure Maintenance Particulars & Sub Products"
           >
-            🖨️ Export to PDF
+            <span>⚙️</span> Product Master
+          </button>
+          <button 
+            onClick={handleExportPDF}
+            className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12 flex items-center gap-1.5"
+          >
+            <span>🖨️</span> Export to PDF
           </button>
         </div>
       </div>
@@ -566,10 +575,10 @@ const MaintenanceHistory = () => {
                         required
                       >
                         <option value="">Select Particular</option>
-                        <option value="filters">Filters</option>
-                        <option value="CLEANING">Cleaning</option>
-                        <option value="Others">Others</option>
-                        {formData.particular && !['filters', 'cleaning', 'others'].includes(formData.particular.toLowerCase()) && (
+                        {maintenanceMasterTree.map(p => (
+                          <option key={p.id} value={p.name}>{p.name}</option>
+                        ))}
+                        {formData.particular && !maintenanceMasterTree.some(p => p.name.toLowerCase() === formData.particular.toLowerCase()) && (
                           <option value={formData.particular}>{formData.particular}</option>
                         )}
                       </select>
