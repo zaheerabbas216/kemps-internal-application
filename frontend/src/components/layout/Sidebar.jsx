@@ -134,6 +134,8 @@ const navGroups = [
     icon: '🏪',
     items: [
       { name: 'Loading', path: '/loading' },
+      { name: 'Sunday Loading', path: '/sunday-loading' },
+      { name: 'Sunday Loading History', path: '/sunday-loading-history' },
     ]
   },
   {

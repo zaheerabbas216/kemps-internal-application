@@ -32,6 +32,7 @@ import accountsLedgerRoutes from './routes/accountsLedger.js';
 import supplierLedgerRoutes from './routes/supplierLedger.js';
 import cashLedgerRoutes from './routes/cashLedger.js';
 import timerRoutes from './routes/timer.js';
+import sundayLoadingRoutes from './routes/sundayLoading.js';
 import authMiddleware from './middleware/auth.js';
 
 const app = express();
@@ -111,6 +112,7 @@ app.use('/api/accounts-ledger', authMiddleware, accountsLedgerRoutes);
 app.use('/api/supplier-ledger', authMiddleware, supplierLedgerRoutes);
 app.use('/api/cash-ledger', authMiddleware, cashLedgerRoutes);
 app.use('/api/timer', authMiddleware, timerRoutes);
+app.use('/api/sunday-loading', authMiddleware, sundayLoadingRoutes);
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

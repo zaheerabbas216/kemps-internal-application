@@ -50,6 +50,8 @@ const SupplierLedger = lazy(() => import('./pages/SupplierLedger'));
 const CashLedger = lazy(() => import('./pages/CashLedger'));
 const Timer = lazy(() => import('./pages/Timer'));
 const TimerHistory = lazy(() => import('./pages/TimerHistory'));
+const SundayLoading = lazy(() => import('./pages/SundayLoading'));
+const SundayLoadingHistory = lazy(() => import('./pages/SundayLoadingHistory'));
 
 // Route guard for authenticated pages
 const ProtectedRoute = () => {
@@ -130,6 +132,8 @@ function App() {
               <Route path="/stock-dashboard" element={<StockDashboard />} />
               <Route path="/production-dashboard" element={<ProductionDashboard />} />
               <Route path="/sunday-dashboard" element={<SundayDashboard />} />
+              <Route path="/sunday-loading" element={<SundayLoading />} />
+              <Route path="/sunday-loading-history" element={<SundayLoadingHistory />} />
               <Route path="/total-sales" element={<TotalSales />} />
 
               {/* Admin only routes */}

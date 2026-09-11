@@ -187,6 +187,37 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    console.log('Creating sunday_loading table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sunday_loading (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        transaction_number VARCHAR(50) UNIQUE NOT NULL,
+        loading_date DATE NOT NULL,
+        customer_id VARCHAR(50) NULL,
+        customer_name VARCHAR(200) NOT NULL,
+        customer_phone VARCHAR(50) NULL,
+        customer_address TEXT NULL,
+        customer_type VARCHAR(100) NULL,
+        product_id INT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        cash_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        upi_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        bank_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_paid DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        due_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        notes TEXT NULL,
+        created_by VARCHAR(100) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_sl_date (loading_date),
+        INDEX idx_sl_customer (customer_name),
+        INDEX idx_sl_txn (transaction_number)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
 
 
     console.log('Creating bank_accounts table...');

@@ -34,6 +34,16 @@ const SundayDashboard = () => {
       bgGlow: 'bg-emerald-500/10 border-emerald-200/80 hover:border-emerald-400',
       tagColor: 'bg-emerald-100/80 text-emerald-800 border-emerald-200',
       description: 'Track machine start/stop running timers, compressor run-times, maintenance warm-ups, and operational hours.'
+    },
+    {
+      title: 'Sunday Loading',
+      tag: 'Weekend Dispatch',
+      path: '/sunday-loading',
+      icon: '🚚',
+      color: 'from-amber-500 to-orange-600',
+      bgGlow: 'bg-amber-500/10 border-amber-200/80 hover:border-amber-400',
+      tagColor: 'bg-amber-100/80 text-amber-800 border-amber-200',
+      description: 'Record standalone Sunday vehicle loadings, independent pricing, and separate customer payment collections.'
     }
   ];
 
@@ -70,7 +80,7 @@ const SundayDashboard = () => {
       </div>
 
       {/* Shortcuts Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {shortcuts.map((sc, idx) => (
           <div
             key={idx}
