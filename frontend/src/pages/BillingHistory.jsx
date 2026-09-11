@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TaxInvoiceModal from '../components/billing/TaxInvoiceModal';
 
 const BillingHistory = () => {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ const BillingHistory = () => {
   // Modals & deletes
   const [viewingBill, setViewingBill] = useState(null);
   const [viewingBillItems, setViewingBillItems] = useState([]);
+  const [viewingCompanyDetails, setViewingCompanyDetails] = useState(null);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
 
   const [deletingBillId, setDeletingBillId] = useState(null);
@@ -74,6 +76,7 @@ const BillingHistory = () => {
       if (res.data.ok) {
         setViewingBill(res.data.bill);
         setViewingBillItems(res.data.items || []);
+        setViewingCompanyDetails(res.data.companyDetails || null);
         setIsViewModalOpen(true);
       } else {
         alert(res.data.error || 'Failed to fetch invoice details.');
@@ -682,126 +685,14 @@ const BillingHistory = () => {
         )}
       </div>
 
-      {/* VIEW MODAL (WITH POS PRINT TRIGGER) */}
-      {isViewModalOpen && viewingBill && createPortal(
-        <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-3xl bg-white border border-slate-200 rounded-3xl p-8 relative shadow-2xl max-h-[90vh] overflow-y-auto z-10">
-            <button 
-              onClick={() => setIsViewModalOpen(false)}
-              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
-            >
-              ✕
-            </button>
-
-            {/* Receipt Preview */}
-            <div className="border border-slate-200 p-6 rounded-2xl space-y-6 bg-slate-50/30 text-slate-800">
-              <div className="flex justify-between items-start border-b border-slate-200 pb-4">
-                <div>
-                  <h3 className="text-lg font-black tracking-tight text-slate-850 uppercase italic">
-                    {viewingBill.company}
-                  </h3>
-                  <p className="text-[10px] text-slate-500 font-bold mt-0.5">INVOICE TRANSACTION RECEIPT</p>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-black text-primary">{viewingBill.id}</div>
-                  <div className="text-[10px] text-slate-400 font-bold mt-0.5">
-                    Date: {formatDateDDMMYYYY(viewingBill.billing_date)}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold">
-                <div>
-                  <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider">Billed To:</div>
-                  <div className="font-extrabold text-slate-800 mt-1">{viewingBill.customer_name}</div>
-                  <div className="text-slate-500 mt-0.5">Phone: {viewingBill.customer_phone}</div>
-                  {viewingBill.customer_address && (
-                    <div className="text-slate-500 mt-1 leading-relaxed">
-                      Address: {viewingBill.customer_address}
-                    </div>
-                  )}
-                </div>
-                <div className="md:text-right">
-                  <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider">Billing Context:</div>
-                  <div className="text-slate-700 mt-1">
-                    Customer Type: <span className="font-extrabold uppercase">{viewingBill.customer_type}</span>
-                  </div>
-                  {viewingBill.customer_gstin && (
-                    <div className="text-slate-600 mt-0.5">
-                      GSTIN: <span className="font-mono font-bold text-slate-800">{viewingBill.customer_gstin}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                      <th className="py-2.5 px-3">Product Name</th>
-                      <th className="py-2.5 px-3 text-center">Qty</th>
-                      <th className="py-2.5 px-3 text-right">Rate (With Tax)</th>
-                      <th className="py-2.5 px-3 text-center">Tax %</th>
-                      <th className="py-2.5 px-3 text-right">Basic Rate</th>
-                      <th className="py-2.5 px-3 text-right">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
-                    {viewingBillItems.map(item => (
-                      <tr key={item.id}>
-                        <td className="py-2 px-3 text-slate-850 font-extrabold">{item.product_name}</td>
-                        <td className="py-2 px-3 text-center">{item.quantity}</td>
-                        <td className="py-2 px-3 text-right">₹ {parseFloat(item.rate_with_tax).toFixed(2)}</td>
-                        <td className="py-2 px-3 text-center">{parseFloat(item.tax_percent)}%</td>
-                        <td className="py-2 px-3 text-right text-slate-500">₹ {parseFloat(item.basic_rate).toFixed(2)}</td>
-                        <td className="py-2 px-3 text-right text-slate-850">₹ {parseFloat(item.total_amount).toFixed(2)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="flex flex-col items-end gap-1.5 border-t border-slate-200 pt-4">
-                <div className="flex items-center gap-16 text-xs">
-                  <span className="font-bold text-slate-500">Grand Total:</span>
-                  <span className="font-black text-slate-800 text-sm">
-                    ₹ {parseFloat(viewingBill.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-16 text-xs">
-                  <span className="font-bold text-slate-500">Amount Paid ({viewingBill.payment_mode}):</span>
-                  <span className="font-extrabold text-emerald-600">
-                    ₹ {parseFloat(viewingBill.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-16 text-xs border-t border-dashed border-slate-200 pt-1.5 w-64 justify-end">
-                  <span className="font-bold text-slate-600">Balance Due:</span>
-                  <span className={`font-black ${parseFloat(viewingBill.due_amount) > 0 ? 'text-rose-500' : 'text-slate-450'}`}>
-                    ₹ {parseFloat(viewingBill.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-between mt-6">
-              <button 
-                onClick={() => handlePrintReceipt(viewingBill, viewingBillItems)}
-                className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-primary/10"
-              >
-                🖨 Print POS Receipt
-              </button>
-              <button 
-                onClick={() => setIsViewModalOpen(false)}
-                className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-all uppercase tracking-wider"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsViewModalOpen(false)}></div>
-        </div>,
-        document.body
-      )}
+      {/* VIEW MODAL (PROFESSIONAL GST TAX INVOICE) */}
+      <TaxInvoiceModal
+        isOpen={isViewModalOpen}
+        onClose={() => setIsViewModalOpen(false)}
+        bill={viewingBill}
+        items={viewingBillItems}
+        companyDetails={viewingCompanyDetails}
+      />
 
       {/* DELETE CONFIRMATION MODAL */}
       {isDeleteModalOpen && createPortal(

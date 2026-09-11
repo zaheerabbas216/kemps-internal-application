@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
 import { fileURLToPath } from 'url';
 import path from 'path';
+import { repairCorruptedTables } from './helpers/dbRepair.js';
 dotenv.config();
 
 function quoteIdentifier(identifier) {
@@ -177,6 +178,9 @@ export async function runMigration(shouldExit = false) {
     );
     await connection.query(`USE ${quoteIdentifier(dbName)}`);
 
+    // Check and repair any corrupted InnoDB tables / orphan tablespaces
+    await repairCorruptedTables(connection, dbName);
+
     console.log('Running schema migrations...');
     await ensureCoreTables(connection);
 
@@ -293,6 +297,22 @@ export async function runMigration(shouldExit = false) {
       console.log('Columns added successfully.');
     } else {
       console.log('pet_bottle_batches table columns already up-to-date.');
+    }
+
+    // Check if machine_id exists in pet_bottle_batches
+    const [machCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'pet_bottle_batches' AND COLUMN_NAME = 'machine_id'`,
+      [dbName]
+    );
+
+    if (machCols.length === 0) {
+      console.log('Adding machine_id column to pet_bottle_batches...');
+      await connection.query(`
+        ALTER TABLE pet_bottle_batches
+        ADD COLUMN machine_id VARCHAR(50) NULL
+      `);
+      console.log('machine_id column added to pet_bottle_batches successfully.');
     }
 
     // 4. Create production_batches table if not exists
@@ -2093,17 +2113,19 @@ export async function runMigration(shouldExit = false) {
       console.log('Default 5 machines seeded.');
     }
 
-    // Seed default admin if no admins exist
-    const [existingAdmins] = await connection.query('SELECT COUNT(*) as count FROM admins');
-    if (existingAdmins[0].count === 0) {
-      console.log('Seeding default admin user...');
-      const hashedPassword = await bcrypt.hash('username', 10);
-      await connection.query(
-        'INSERT INTO admins (username, password, name) VALUES (?, ?, ?)',
-        ['admin', hashedPassword, 'Admin']
-      );
-      console.log('Default admin created (username: admin, password: username).');
-    }
+    // Sync existing stock_register purchase entries with qty_in_pcs for non-preform items
+    await connection.query(`
+      UPDATE stock_register sr
+      JOIN inventory_bill_items bi ON sr.reference_id = bi.bill_id AND sr.item_id = bi.raw_material_id
+      JOIN raw_materials rm ON sr.item_id = rm.id
+      JOIN raw_material_categories rmc ON rm.category_id = rmc.id
+      SET sr.quantity = bi.qty_in_pcs
+      WHERE sr.transaction_type = 'PURCHASE'
+        AND sr.item_type = 'RAW_MATERIAL'
+        AND rmc.name != 'Preforms'
+        AND bi.qty_in_pcs > 0
+        AND sr.quantity != bi.qty_in_pcs
+    `);
 
     console.log('Migration complete!');
     await connection.end();

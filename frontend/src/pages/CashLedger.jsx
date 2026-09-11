@@ -19,6 +19,7 @@ const METHOD_BADGE = {
   bank:             'bg-sky-50 text-sky-700 border-sky-100',
   'credit balance': 'bg-violet-100 text-violet-800 border-violet-300 font-black',
   'credit adjust':  'bg-violet-100 text-violet-800 border-violet-300 font-black',
+  'credit adjustment': 'bg-violet-100 text-violet-800 border-violet-300 font-black',
 };
 
 // ── helpers ────────────────────────────────────────────────────────────────
@@ -1371,11 +1372,23 @@ const CashLedger = () => {
                           <span>Amount Paid:</span>
                           <span>{formatINR(txnDetailsData.bill.amount_paid)}</span>
                         </div>
-                        <div className="grid grid-cols-3 gap-1 text-[11px] text-slate-600 font-semibold pt-1 border-t border-blue-200/40">
-                          <div>Cash: <strong className="text-emerald-700">{formatINR(txnDetailsData.bill.cash_paid)}</strong></div>
-                          <div>UPI: <strong className="text-indigo-700">{formatINR(txnDetailsData.bill.upi_paid)}</strong></div>
-                          <div>Bank: <strong className="text-sky-700">{formatINR(txnDetailsData.bill.bank_paid)}</strong></div>
-                        </div>
+                        {(() => {
+                          const creditAmt = Math.max(0, parseFloat(txnDetailsData.bill.amount_paid || 0) - (
+                            parseFloat(txnDetailsData.bill.cash_paid || 0) +
+                            parseFloat(txnDetailsData.bill.upi_paid || 0) +
+                            parseFloat(txnDetailsData.bill.bank_paid || 0)
+                          ));
+                          return (
+                            <div className={`grid ${creditAmt > 0 ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-1 text-[11px] text-slate-600 font-semibold pt-1 border-t border-blue-200/40`}>
+                              <div>Cash: <strong className="text-emerald-700">{formatINR(txnDetailsData.bill.cash_paid)}</strong></div>
+                              <div>UPI: <strong className="text-indigo-700">{formatINR(txnDetailsData.bill.upi_paid)}</strong></div>
+                              <div>Bank: <strong className="text-sky-700">{formatINR(txnDetailsData.bill.bank_paid)}</strong></div>
+                              {creditAmt > 0 && (
+                                <div>Credit Adj: <strong className="text-violet-700">{formatINR(creditAmt)}</strong></div>
+                              )}
+                            </div>
+                          );
+                        })()}
                         {txnDetailsData.bill.due_amount > 0 && (
                           <div className="flex justify-between font-bold text-amber-700 border-t border-blue-200/60 pt-1">
                             <span>Remaining Due:</span>

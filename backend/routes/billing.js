@@ -317,10 +317,27 @@ router.get('/:id', async (req, res) => {
       [id]
     );
 
+    // Fetch company info if available in company_details
+    const bill = billRows[0];
+    let companyDetails = null;
+    if (bill && bill.company) {
+      const [compRows] = await pool.query(
+        `SELECT company_name, phone_number, gst_number, address, bank_name, account_number, ifsc_code 
+         FROM company_details 
+         WHERE company_name LIKE ? 
+         LIMIT 1`,
+        [`%${bill.company.trim()}%`]
+      );
+      if (compRows.length > 0) {
+        companyDetails = compRows[0];
+      }
+    }
+
     res.json({
       ok: true,
-      bill: billRows[0],
-      items: itemRows
+      bill,
+      items: itemRows,
+      companyDetails
     });
   } catch (error) {
     res.status(400).json({ ok: false, error: error.message });

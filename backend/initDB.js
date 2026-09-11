@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import bcrypt from 'bcryptjs';
+import { repairCorruptedTables } from './helpers/dbRepair.js';
 dotenv.config();
 
 async function initDB() {
@@ -14,6 +15,9 @@ async function initDB() {
     console.log('Connected to MySQL. Creating kemps_inventory database if not exists...');
     await connection.query('CREATE DATABASE IF NOT EXISTS kemps_inventory CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     await connection.query('USE kemps_inventory');
+
+    // Automatically check and repair any corrupted InnoDB tables / orphan tablespaces
+    await repairCorruptedTables(connection, 'kemps_inventory');
 
     console.log('Creating admins table...');
     await connection.query(`

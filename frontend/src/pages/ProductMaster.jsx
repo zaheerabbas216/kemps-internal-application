@@ -28,6 +28,18 @@ const ProductMaster = () => {
   const [isRmDeleteModalOpen, setIsRmDeleteModalOpen] = useState(false);
   const [deletingRmMaterial, setDeletingRmMaterial] = useState(null);
 
+  // RM Edit Modal State
+  const [isRmEditModalOpen, setIsRmEditModalOpen] = useState(false);
+  const [editingRmMaterial, setEditingRmMaterial] = useState(null);
+  const [rmEditFormData, setRmEditFormData] = useState({
+    categoryId: '',
+    subProductName: '',
+    unit: 'KG',
+    qtyInPcPerKg: ''
+  });
+  const [rmEditModalError, setRmEditModalError] = useState('');
+  const [isSavingRmEdit, setIsSavingRmEdit] = useState(false);
+
   const rmUnitsList = ['PCS', 'BAGS', 'ROLLS', 'QTY', 'KG'];
 
   const [rmFormData, setRmFormData] = useState({
@@ -59,6 +71,16 @@ const ProductMaster = () => {
   const [isFpDeleteModalOpen, setIsFpDeleteModalOpen] = useState(false);
   const [deletingFpProduct, setDeletingFpProduct] = useState(null);
 
+  // FP Edit Modal State
+  const [isFpEditModalOpen, setIsFpEditModalOpen] = useState(false);
+  const [editingFpProduct, setEditingFpProduct] = useState(null);
+  const [fpEditFormData, setFpEditFormData] = useState({
+    name: '',
+    categoryId: ''
+  });
+  const [fpEditModalError, setFpEditModalError] = useState('');
+  const [isSavingFpEdit, setIsSavingFpEdit] = useState(false);
+
   const [fpFormData, setFpFormData] = useState({
     name: '',
     categoryId: ''
@@ -82,8 +104,12 @@ const ProductMaster = () => {
         setIsFpCategoryModalOpen(false);
         setIsRmDeleteModalOpen(false);
         setDeletingRmMaterial(null);
+        setIsRmEditModalOpen(false);
+        setEditingRmMaterial(null);
         setIsFpDeleteModalOpen(false);
         setDeletingFpProduct(null);
+        setIsFpEditModalOpen(false);
+        setEditingFpProduct(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -300,6 +326,62 @@ const ProductMaster = () => {
     }
   };
 
+  const openRmEditModal = (item) => {
+    setEditingRmMaterial(item);
+    setRmEditFormData({
+      categoryId: String(item.category_id || ''),
+      subProductName: item.sub_product_name || '',
+      unit: item.unit || 'KG',
+      qtyInPcPerKg: item.qty_in_pc_per_kg !== null && item.qty_in_pc_per_kg !== undefined ? String(item.qty_in_pc_per_kg) : ''
+    });
+    setRmEditModalError('');
+    setIsRmEditModalOpen(true);
+  };
+
+  const handleSaveRmEdit = async (e) => {
+    e.preventDefault();
+    setRmEditModalError('');
+
+    if (!rmEditFormData.categoryId) {
+      setRmEditModalError('Please select a category.');
+      return;
+    }
+    if (!rmEditFormData.subProductName.trim()) {
+      setRmEditModalError('Please enter a sub product name.');
+      return;
+    }
+    if (!rmEditFormData.unit) {
+      setRmEditModalError('Please select a unit.');
+      return;
+    }
+
+    setIsSavingRmEdit(true);
+    try {
+      const selectedCategory = rmCategories.find(c => String(c.id) === String(rmEditFormData.categoryId));
+      const selectedCategoryName = selectedCategory ? selectedCategory.name : '';
+      const showQtyPerKg = selectedCategoryName.toLowerCase() !== 'preforms' && rmEditFormData.unit === 'KG';
+
+      const res = await api.put(`/raw-materials/${editingRmMaterial.id}`, {
+        categoryId: rmEditFormData.categoryId,
+        subProductName: rmEditFormData.subProductName.trim(),
+        unit: rmEditFormData.unit,
+        qtyInPcPerKg: showQtyPerKg && rmEditFormData.qtyInPcPerKg !== '' ? parseFloat(rmEditFormData.qtyInPcPerKg) : null
+      });
+
+      if (res.data.ok) {
+        setIsRmEditModalOpen(false);
+        setEditingRmMaterial(null);
+        fetchRawMaterials();
+      } else {
+        setRmEditModalError(res.data.error || 'Failed to update raw material.');
+      }
+    } catch (err) {
+      setRmEditModalError(err.response?.data?.error || err.message || 'An error occurred.');
+    } finally {
+      setIsSavingRmEdit(false);
+    }
+  };
+
   // ==========================================
   // FP HANDLERS
   // ==========================================
@@ -416,6 +498,46 @@ const ProductMaster = () => {
       }
     } catch (err) {
       alert(err.response?.data?.error || `Delete failed: ${err.message}`);
+    }
+  };
+
+  const openFpEditModal = (item) => {
+    setEditingFpProduct(item);
+    setFpEditFormData({
+      name: item.name || '',
+      categoryId: item.category_id ? String(item.category_id) : ''
+    });
+    setFpEditModalError('');
+    setIsFpEditModalOpen(true);
+  };
+
+  const handleSaveFpEdit = async (e) => {
+    e.preventDefault();
+    setFpEditModalError('');
+
+    if (!fpEditFormData.name.trim()) {
+      setFpEditModalError('Please enter a product name.');
+      return;
+    }
+
+    setIsSavingFpEdit(true);
+    try {
+      const res = await api.put(`/finished-products/${editingFpProduct.id}`, {
+        name: fpEditFormData.name.trim(),
+        categoryId: fpEditFormData.categoryId || null
+      });
+
+      if (res.data.ok) {
+        setIsFpEditModalOpen(false);
+        setEditingFpProduct(null);
+        fetchFinishedProducts();
+      } else {
+        setFpEditModalError(res.data.error || 'Failed to update finished product.');
+      }
+    } catch (err) {
+      setFpEditModalError(err.response?.data?.error || err.message || 'An error occurred.');
+    } finally {
+      setIsSavingFpEdit(false);
     }
   };
 
@@ -656,10 +778,10 @@ const ProductMaster = () => {
                           )}
                         </td>
                         <td className="py-4 px-6">
-                          <div className="flex items-center justify-center gap-3">
+                          <div className="flex items-center justify-center gap-2">
                             <button 
                               onClick={() => handleToggleFpStatus(item)}
-                              className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
+                              className={`btn btn-xs rounded-lg px-2.5 py-1 font-bold text-[11px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
                                 item.status === 1 
                                   ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
                                   : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
@@ -668,8 +790,16 @@ const ProductMaster = () => {
                               {item.status === 1 ? 'Disable' : 'Enable'}
                             </button>
                             <button 
+                              type="button"
+                              onClick={() => openFpEditModal(item)}
+                              className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/70 rounded-lg px-2.5 py-1 font-bold text-[11px] flex items-center gap-1 transition-all duration-200 shadow-sm"
+                              title="Edit Product Details"
+                            >
+                              <span>✏️</span> Edit
+                            </button>
+                            <button 
                               onClick={() => confirmFpDelete(item)}
-                              className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
+                              className="bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 rounded-lg px-2.5 py-1 font-bold text-[11px] flex items-center gap-1 transition-all duration-200"
                             >
                               <span>🗑️</span> Delete
                             </button>
@@ -903,11 +1033,11 @@ const ProductMaster = () => {
                                     )}
                                   </td>
                                   <td className="py-4 px-6">
-                                    <div className="flex items-center justify-center gap-3">
+                                    <div className="flex items-center justify-center gap-2">
                                       <button 
                                         type="button"
                                         onClick={() => handleToggleRmStatus(item)}
-                                        className={`btn btn-xs rounded-lg px-3 py-1 font-bold text-[12px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
+                                        className={`btn btn-xs rounded-lg px-2.5 py-1 font-bold text-[11px] h-auto min-h-0 text-white shadow-sm transition-all duration-200 ${
                                           item.status === 1 
                                             ? 'bg-[#10b981] hover:bg-emerald-600 shadow-emerald-100' 
                                             : 'bg-slate-500 hover:bg-slate-600 shadow-slate-150'
@@ -917,8 +1047,16 @@ const ProductMaster = () => {
                                       </button>
                                       <button 
                                         type="button"
+                                        onClick={() => openRmEditModal(item)}
+                                        className="bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200/70 rounded-lg px-2.5 py-1 font-bold text-[11px] flex items-center gap-1 transition-all duration-200 shadow-sm"
+                                        title="Edit Product Details"
+                                      >
+                                        <span>✏️</span> Edit
+                                      </button>
+                                      <button 
+                                        type="button"
                                         onClick={() => confirmRmDelete(item)}
-                                        className="bg-red-50 hover:bg-red-100 text-red-500 rounded-lg px-3 py-1 font-bold text-[12px] flex items-center gap-1 transition-all duration-200"
+                                        className="bg-red-50 hover:bg-red-100 text-red-500 border border-red-100 rounded-lg px-2.5 py-1 font-bold text-[11px] flex items-center gap-1 transition-all duration-200"
                                       >
                                         <span>🗑️</span> Delete
                                       </button>
@@ -1250,6 +1388,223 @@ const ProductMaster = () => {
                 Cancel
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* RM EDIT MODAL */}
+      {isRmEditModalOpen && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsRmEditModalOpen(false); setEditingRmMaterial(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[500px] p-8 flex flex-col gap-5 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => { setIsRmEditModalOpen(false); setEditingRmMaterial(null); }}
+              className="absolute top-5 right-5 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
+            >
+              ✕
+            </button>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                <span>✏️</span> Edit Raw Material
+              </h3>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                Update category, product name, unit, or piece conversion
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveRmEdit} className="space-y-4">
+              {/* Category */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                  Category
+                </label>
+                <select
+                  value={rmEditFormData.categoryId}
+                  onChange={(e) => setRmEditFormData(prev => ({ ...prev, categoryId: e.target.value }))}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold cursor-pointer"
+                  required
+                >
+                  <option value="">Select Category</option>
+                  {rmCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Sub Product Name */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                  Sub Product Name / Specification
+                </label>
+                <input
+                  type="text"
+                  value={rmEditFormData.subProductName}
+                  onChange={(e) => setRmEditFormData(prev => ({ ...prev, subProductName: e.target.value }))}
+                  placeholder="e.g. 1L BOPP Kemps or 19.8"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold"
+                  required
+                />
+              </div>
+
+              {/* Unit */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                  Unit
+                </label>
+                <select
+                  value={rmEditFormData.unit}
+                  onChange={(e) => setRmEditFormData(prev => ({ ...prev, unit: e.target.value }))}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold cursor-pointer"
+                  required
+                >
+                  {rmUnitsList.map(unit => (
+                    <option key={unit} value={unit}>{unit}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Qty in PC per KG (if unit is KG and category is not Preforms) */}
+              {(() => {
+                const selectedCat = rmCategories.find(c => String(c.id) === String(rmEditFormData.categoryId));
+                const catName = selectedCat ? selectedCat.name.toLowerCase() : '';
+                if (catName !== 'preforms' && rmEditFormData.unit === 'KG') {
+                  return (
+                    <div className="space-y-1.5 animate-fade-in">
+                      <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Qty in PC (per 1 KG)
+                      </label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={rmEditFormData.qtyInPcPerKg}
+                        onChange={(e) => setRmEditFormData(prev => ({ ...prev, qtyInPcPerKg: e.target.value }))}
+                        placeholder="e.g. 1000"
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold"
+                      />
+                      <span className="text-[10px] text-slate-400 font-semibold block">
+                        Used to convert inventory bill KG into pieces for production ledger
+                      </span>
+                    </div>
+                  );
+                }
+                return null;
+              })()}
+
+              {rmEditModalError && (
+                <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-xs font-semibold border border-red-100">
+                  ⚠️ {rmEditModalError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={isSavingRmEdit}
+                  className="btn-premium btn-primary-premium flex-[2] h-11 text-xs uppercase tracking-wider"
+                >
+                  {isSavingRmEdit ? <span className="loading loading-spinner text-white"></span> : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsRmEditModalOpen(false); setEditingRmMaterial(null); }}
+                  className="btn-premium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex-1 h-11 text-xs font-bold uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* FP EDIT MODAL */}
+      {isFpEditModalOpen && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto"
+          onClick={() => { setIsFpEditModalOpen(false); setEditingFpProduct(null); }}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[480px] p-8 flex flex-col gap-5 max-h-[90vh] overflow-y-auto animate-fade-in pointer-events-auto relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button 
+              onClick={() => { setIsFpEditModalOpen(false); setEditingFpProduct(null); }}
+              className="absolute top-5 right-5 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
+            >
+              ✕
+            </button>
+
+            <div className="border-b border-slate-100 pb-3">
+              <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                <span>✏️</span> Edit Finished Product
+              </h3>
+              <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                Update finished product name and category
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveFpEdit} className="space-y-4">
+              {/* Product Name */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                  Product Name
+                </label>
+                <input
+                  type="text"
+                  value={fpEditFormData.name}
+                  onChange={(e) => setFpEditFormData(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="e.g. 1L Mango Kemps"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold"
+                  required
+                />
+              </div>
+
+              {/* Category */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                  Category
+                </label>
+                <select
+                  value={fpEditFormData.categoryId}
+                  onChange={(e) => setFpEditFormData(prev => ({ ...prev, categoryId: e.target.value }))}
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-semibold cursor-pointer"
+                >
+                  <option value="">No Category (Uncategorized)</option>
+                  {fpCategories.map(cat => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {fpEditModalError && (
+                <div className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-xs font-semibold border border-red-100">
+                  ⚠️ {fpEditModalError}
+                </div>
+              )}
+
+              <div className="flex gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="submit"
+                  disabled={isSavingFpEdit}
+                  className="btn-premium btn-primary-premium flex-[2] h-11 text-xs uppercase tracking-wider"
+                >
+                  {isSavingFpEdit ? <span className="loading loading-spinner text-white"></span> : 'Save Changes'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setIsFpEditModalOpen(false); setEditingFpProduct(null); }}
+                  className="btn-premium bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200 flex-1 h-11 text-xs font-bold uppercase tracking-wider"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

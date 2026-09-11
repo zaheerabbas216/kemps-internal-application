@@ -9,6 +9,24 @@ const navGroups = [
     icon: '⊞'
   },
   {
+    type: 'button',
+    name: 'Stock Dashboard',
+    path: '/stock-dashboard',
+    icon: '📦'
+  },
+  {
+    type: 'button',
+    name: 'Production Dashboard',
+    path: '/production-dashboard',
+    icon: '🏭'
+  },
+  {
+    type: 'button',
+    name: 'Sunday Dashboard',
+    path: '/sunday-dashboard',
+    icon: '☀️'
+  },
+  {
     type: 'section',
     title: 'Sales'
   },

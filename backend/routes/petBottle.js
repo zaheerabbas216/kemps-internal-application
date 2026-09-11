@@ -64,9 +64,9 @@ router.get('/today', async (req, res) => {
     let whereClause = 'WHERE pb.batch_date = ?';
 
     if (search.trim()) {
-      whereClause += ' AND (fp.name LIKE ? OR rmf.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)';
+      whereClause += ' AND (fp.name LIKE ? OR rmf.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ? OR m.machine_name LIKE ? OR pb.machine_id LIKE ?)';
       const wildSearch = `%${search.trim()}%`;
-      queryParams.push(wildSearch, wildSearch, wildSearch, wildSearch);
+      queryParams.push(wildSearch, wildSearch, wildSearch, wildSearch, wildSearch, wildSearch);
     }
 
     const [rows] = await pool.query(
@@ -77,6 +77,8 @@ router.get('/today', async (req, res) => {
          COALESCE(fp.name, rmf.sub_product_name, 'Unknown Product') AS product_name,
          pb.raw_material_id,
          rm.sub_product_name AS preform_name,
+         pb.machine_id,
+         COALESCE(m.machine_name, pb.machine_id, '') AS machine_name,
          pb.bags_used,
          pb.actual_reading,
          pb.expected_reading,
@@ -91,6 +93,7 @@ router.get('/today', async (req, res) => {
        LEFT JOIN finished_products fp ON pb.finished_product_id = fp.id
        LEFT JOIN raw_materials rmf ON pb.finished_product_id = rmf.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
+       LEFT JOIN machines m ON pb.machine_id = m.id
        ${whereClause} 
        ORDER BY pb.created_at DESC`,
       queryParams
@@ -117,6 +120,7 @@ router.post('/', async (req, res) => {
       batchDate,
       productId,
       rawMaterialId,
+      machineId = null,
       bagsUsed,
       actualReading,
       bottleBags = 0,
@@ -204,13 +208,14 @@ router.post('/', async (req, res) => {
     // 1. Insert into pet_bottle_batches
     await connection.query(
       `INSERT INTO pet_bottle_batches 
-       (id, batch_date, finished_product_id, raw_material_id, bags_used, actual_reading, expected_reading, difference_val, bottle_bags, wastage, start_time, stop_time, notes, unit_cost, production_value, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, batch_date, finished_product_id, raw_material_id, machine_id, bags_used, actual_reading, expected_reading, difference_val, bottle_bags, wastage, start_time, stop_time, notes, unit_cost, production_value, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         batchId,
         batchDate,
         productId,
         rawMaterialId,
+        machineId || null,
         parsedBagsUsed,
         parsedActual,
         expectedReading,
@@ -274,9 +279,9 @@ router.get('/', async (req, res) => {
     }
 
     if (search.trim()) {
-      whereClauses.push('(fp.name LIKE ? OR rmf.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ?)');
+      whereClauses.push('(fp.name LIKE ? OR rmf.sub_product_name LIKE ? OR rm.sub_product_name LIKE ? OR pb.notes LIKE ? OR m.machine_name LIKE ? OR pb.machine_id LIKE ?)');
       const wild = `%${search.trim()}%`;
-      queryParams.push(wild, wild, wild, wild);
+      queryParams.push(wild, wild, wild, wild, wild, wild);
     }
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
@@ -288,6 +293,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN finished_products fp ON pb.finished_product_id = fp.id
        LEFT JOIN raw_materials rmf ON pb.finished_product_id = rmf.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
+       LEFT JOIN machines m ON pb.machine_id = m.id
        ${whereStr}`,
       queryParams
     );
@@ -303,6 +309,8 @@ router.get('/', async (req, res) => {
         COALESCE(fp.name, rmf.sub_product_name, 'Unknown Product') AS product_name,
         pb.raw_material_id,
         rm.sub_product_name AS preform_name,
+        pb.machine_id,
+        COALESCE(m.machine_name, pb.machine_id, '') AS machine_name,
         pb.bags_used,
         pb.actual_reading,
         pb.expected_reading,
@@ -317,6 +325,7 @@ router.get('/', async (req, res) => {
        LEFT JOIN finished_products fp ON pb.finished_product_id = fp.id
        LEFT JOIN raw_materials rmf ON pb.finished_product_id = rmf.id
        JOIN raw_materials rm ON pb.raw_material_id = rm.id
+       LEFT JOIN machines m ON pb.machine_id = m.id
        ${whereStr}
        ORDER BY pb.batch_date DESC, pb.created_at DESC
        LIMIT ? OFFSET ?`,
@@ -404,6 +413,7 @@ router.put('/:id', async (req, res) => {
       batchDate,
       productId,
       rawMaterialId,
+      machineId = null,
       bagsUsed,
       actualReading,
       bottleBags = 0,
@@ -518,6 +528,7 @@ router.put('/:id', async (req, res) => {
          batch_date = ?, 
          finished_product_id = ?, 
          raw_material_id = ?, 
+         machine_id = ?, 
          bags_used = ?, 
          actual_reading = ?, 
          expected_reading = ?, 
@@ -534,6 +545,7 @@ router.put('/:id', async (req, res) => {
         batchDate,
         productId,
         rawMaterialId,
+        machineId || null,
         parsedBagsUsed,
         parsedActual,
         expectedReading,

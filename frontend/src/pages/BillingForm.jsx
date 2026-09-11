@@ -13,12 +13,13 @@ const BillingForm = () => {
   const preloadCanSupply = location.state?.preloadCanSupply || null;
 
   // Static options
-  const TAX_OPTIONS = [0, 5, 12, 18, 28];
+  const TAX_OPTIONS = [0, 5, 12, 18, 28, 40];
   const PAYMENT_MODES = ['Cash', 'Credit', 'UPI(KI)', 'UPI(KP)', 'BANK (KI)', 'BANK (KP)'];
 
   // Master lists
   const [finishedProducts, setFinishedProducts] = useState([]);
   const [customers, setCustomers] = useState([]); // In-memory list for name autocomplete
+  const [goodsLedgerStock, setGoodsLedgerStock] = useState({}); // { [productId]: closing_stock }
 
   // Form states
   const [billingInfo, setBillingInfo] = useState({
@@ -277,6 +278,30 @@ const BillingForm = () => {
     setPhoneSearchText(cust.phone);
   };
 
+  const fetchGoodsLedgerStock = async (targetDate) => {
+    try {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      const istDate = new Date(now.getTime() + (330 + offset) * 60000);
+      const yyyy = istDate.getFullYear();
+      const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(istDate.getDate()).padStart(2, '0');
+      const todayFormatted = `${yyyy}-${mm}-${dd}`;
+
+      const d = targetDate || billingInfo.billingDate || todayFormatted;
+      const res = await api.get('/goods-ledger/day', { params: { date: d } });
+      if (res.data.ok && res.data.items) {
+        const stockMap = {};
+        res.data.items.forEach(item => {
+          stockMap[item.finished_product_id] = parseFloat(item.closing_stock) || 0;
+        });
+        setGoodsLedgerStock(stockMap);
+      }
+    } catch (err) {
+      console.error('Failed to load goods ledger stock:', err);
+    }
+  };
+
   const fetchDropdownMasters = async () => {
     try {
       const [fpRes, custRes] = await Promise.all([
@@ -289,10 +314,18 @@ const BillingForm = () => {
       if (custRes.data.customers) {
         setCustomers(custRes.data.customers || []);
       }
+      await fetchGoodsLedgerStock(billingInfo.billingDate);
     } catch (err) {
       console.error('Failed to load masters:', err);
     }
   };
+
+  // Re-fetch goods ledger stock whenever billing date changes
+  useEffect(() => {
+    if (billingInfo.billingDate) {
+      fetchGoodsLedgerStock(billingInfo.billingDate);
+    }
+  }, [billingInfo.billingDate]);
 
   const initializeNewForm = () => {
     // Set default billing date to today in IST
@@ -974,9 +1007,22 @@ const BillingForm = () => {
                 
                 {/* Finished Product Selector */}
                 <div className="md:col-span-3 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Product #{index + 1}
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                      Product #{index + 1}
+                    </label>
+                    {row.finishedProductId && goodsLedgerStock[row.finishedProductId] !== undefined && (
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                        goodsLedgerStock[row.finishedProductId] > 0
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : (goodsLedgerStock[row.finishedProductId] === 0
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-rose-50 text-rose-600 border border-rose-200')
+                      }`}>
+                        Stock: {goodsLedgerStock[row.finishedProductId]} Pcs
+                      </span>
+                    )}
+                  </div>
                   {preloadLoading ? (
                     <input 
                       type="text"
@@ -986,11 +1032,26 @@ const BillingForm = () => {
                     />
                   ) : (
                     <SearchableSelect
-                      options={finishedProducts.map(fp => ({ value: fp.id, label: fp.name }))}
+                      options={finishedProducts.map(fp => {
+                        const stockVal = goodsLedgerStock[fp.id];
+                        const hasStock = stockVal !== undefined;
+                        return {
+                          value: fp.id,
+                          label: `${fp.name}${hasStock ? ` (${stockVal} in stock)` : ''}`,
+                          rawName: fp.name,
+                          stock: hasStock ? stockVal : null,
+                          badge: hasStock ? `${stockVal} in stock` : null,
+                          badgeClassName: (stockVal > 0)
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : (stockVal === 0 
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                                : 'bg-rose-50 text-rose-600 border border-rose-200')
+                        };
+                      })}
                       value={row.finishedProductId}
                       onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
                       placeholder="Select Finished Product"
-                      searchPlaceholder="Search product..."
+                      searchPlaceholder="Search product or stock..."
                     />
                   )}
                 </div>
@@ -1033,18 +1094,25 @@ const BillingForm = () => {
 
                 {/* Tax Percent */}
                 <div className="md:col-span-1 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Tax (%)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                      Tax (%)
+                    </label>
+                  </div>
                   <select
                     value={row.taxPercent}
                     onChange={(e) => handleItemRowChange(row.id, 'taxPercent', e.target.value)}
-                    className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                    className="w-full h-11 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                   >
                     {TAX_OPTIONS.map(tax => (
                       <option key={tax} value={tax}>{tax}%</option>
                     ))}
                   </select>
+                  <div className="text-[9px] font-bold text-slate-400 text-center">
+                    {parseFloat(row.taxPercent) > 0 
+                      ? `${(parseFloat(row.taxPercent) / 2)}% + ${(parseFloat(row.taxPercent) / 2)}%`
+                      : '0%'}
+                  </div>
                 </div>
 
                 {/* Basic Rate (Readonly) */}

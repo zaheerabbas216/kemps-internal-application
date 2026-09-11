@@ -23,6 +23,10 @@ const RawMaterialLedger = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState('');
 
+  // 2 Search / Filter Fields: Category & Sub Product
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [searchSubProduct, setSearchSubProduct] = useState('');
+
   // Lock status
   const [isClosed, setIsClosed] = useState(false);
   const [closedBy, setClosedBy] = useState(null);
@@ -118,18 +122,45 @@ const RawMaterialLedger = () => {
     setRefreshing(false);
   };
 
-  // Group items by category for rendering
+  // Get unique category names for the category dropdown
+  const getUniqueCategories = () => {
+    const cats = new Set();
+    (ledgerData.items || []).forEach(item => {
+      if (item.category_name) {
+        cats.add(item.category_name.toUpperCase());
+      }
+    });
+    return Array.from(cats).sort();
+  };
+
+  // Group items by category for rendering (filtered by Category & Sub Product)
   const getGroupedItems = () => {
     const groups = {};
     const items = ledgerData.items || [];
+    const subQuery = searchSubProduct.trim().toLowerCase();
+    const selCat = selectedCategory.trim().toUpperCase();
+
     items.forEach(item => {
-      const cat = item.category_name.toUpperCase();
-      if (!groups[cat]) {
-        groups[cat] = [];
+      const itemCat = item.category_name.toUpperCase();
+      const matchCat = selCat === 'ALL' || itemCat === selCat;
+      const matchSub = !subQuery || 
+        (item.sub_product_name && item.sub_product_name.toLowerCase().includes(subQuery)) ||
+        (item.unit && item.unit.toLowerCase().includes(subQuery));
+
+      if (matchCat && matchSub) {
+        if (!groups[itemCat]) {
+          groups[itemCat] = [];
+        }
+        groups[itemCat].push(item);
       }
-      groups[cat].push(item);
     });
     return groups;
+  };
+
+  const handleResetFilters = () => {
+    setSelectedCategory('ALL');
+    setSearchSubProduct('');
+    setRmCurrentPages({});
   };
 
   // Set Opening handlers
@@ -292,7 +323,10 @@ const RawMaterialLedger = () => {
 
   const grandTotals = calculateGrandTotals();
   const groupedItems = getGroupedItems();
+  const uniqueCategories = getUniqueCategories();
   const isToday = ledgerDate === getTodayISTStr();
+  const hasActiveFilters = selectedCategory !== 'ALL' || Boolean(searchSubProduct.trim());
+  const totalMatchingItems = Object.values(groupedItems).reduce((acc, curr) => acc + curr.length, 0);
 
   return (
     <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
@@ -558,6 +592,82 @@ const RawMaterialLedger = () => {
             </div>
           </div>
 
+          {/* SEARCH & FILTER CONTROLS (2 FIELDS: CATEGORY & SUB PRODUCT) */}
+          <div className="card-premium p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+              {/* Field 1: Category Selector */}
+              <div className="md:col-span-4 space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Category
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">📁</span>
+                  <select
+                    value={selectedCategory}
+                    onChange={(e) => {
+                      setSelectedCategory(e.target.value);
+                      setRmCurrentPages({});
+                    }}
+                    className="w-full h-11 pl-10 pr-8 rounded-xl border border-slate-200 bg-white text-slate-750 text-sm font-semibold focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none cursor-pointer appearance-none shadow-sm"
+                  >
+                    <option value="ALL">All Categories ({uniqueCategories.length})</option>
+                    {uniqueCategories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 text-xs">▼</span>
+                </div>
+              </div>
+
+              {/* Field 2: Sub Product Search Input */}
+              <div className="md:col-span-8 space-y-1">
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">
+                  Sub Product Search
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                  <input
+                    type="text"
+                    placeholder="Search sub product (e.g. 1L BOPP Kemps, 19.8, Green Cap, 500ml, ROLLS)..."
+                    value={searchSubProduct}
+                    onChange={(e) => {
+                      setSearchSubProduct(e.target.value);
+                      setRmCurrentPages({});
+                    }}
+                    className="w-full h-11 pl-10 pr-10 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm font-medium focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none shadow-sm"
+                  />
+                  {searchSubProduct && (
+                    <button
+                      onClick={() => {
+                        setSearchSubProduct('');
+                        setRmCurrentPages({});
+                      }}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs bg-slate-100 hover:bg-slate-200 rounded-full w-5 h-5 flex items-center justify-center transition-all"
+                      title="Clear text"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Status Badge & Reset Action */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs animate-fade-in">
+                <span className="bg-blue-50 text-blue-700 font-bold px-3 py-1 rounded-lg border border-blue-100 flex items-center gap-1.5">
+                  <span>🎯</span> {totalMatchingItems} {totalMatchingItems === 1 ? 'item' : 'items'} found in {Object.keys(groupedItems).length} {Object.keys(groupedItems).length === 1 ? 'category' : 'categories'}
+                </span>
+                <button
+                  onClick={handleResetFilters}
+                  className="text-xs text-rose-600 hover:text-rose-700 font-bold px-2.5 py-1 rounded-lg hover:bg-rose-50 transition-all flex items-center gap-1"
+                >
+                  <span>✕</span> Reset Filters
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Grouped Lists */}
           {loading ? (
             <div className="card-premium py-20 text-center text-slate-400">
@@ -565,8 +675,21 @@ const RawMaterialLedger = () => {
               Calculating ledger stocks for {formatDateDDMMYYYY(ledgerDate)}...
             </div>
           ) : Object.keys(groupedItems).length === 0 ? (
-            <div className="card-premium py-20 text-center text-slate-400 italic">
-              No raw materials found. Add raw materials to the Product Master first.
+            <div className="card-premium py-16 text-center text-slate-400">
+              <div className="text-3xl mb-2">🔍</div>
+              <p className="text-sm font-bold text-slate-600">
+                {hasActiveFilters
+                  ? 'No raw materials found matching the selected category and search criteria.'
+                  : 'No raw materials found. Add raw materials to the Product Master first.'}
+              </p>
+              {hasActiveFilters && (
+                <button
+                  onClick={handleResetFilters}
+                  className="mt-3 px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all"
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -585,10 +708,10 @@ const RawMaterialLedger = () => {
 
                 return (
                   <details 
-                    key={categoryName} 
+                    key={`${categoryName}-${Boolean(hasActiveFilters)}`}
                     className="collapse collapse-arrow bg-white border border-slate-200 rounded-2xl shadow-sm mb-4 pointer-events-auto"
-                    name="rm-ledger-accordion"
-                    defaultOpen={idx === 0}
+                    name={hasActiveFilters ? undefined : "rm-ledger-accordion"}
+                    open={Boolean(hasActiveFilters) || idx === 0}
                   >
                     <summary className="collapse-title text-sm font-black text-slate-800 uppercase tracking-wide py-4 px-6 cursor-pointer flex items-center justify-between">
                       <span className="flex items-center gap-2">

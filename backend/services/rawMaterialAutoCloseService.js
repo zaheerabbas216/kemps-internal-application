@@ -33,12 +33,23 @@ export async function getTransactions(connection, rawMaterialId, startDate, endD
   }
 
   const txQuery = `
-    SELECT tx.quantity, tx.transaction_type, tx.reference_id, tx.tx_date, tx.user_name
+    SELECT 
+      tx.quantity, 
+      tx.transaction_type, 
+      tx.reference_id, 
+      tx.tx_date, 
+      tx.user_name,
+      tx.bottle_bags,
+      tx.bags_used,
+      tx.bags_box
     FROM (
       SELECT 
         sr.quantity,
         sr.transaction_type,
         sr.reference_id,
+        pbb.bottle_bags,
+        pbb.bags_used,
+        bi.bags_box,
         CASE 
           WHEN sr.transaction_type = 'PURCHASE' THEN COALESCE(ib.bill_date, DATE(sr.created_at))
           WHEN sr.transaction_type = 'PRODUCTION' AND sr.reference_id LIKE 'BATCH-%' THEN COALESCE(pbb.batch_date, DATE(sr.created_at))
@@ -52,7 +63,8 @@ export async function getTransactions(connection, rawMaterialId, startDate, endD
         END AS user_name
       FROM stock_register sr
       LEFT JOIN inventory_bills ib ON sr.transaction_type = 'PURCHASE' AND sr.reference_id = ib.id
-      LEFT JOIN pet_bottle_batches pbb ON sr.transaction_type = 'PRODUCTION' AND sr.reference_id = pbb.id
+      LEFT JOIN inventory_bill_items bi ON sr.transaction_type = 'PURCHASE' AND sr.reference_id = bi.bill_id AND sr.item_id = bi.raw_material_id
+      LEFT JOIN pet_bottle_batches pbb ON sr.transaction_type = 'PRODUCTION' AND sr.reference_id = pbb.id AND (sr.item_id = pbb.finished_product_id OR sr.item_id = pbb.raw_material_id)
       LEFT JOIN production_batches pb ON sr.transaction_type = 'PRODUCTION' AND sr.reference_id = pb.id
       LEFT JOIN stock_corrections sc ON sr.transaction_type = 'CORRECTION' AND sr.reference_id = sc.id
       WHERE sr.item_type = 'RAW_MATERIAL' AND sr.item_id = ?
@@ -69,13 +81,18 @@ export function aggregateTxs(txs, categoryName, subProductName, unit, factor) {
   let stock_in = 0;
   let stock_out = 0;
   const isPreform = categoryName.toLowerCase() === 'preforms';
+  const isBottle = categoryName.toLowerCase() === 'bottles';
   const weight = parseFloat(subProductName) || 0;
 
   for (const t of txs) {
     let qty = parseFloat(t.quantity) || 0;
     if (isPreform) {
-      const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
-      qty = qty * scale;
+      if (unit === 'BAGS' && t.bags_used !== undefined && t.bags_used !== null && parseFloat(t.bags_used) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+        qty = -parseFloat(t.bags_used);
+      } else {
+        const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
+        qty = qty * scale;
+      }
       if (qty > 0) {
         stock_in += qty;
       } else if (qty < 0) {
@@ -84,7 +101,13 @@ export function aggregateTxs(txs, categoryName, subProductName, unit, factor) {
     } else {
       const secondUnit = getSecondUnit(categoryName);
       if (secondUnit && unit === secondUnit) {
-        qty = qty / factor;
+        if (isBottle && t.bottle_bags !== undefined && t.bottle_bags !== null && parseFloat(t.bottle_bags) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+          qty = parseFloat(t.bottle_bags);
+        } else if (t.bags_box !== undefined && t.bags_box !== null && parseFloat(t.bags_box) > 0 && String(t.reference_id).startsWith('BILL-')) {
+          qty = parseFloat(t.bags_box);
+        } else {
+          qty = factor > 0 ? (qty / factor) : 0;
+        }
       }
       if (qty > 0) {
         stock_in += qty;

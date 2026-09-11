@@ -101,12 +101,22 @@ async function getTransactionsForOpening(connection, rawMaterialId, unit, date, 
     for (const t of priorTxs) {
       let qty = parseFloat(t.quantity) || 0;
       if (isPreform) {
-        const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
-        qty = qty * scale;
+        if (unit === 'BAGS' && t.bags_used !== undefined && t.bags_used !== null && parseFloat(t.bags_used) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+          qty = -parseFloat(t.bags_used);
+        } else {
+          const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
+          qty = qty * scale;
+        }
       } else {
         const secondUnit = getSecondUnit(rm.category_name);
         if (secondUnit && unit === secondUnit) {
-          qty = qty / factor;
+          if (isBottle && t.bottle_bags !== undefined && t.bottle_bags !== null && parseFloat(t.bottle_bags) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+            qty = parseFloat(t.bottle_bags);
+          } else if (t.bags_box !== undefined && t.bags_box !== null && parseFloat(t.bags_box) > 0 && String(t.reference_id).startsWith('BILL-')) {
+            qty = parseFloat(t.bags_box);
+          } else {
+            qty = factor > 0 ? (qty / factor) : 0;
+          }
         }
       }
 
@@ -702,12 +712,22 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
         };
 
         if (isPreform) {
-          const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
-          details.quantity = qty * scale;
+          if (unit === 'BAGS' && t.bags_used !== undefined && t.bags_used !== null && parseFloat(t.bags_used) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+            details.quantity = parseFloat(t.bags_used);
+          } else {
+            const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
+            details.quantity = qty * scale;
+          }
         } else {
           const secondUnit = getSecondUnit(rm.category_name);
           if (secondUnit && unit === secondUnit) {
-            details.quantity = qty / factor;
+            if (isBottle && t.bottle_bags !== undefined && t.bottle_bags !== null && parseFloat(t.bottle_bags) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+              details.quantity = parseFloat(t.bottle_bags);
+            } else if (t.bags_box !== undefined && t.bags_box !== null && parseFloat(t.bags_box) > 0 && String(t.reference_id).startsWith('BILL-')) {
+              details.quantity = parseFloat(t.bags_box);
+            } else {
+              details.quantity = factor > 0 ? (qty / factor) : 0;
+            }
           }
         }
 
@@ -733,12 +753,22 @@ router.get('/drilldown', authMiddleware, async (req, res) => {
         };
 
         if (isPreform) {
-          const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
-          details.quantity = Math.abs(qty) * scale;
+          if (unit === 'BAGS' && t.bags_used !== undefined && t.bags_used !== null && parseFloat(t.bags_used) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+            details.quantity = parseFloat(t.bags_used);
+          } else {
+            const scale = unit === 'BAGS' ? (1 / 25) : (1000 / weight);
+            details.quantity = Math.abs(qty) * scale;
+          }
         } else {
           const secondUnit = getSecondUnit(rm.category_name);
           if (secondUnit && unit === secondUnit) {
-            details.quantity = Math.abs(qty) / factor;
+            if (isBottle && t.bottle_bags !== undefined && t.bottle_bags !== null && parseFloat(t.bottle_bags) > 0 && String(t.reference_id).startsWith('BATCH-')) {
+              details.quantity = parseFloat(t.bottle_bags);
+            } else if (t.bags_box !== undefined && t.bags_box !== null && parseFloat(t.bags_box) > 0 && String(t.reference_id).startsWith('BILL-')) {
+              details.quantity = parseFloat(t.bags_box);
+            } else {
+              details.quantity = factor > 0 ? (Math.abs(qty) / factor) : 0;
+            }
           }
         }
 

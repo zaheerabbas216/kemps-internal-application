@@ -15,6 +15,7 @@ const Loading = () => {
   // Master lists
   const [finishedProducts, setFinishedProducts] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [goodsLedgerStock, setGoodsLedgerStock] = useState({}); // { [productId]: closing_stock }
 
   // ==========================================
   // NEW LOADING FORM STATE
@@ -285,6 +286,29 @@ const Loading = () => {
     }
   }, [activeTab, historyPage, todayHistoryPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
 
+  const fetchGoodsLedgerStock = async () => {
+    try {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      const istDate = new Date(now.getTime() + (330 + offset) * 60000);
+      const yyyy = istDate.getFullYear();
+      const mm = String(istDate.getMonth() + 1).padStart(2, '0');
+      const dd = String(istDate.getDate()).padStart(2, '0');
+      const todayFormatted = `${yyyy}-${mm}-${dd}`;
+
+      const res = await api.get('/goods-ledger/day', { params: { date: todayFormatted } });
+      if (res.data.ok && res.data.items) {
+        const stockMap = {};
+        res.data.items.forEach(item => {
+          stockMap[item.finished_product_id] = parseFloat(item.closing_stock) || 0;
+        });
+        setGoodsLedgerStock(stockMap);
+      }
+    } catch (err) {
+      console.error('Failed to load goods ledger stock in loading:', err);
+    }
+  };
+
   const fetchDropdownMasters = async () => {
     try {
       const [fpRes, custRes] = await Promise.all([
@@ -297,6 +321,7 @@ const Loading = () => {
       if (custRes.data.customers) {
         setCustomers(custRes.data.customers || []);
       }
+      await fetchGoodsLedgerStock();
     } catch (err) {
       console.error('Failed to load masters:', err);
     }
@@ -1137,15 +1162,43 @@ const Loading = () => {
                     
                     {/* Finished Product Dropdown */}
                     <div className="md:col-span-5 space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                        Product #{index + 1}
-                      </label>
+                      <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                          Product #{index + 1}
+                        </label>
+                        {row.finishedProductId && goodsLedgerStock[row.finishedProductId] !== undefined && (
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
+                            goodsLedgerStock[row.finishedProductId] > 0
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : (goodsLedgerStock[row.finishedProductId] === 0
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : 'bg-rose-50 text-rose-600 border border-rose-200')
+                          }`}>
+                            Stock: {goodsLedgerStock[row.finishedProductId]} Pcs
+                          </span>
+                        )}
+                      </div>
                       <SearchableSelect
-                        options={finishedProducts.map(fp => ({ value: fp.id, label: fp.name }))}
+                        options={finishedProducts.map(fp => {
+                          const stockVal = goodsLedgerStock[fp.id];
+                          const hasStock = stockVal !== undefined;
+                          return {
+                            value: fp.id,
+                            label: `${fp.name}${hasStock ? ` (${stockVal} in stock)` : ''}`,
+                            rawName: fp.name,
+                            stock: hasStock ? stockVal : null,
+                            badge: hasStock ? `${stockVal} in stock` : null,
+                            badgeClassName: (stockVal > 0)
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : (stockVal === 0 
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                                  : 'bg-rose-50 text-rose-600 border border-rose-200')
+                          };
+                        })}
                         value={row.finishedProductId}
                         onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
                         placeholder="-- Select Product --"
-                        searchPlaceholder="Type product name or number (e.g. 1, 500ml)..."
+                        searchPlaceholder="Type product name or stock..."
                         className="!h-11 font-semibold text-slate-750"
                       />
                     </div>

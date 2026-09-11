@@ -40,6 +40,9 @@ const MaintenanceForm = lazy(() => import('./pages/MaintenanceForm'));
 const MaintenanceHistory = lazy(() => import('./pages/MaintenanceHistory'));
 const MaintenanceMaster = lazy(() => import('./pages/MaintenanceMaster'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const StockDashboard = lazy(() => import('./pages/StockDashboard'));
+const ProductionDashboard = lazy(() => import('./pages/ProductionDashboard'));
+const SundayDashboard = lazy(() => import('./pages/SundayDashboard'));
 const TotalSales = lazy(() => import('./pages/TotalSales'));
 const UserAuthentication = lazy(() => import('./pages/UserAuthentication'));
 const AccountsLedger = lazy(() => import('./pages/AccountsLedger'));
@@ -124,6 +127,9 @@ function App() {
               <Route path="/timer" element={<Timer />} />
               <Route path="/timer-history" element={<TimerHistory />} />
               <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/stock-dashboard" element={<StockDashboard />} />
+              <Route path="/production-dashboard" element={<ProductionDashboard />} />
+              <Route path="/sunday-dashboard" element={<SundayDashboard />} />
               <Route path="/total-sales" element={<TotalSales />} />
 
               {/* Admin only routes */}

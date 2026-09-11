@@ -43,15 +43,16 @@ export async function getConversionFactor(connection, rawMaterial) {
 
   // 1. Try fetching from inventory_bill_items (for purchases)
   const [invRows] = await db.query(
-    `SELECT bi.total_quantity, bi.bags_box 
+    `SELECT bi.total_quantity, bi.qty_in_pcs, bi.bags_box 
      FROM inventory_bill_items bi 
      JOIN inventory_bills b ON bi.bill_id = b.id 
-     WHERE bi.raw_material_id = ? AND bi.bags_box > 0 AND bi.total_quantity > 0 
+     WHERE bi.raw_material_id = ? AND bi.bags_box > 0 AND (bi.qty_in_pcs > 0 OR bi.total_quantity > 0) 
      ORDER BY b.bill_date DESC, bi.created_at DESC LIMIT 1`,
     [rawMaterial.id]
   );
   if (invRows.length > 0) {
-    const qty = parseFloat(invRows[0].total_quantity);
+    const pcs = parseFloat(invRows[0].qty_in_pcs);
+    const qty = pcs > 0 ? pcs : parseFloat(invRows[0].total_quantity);
     const bb = parseFloat(invRows[0].bags_box);
     if (qty > 0 && bb > 0) {
       return qty / bb;

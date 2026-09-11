@@ -164,7 +164,7 @@ export const computeDailyLedger = async (targetDate) => {
   );
   const totalCreditAdjusted = parseFloat(creditAdjRows[0]?.total_credit_adjusted || 0);
 
-  // 2. Billing — ONLY actual cash/UPI/Bank collected at billing counter at invoice creation time
+  // 2. Billing — actual cash/UPI/Bank collected at billing counter at invoice creation time, or credit balance adjusted
   const [bRows] = await pool.query(
     `SELECT
        cb.id AS ref_id,
@@ -178,6 +178,11 @@ export const computeDailyLedger = async (targetDate) => {
          WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
          WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
          WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
+         WHEN GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+         )) > 0 THEN 'Credit Adjustment'
          ELSE cb.payment_mode
        END AS method,
        GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
@@ -190,7 +195,12 @@ export const computeDailyLedger = async (targetDate) => {
        )) AS credit_adjusted_amt,
        (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
         GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-        GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
+        GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) +
+        GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+        ))) AS amount,
        'in' AS flow,
        'Billing' AS source_module,
        CONCAT('Sales Invoice — ', cb.customer_name, 
@@ -218,7 +228,12 @@ export const computeDailyLedger = async (targetDate) => {
        AND (
          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
-         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0
+         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR
+         GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+         )) > 0
        )
        AND cb.payment_mode != 'Credit'
        AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))
@@ -398,7 +413,7 @@ export const computeDailyLedger = async (targetDate) => {
       cash = rCash;
       upi  = rUpi;
       bank = rBank;
-    } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
+    } else if (!meth.includes('credit') && amt > 0) {
       if (meth.includes('cash')) {
         cash = amt;
       } else if (meth.includes('upi')) {
@@ -1005,7 +1020,12 @@ router.get('/', async (req, res) => {
       let w = [
         `(GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
-          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0)`,
+          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR
+          GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+            GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+            GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+          )) > 0)`,
         `cb.payment_mode != 'Credit'`,
         `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`
       ];
@@ -1025,7 +1045,7 @@ router.get('/', async (req, res) => {
           w.push('GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0');
         } else if (method === 'Bank') {
           w.push('GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0');
-        } else if (method === 'Credit Balance') {
+        } else if (method === 'Credit Balance' || method === 'Credit Adjustment') {
           w.push(`GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
             GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
@@ -1047,6 +1067,11 @@ router.get('/', async (req, res) => {
              WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
              WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
              WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
+             WHEN GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+               GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+               GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+               GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+             )) > 0 THEN 'Credit Adjustment'
              ELSE cb.payment_mode
            END AS method,
            GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
@@ -1059,7 +1084,12 @@ router.get('/', async (req, res) => {
            )) AS credit_adjusted_amt,
            (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
+            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) +
+            GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
+              GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
+              GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
+              GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
+            ))) AS amount,
            'in'             AS flow,
            'Billing'        AS source_module,
            CONCAT('Sales Invoice — ', cb.customer_name,
@@ -1388,7 +1418,7 @@ router.get('/', async (req, res) => {
         cash = rCash;
         upi  = rUpi;
         bank = rBank;
-      } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
+      } else if (!meth.includes('credit') && amt > 0) {
         if (meth.includes('cash')) {
           cash = amt;
         } else if (meth.includes('upi')) {

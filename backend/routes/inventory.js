@@ -170,11 +170,27 @@ router.post('/', async (req, res) => {
         ]
       );
 
+      // Check category to see if it's preform
+      const [matRows] = await connection.query(
+        `SELECT rm.unit, rmc.name as category_name 
+         FROM raw_materials rm 
+         JOIN raw_material_categories rmc ON rm.category_id = rmc.id 
+         WHERE rm.id = ?`,
+        [rawMaterialId]
+      );
+      const isPreform = matRows.length > 0 && matRows[0].category_name.toLowerCase() === 'preforms';
+
+      // For non-preforms: if qty_in_pcs is provided and > 0, log qty_in_pcs to stock register
+      let stockQty = parseFloat(totalQuantity) || 0;
+      if (!isPreform && cleanQtyInPcs > 0) {
+        stockQty = cleanQtyInPcs;
+      }
+
       // Log to Stock Register (positive addition for purchases)
       await connection.query(
         `INSERT INTO stock_register (item_type, item_id, transaction_type, reference_id, quantity, created_at)
          VALUES ('RAW_MATERIAL', ?, 'PURCHASE', ?, ?, NOW())`,
-        [rawMaterialId, billId, totalQuantity]
+        [rawMaterialId, billId, stockQty]
       );
     }
 
@@ -687,11 +703,27 @@ router.put('/:id', async (req, res) => {
         ]
       );
 
+      // Check category to see if it's preform
+      const [matRows] = await connection.query(
+        `SELECT rm.unit, rmc.name as category_name 
+         FROM raw_materials rm 
+         JOIN raw_material_categories rmc ON rm.category_id = rmc.id 
+         WHERE rm.id = ?`,
+        [rawMaterialId]
+      );
+      const isPreform = matRows.length > 0 && matRows[0].category_name.toLowerCase() === 'preforms';
+
+      // For non-preforms: if qty_in_pcs is provided and > 0, log qty_in_pcs to stock register
+      let stockQty = parseFloat(totalQuantity) || 0;
+      if (!isPreform && cleanQtyInPcs > 0) {
+        stockQty = cleanQtyInPcs;
+      }
+
       // Log to Stock Register (positive addition for purchases)
       await connection.query(
         `INSERT INTO stock_register (item_type, item_id, transaction_type, reference_id, quantity, created_at)
          VALUES ('RAW_MATERIAL', ?, 'PURCHASE', ?, ?, NOW())`,
-        [rawMaterialId, id, totalQuantity]
+        [rawMaterialId, id, stockQty]
       );
     }
 

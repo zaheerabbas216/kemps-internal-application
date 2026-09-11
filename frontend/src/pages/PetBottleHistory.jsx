@@ -20,6 +20,7 @@ const PetBottleHistory = () => {
   // Dropdowns
   const [finishedProducts, setFinishedProducts] = useState([]);
   const [preformMaterials, setPreformMaterials] = useState([]);
+  const [machines, setMachines] = useState([]);
 
   // Modal states
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
@@ -34,6 +35,7 @@ const PetBottleHistory = () => {
     batchDate: '',
     productId: '',
     rawMaterialId: '',
+    machineId: '',
     bagsUsed: '',
     actualReading: '',
     bottleBags: '0',
@@ -91,6 +93,12 @@ const PetBottleHistory = () => {
           );
           setPreformMaterials(preformMats);
         }
+      }
+
+      // 3. Fetch machines from timer module
+      const machinesRes = await api.get('/timer/machines');
+      if (machinesRes.data.ok) {
+        setMachines(machinesRes.data.data || []);
       }
     } catch (err) {
       console.error('Failed to load dropdowns:', err);
@@ -166,6 +174,7 @@ const PetBottleHistory = () => {
       batchDate: batch.batch_date,
       productId: batch.finished_product_id,
       rawMaterialId: batch.raw_material_id,
+      machineId: batch.machine_id || '',
       bagsUsed: batch.bags_used,
       actualReading: batch.actual_reading,
       bottleBags: batch.bottle_bags || 0,
@@ -207,7 +216,7 @@ const PetBottleHistory = () => {
     setFormError('');
     setFormSuccess('');
 
-    const { batchDate, productId, rawMaterialId, bagsUsed, actualReading, bottleBags, wastage, startTime, stopTime, notes } = formData;
+    const { batchDate, productId, rawMaterialId, machineId, bagsUsed, actualReading, bottleBags, wastage, startTime, stopTime, notes } = formData;
 
     if (!batchDate) return setFormError('Batch Date is required.');
     if (!productId) return setFormError('Product is required.');
@@ -229,6 +238,7 @@ const PetBottleHistory = () => {
         batchDate,
         productId: parseInt(productId, 10),
         rawMaterialId: parseInt(rawMaterialId, 10),
+        machineId: machineId || null,
         bagsUsed: parseFloat(bagsUsed),
         actualReading: parseFloat(actualReading),
         bottleBags: parseInt(bottleBags, 10) || 0,
@@ -308,6 +318,7 @@ const PetBottleHistory = () => {
               <tr>
                 <th>Batch ID</th>
                 <th>Date</th>
+                <th>Machine</th>
                 <th>Product</th>
                 <th>Preform Weight</th>
                 <th>Bags Used</th>
@@ -323,6 +334,7 @@ const PetBottleHistory = () => {
                 <tr>
                   <td class="mono">${b.id}</td>
                   <td>${formatDateDDMMYYYY(b.batch_date)}</td>
+                  <td style="font-weight: 600;">${b.machine_name || '—'}</td>
                   <td style="font-weight: 600;">${b.product_name}</td>
                   <td>${b.preform_name}g</td>
                   <td>${b.bags_used}</td>
@@ -437,6 +449,7 @@ const PetBottleHistory = () => {
               <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
                 <th className="py-4 px-6 text-left">Batch ID</th>
                 <th className="py-4 px-6 text-left">Date</th>
+                <th className="py-4 px-6 text-left">Machine</th>
                 <th className="py-4 px-6 text-left">Product</th>
                 <th className="py-4 px-6 text-left">Preform</th>
                 <th className="py-4 px-6 text-left">Bags Used</th>
@@ -451,7 +464,7 @@ const PetBottleHistory = () => {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="11" className="py-20 text-center">
+                  <td colSpan="12" className="py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                        <span className="loading loading-spinner text-primary"></span>
                        <span className="text-slate-400 text-sm font-medium">Fetching history ledger...</span>
@@ -460,7 +473,7 @@ const PetBottleHistory = () => {
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="12" className="py-20 text-center text-slate-400 font-medium italic">
                     No production batch records matching the criteria.
                   </td>
                 </tr>
@@ -469,6 +482,15 @@ const PetBottleHistory = () => {
                   <tr key={b.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{b.id}</td>
                     <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(b.batch_date)}</td>
+                    <td className="py-4 px-6 text-[13px] font-semibold text-slate-700">
+                      {b.machine_name ? (
+                        <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200">
+                          {b.machine_name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">—</span>
+                      )}
+                    </td>
                     <td className="py-4 px-6 text-[13px] font-bold text-slate-700 truncate max-w-[150px]" title={b.product_name}>{b.product_name}</td>
                     <td className="py-4 px-6 text-[13px] font-semibold text-slate-605">{b.preform_name}g</td>
                     <td className="py-4 px-6 text-[13px] font-semibold text-slate-650">{b.bags_used}</td>
@@ -584,6 +606,26 @@ const PetBottleHistory = () => {
                       />
                     </div>
 
+                    {/* Machine Details */}
+                    <div className="space-y-1.5">
+                      <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Machine Details
+                      </label>
+                      <select
+                        name="machineId"
+                        value={formData.machineId}
+                        onChange={handleInputChange}
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium cursor-pointer"
+                      >
+                        <option value="">Select Machine (from Timer Module)</option>
+                        {machines.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.machine_name} ({m.id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Finished Product */}
                     <div className="space-y-1.5">
                       <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
@@ -593,7 +635,7 @@ const PetBottleHistory = () => {
                         name="productId"
                         value={formData.productId}
                         onChange={handleInputChange}
-                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium cursor-pointer"
                         required
                       >
                         <option value="">Select Product</option>
@@ -855,6 +897,10 @@ const PetBottleHistory = () => {
               <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Date</span>
                 <span className="col-span-2 text-slate-800">{formatDateDDMMYYYY(viewingBatch.batch_date)}</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
+                <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Machine</span>
+                <span className="col-span-2 text-slate-800 font-bold">{viewingBatch.machine_name || '—'}</span>
               </div>
               <div className="grid grid-cols-3 gap-2 py-2 border-b border-slate-50">
                 <span className="text-slate-400 font-bold text-xs uppercase tracking-wider">Product</span>

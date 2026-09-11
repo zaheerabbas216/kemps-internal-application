@@ -20,6 +20,7 @@ const PetBottle = () => {
   // Dropdowns
   const [bottleProducts, setBottleProducts] = useState([]);
   const [preformMaterials, setPreformMaterials] = useState([]);
+  const [machines, setMachines] = useState([]);
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -32,6 +33,7 @@ const PetBottle = () => {
     batchDate: '',
     productId: '',
     rawMaterialId: '',
+    machineId: '',
     bagsUsed: '',
     actualReading: '',
     bottleBags: '',
@@ -76,6 +78,11 @@ const PetBottle = () => {
       // Fetch raw materials and categories
       const materialsRes = await api.get('/raw-materials', { params: { limit: 500, activeOnly: true } });
       const categoriesRes = await api.get('/raw-materials/categories');
+      const machinesRes = await api.get('/timer/machines');
+
+      if (machinesRes.data.ok) {
+        setMachines(machinesRes.data.data || []);
+      }
 
       if (materialsRes.data.ok) {
         const allMats = materialsRes.data.materials || [];
@@ -116,6 +123,7 @@ const PetBottle = () => {
         batchDate: batch.batch_date,
         productId: batch.finished_product_id,
         rawMaterialId: batch.raw_material_id,
+        machineId: batch.machine_id || '',
         bagsUsed: batch.bags_used,
         actualReading: batch.actual_reading,
         bottleBags: batch.bottle_bags || 0,
@@ -139,6 +147,7 @@ const PetBottle = () => {
         batchDate: todayFormatted,
         productId: '',
         rawMaterialId: '',
+        machineId: '',
         bagsUsed: '',
         actualReading: '',
         bottleBags: '0',
@@ -182,7 +191,7 @@ const PetBottle = () => {
     setFormError('');
     setFormSuccess('');
 
-    const { batchDate, productId, rawMaterialId, bagsUsed, actualReading, bottleBags, wastage, startTime, stopTime, notes } = formData;
+    const { batchDate, productId, rawMaterialId, machineId, bagsUsed, actualReading, bottleBags, wastage, startTime, stopTime, notes } = formData;
 
     if (!batchDate) return setFormError('Batch Date is required.');
     if (!productId) return setFormError('Product is required.');
@@ -204,6 +213,7 @@ const PetBottle = () => {
         batchDate,
         productId: parseInt(productId, 10),
         rawMaterialId: parseInt(rawMaterialId, 10),
+        machineId: machineId || null,
         bagsUsed: parseFloat(bagsUsed),
         actualReading: parseFloat(actualReading),
         bottleBags: parseInt(bottleBags, 10) || 0,
@@ -377,6 +387,7 @@ const PetBottle = () => {
               <tr className="text-slate-555 text-[11px] font-black uppercase tracking-wider">
                 <th className="py-4 px-6 text-left">Batch ID</th>
                 <th className="py-4 px-6 text-left">Date</th>
+                <th className="py-4 px-6 text-left">Machine</th>
                 <th className="py-4 px-6 text-left">Product</th>
                 <th className="py-4 px-6 text-left">Preform</th>
                 <th className="py-4 px-6 text-left">Bags Used</th>
@@ -391,14 +402,14 @@ const PetBottle = () => {
             <tbody className="divide-y divide-slate-50">
               {loading ? (
                 <tr>
-                  <td colSpan="11" className="py-20 text-center text-slate-400">
+                  <td colSpan="12" className="py-20 text-center text-slate-400">
                     <span className="loading loading-spinner text-primary block mx-auto mb-2"></span>
                     Loading today's production...
                   </td>
                 </tr>
               ) : batches.length === 0 ? (
                 <tr>
-                  <td colSpan="11" className="py-20 text-center text-slate-400 font-medium italic">
+                  <td colSpan="12" className="py-20 text-center text-slate-400 font-medium italic">
                     {searchQuery ? "No matching batches found for today." : "No production batches logged today."}
                   </td>
                 </tr>
@@ -407,6 +418,15 @@ const PetBottle = () => {
                   <tr key={b.id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="py-4 px-6 text-[12px] font-mono font-bold text-primary">{b.id}</td>
                     <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(b.batch_date)}</td>
+                    <td className="py-4 px-6 text-[13px] font-semibold text-slate-700">
+                      {b.machine_name ? (
+                        <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold border border-slate-200">
+                          {b.machine_name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 text-xs italic">—</span>
+                      )}
+                    </td>
                     <td className="py-4 px-6 text-[13px] font-bold text-slate-700">{b.product_name}</td>
                     <td className="py-4 px-6 text-[13px] font-semibold text-slate-605">{b.preform_name}g</td>
                     <td className="py-4 px-6 text-[13px] font-semibold text-slate-650">{b.bags_used}</td>
@@ -444,7 +464,7 @@ const PetBottle = () => {
       {/* ADD PRODUCTION MODAL */}
       {isFormModalOpen && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/40 backdrop-blur-sm pointer-events-auto">
-          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] max-h-[90vh] h-[640px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.2)] border border-slate-200 w-[650px] max-h-[90vh] h-[660px] flex flex-col overflow-hidden animate-fade-in pointer-events-auto">
             {/* Modal Header */}
             <div className="bg-primary p-7 text-white shrink-0 relative">
               <h3 className="text-2xl font-black italic tracking-tight uppercase">
@@ -487,6 +507,26 @@ const PetBottle = () => {
                       />
                     </div>
 
+                    {/* Machine Details */}
+                    <div className="space-y-1.5">
+                      <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
+                        Machine Details
+                      </label>
+                      <select
+                        name="machineId"
+                        value={formData.machineId}
+                        onChange={handleInputChange}
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium cursor-pointer"
+                      >
+                        <option value="">Select Machine (from Timer Module)</option>
+                        {machines.map(m => (
+                          <option key={m.id} value={m.id}>
+                            {m.machine_name} ({m.id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
                     {/* Finished Product */}
                     <div className="space-y-1.5">
                       <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
@@ -496,7 +536,7 @@ const PetBottle = () => {
                         name="productId"
                         value={formData.productId}
                         onChange={handleInputChange}
-                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium cursor-pointer"
                         required
                       >
                         <option value="">Select Bottle Product</option>
@@ -515,7 +555,7 @@ const PetBottle = () => {
                         name="rawMaterialId"
                         value={formData.rawMaterialId}
                         onChange={handleInputChange}
-                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium cursor-pointer"
                         required
                       >
                         <option value="">Select Preform (g)</option>

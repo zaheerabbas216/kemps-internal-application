@@ -38,7 +38,8 @@ const SearchableSelect = ({
   // Filter options based on search
   const filtered = search.trim()
     ? options.filter(opt =>
-        String(opt.label).toLowerCase().includes(search.trim().toLowerCase())
+        String(opt.label || opt.rawName || '').toLowerCase().includes(search.trim().toLowerCase()) ||
+        (opt.badge && String(opt.badge).toLowerCase().includes(search.trim().toLowerCase()))
       )
     : options;
 
@@ -114,7 +115,7 @@ const SearchableSelect = ({
         onClick={() => isOpen ? closeDropdown() : openDropdown()}
         disabled={disabled}
         className={[
-          'w-full h-10 px-3 rounded-xl border bg-white text-sm text-left flex items-center justify-between gap-2 transition-all outline-none',
+          'w-full h-11 px-3 rounded-xl border bg-white text-sm text-left flex items-center justify-between gap-2 transition-all outline-none',
           isOpen
             ? 'border-primary ring-2 ring-primary/10 shadow-sm'
             : 'border-slate-200 hover:border-slate-300',
@@ -124,11 +125,16 @@ const SearchableSelect = ({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className={`truncate font-medium ${selectedOption ? 'text-slate-800' : 'text-slate-400'}`}>
-          {displayLabel}
+        <span className={`truncate font-medium flex-1 ${selectedOption ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
+          {selectedOption ? (selectedOption.rawName || selectedOption.label) : displayLabel}
         </span>
+        {selectedOption?.badge && (
+          <span className={`text-[10px] font-black px-2 py-0.5 rounded-md shrink-0 ${selectedOption.badgeClassName || 'bg-slate-100 text-slate-600'}`}>
+            {selectedOption.badge}
+          </span>
+        )}
         <span
-          className="text-slate-400 shrink-0 transition-transform duration-200"
+          className="text-slate-400 shrink-0 transition-transform duration-200 text-xs"
           style={{ transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
         >
           ▾
@@ -138,11 +144,11 @@ const SearchableSelect = ({
       {/* Dropdown panel */}
       {isOpen && (
         <div
-          className="absolute z-[9999] left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl overflow-hidden animate-fade-in"
+          className="absolute z-[9999] left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden animate-fade-in"
           style={{ top: '100%' }}
         >
           {/* Search input */}
-          <div className="p-2 border-b border-slate-100">
+          <div className="p-2 border-b border-slate-100 bg-slate-50/50">
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">
                 🔍
@@ -156,7 +162,7 @@ const SearchableSelect = ({
                   setHighlightIndex(0);
                 }}
                 placeholder={searchPlaceholder}
-                className="w-full h-8 pl-7 pr-7 text-xs rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all font-medium"
+                className="w-full h-8 pl-7 pr-7 text-xs rounded-lg border border-slate-200 bg-white focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all font-medium"
               />
               {search && (
                 <button
@@ -174,7 +180,7 @@ const SearchableSelect = ({
           <ul
             ref={listRef}
             role="listbox"
-            className="max-h-52 overflow-y-auto py-1"
+            className="max-h-56 overflow-y-auto py-1 divide-y divide-slate-50"
           >
             {filtered.length === 0 ? (
               <li className="px-3 py-3 text-center text-slate-400 text-xs font-medium italic">
@@ -193,16 +199,23 @@ const SearchableSelect = ({
                     onClick={() => handleSelect(opt)}
                     onMouseEnter={() => setHighlightIndex(idx)}
                     className={[
-                      'px-3 py-2 text-sm cursor-pointer flex items-center justify-between gap-2 transition-colors',
+                      'px-3 py-2 text-xs cursor-pointer flex items-center justify-between gap-2 transition-colors',
                       isHighlighted && !isSelected ? 'bg-primary/5 text-primary' : '',
                       isSelected ? 'bg-primary/10 text-primary font-bold' : 'text-slate-700 font-medium',
                       !isSelected && !isHighlighted ? 'hover:bg-slate-50' : ''
                     ].join(' ')}
                   >
-                    <span className="truncate">{opt.label}</span>
-                    {isSelected && (
-                      <span className="text-primary text-xs shrink-0">✓</span>
-                    )}
+                    <span className="truncate flex-1 font-semibold">{opt.rawName || opt.label}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {opt.badge && (
+                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${opt.badgeClassName || 'bg-slate-100 text-slate-600'}`}>
+                          {opt.badge}
+                        </span>
+                      )}
+                      {isSelected && (
+                        <span className="text-primary text-xs font-black">✓</span>
+                      )}
+                    </div>
                   </li>
                 );
               })
@@ -211,7 +224,7 @@ const SearchableSelect = ({
 
           {/* Footer: result count when searching */}
           {search && filtered.length > 0 && (
-            <div className="px-3 py-1.5 border-t border-slate-100 text-[10px] text-slate-400 font-medium">
+            <div className="px-3 py-1.5 border-t border-slate-100 text-[10px] text-slate-400 font-medium bg-slate-50">
               {filtered.length} result{filtered.length !== 1 ? 's' : ''} for &ldquo;{search}&rdquo;
             </div>
           )}
