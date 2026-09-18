@@ -370,30 +370,30 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   });
 
   return (
-    <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-screen flex flex-col shrink-0 sticky top-0 overflow-hidden transition-all duration-300 ease-in-out`}>
-      <div className={`shrink-0 flex items-center ${isCollapsed ? 'flex-col gap-3 p-4' : 'justify-between p-8'}`}>
+    <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-full flex flex-col shrink-0 overflow-visible transition-all duration-300 ease-in-out relative z-30`}>
+      <div className={`shrink-0 h-20 flex items-center border-b border-slate-100/60 relative ${isCollapsed ? 'justify-center px-2' : 'px-6 justify-between'}`}>
         <div 
           onClick={() => navigate('/dashboard')} 
-          className={`flex items-center cursor-pointer ${isCollapsed ? 'flex-col gap-1' : 'gap-3'}`}
+          className="flex items-center gap-3 cursor-pointer overflow-hidden"
         >
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic shrink-0">
             K
           </div>
           {!isCollapsed && (
-            <div>
+            <div className="overflow-hidden">
               <h1 className="text-xl font-extrabold text-[#0f172a] tracking-tight leading-none italic">
                 Kemp's<span className="text-primary">.</span>
               </h1>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management</p>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">Inventory Management</p>
             </div>
           )}
         </div>
-        
-        {/* ChatGPT-Style Sidebar Toggle Button for Desktop */}
+
+        {/* Toggle Icon */}
         <button 
           onClick={onToggleCollapse}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="hidden lg:flex w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 items-center justify-center transition-all active:scale-95 shrink-0"
+          className="hidden cursor-e-resize lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-white border border-slate-200/90 text-slate-500 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md items-center justify-center transition-all duration-200 active:scale-90 z-40 shadow-sm"
         >
           <svg className={`w-4 h-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -404,7 +404,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         {/* Mobile Close Button */}
         <button 
           onClick={onClose}
-          className="lg:hidden w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto"
+          className="lg:hidden w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto cursor-pointer"
         >
           ✕
         </button>

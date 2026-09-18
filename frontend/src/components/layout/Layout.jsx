@@ -101,12 +101,12 @@ const Layout = () => {
   const isCleanHeader = cleanHeaderPaths.includes(location.pathname);
 
   return (
-    <div className="flex min-h-screen relative overflow-x-hidden">
+    <div className="flex h-screen max-h-screen w-screen overflow-hidden bg-[#f8fbff] relative">
       {/* Sidebar Drawer Container */}
       <div className={`
         fixed inset-y-0 left-0 z-50 transform lg:translate-x-0 lg:static lg:block
         ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        transition-all duration-300 ease-in-out shrink-0
+        transition-all duration-300 ease-in-out shrink-0 h-full
         ${isCollapsed ? 'w-20' : 'w-72'}
       `}>
         <Sidebar 
@@ -126,8 +126,8 @@ const Layout = () => {
       )}
 
       {/* Main Panel */}
-      <div className="flex-1 flex flex-col bg-[#f8fbff] min-w-0">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-4 sm:px-6 md:px-10 sticky top-0 z-20">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#f8fbff]">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-4 sm:px-6 md:px-10 shrink-0 z-20">
           {/* Mobile Hamburg & Logo */}
           <div className="flex items-center gap-3 lg:hidden">
             <button 
@@ -147,32 +147,20 @@ const Layout = () => {
             </div>
           </div>
 
-          {/* Desktop Title & Sidebar Toggle Icon */}
-          <div className="hidden lg:flex items-center">
-            <button 
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 text-slate-600 hover:bg-slate-100 hover:text-slate-900 flex items-center justify-center transition-all mr-4 active:scale-95 shadow-sm"
-              title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              <svg className={`w-5 h-5 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                <line x1="9" y1="3" x2="9" y2="21" />
-              </svg>
-            </button>
-            <div>
-              {isCleanHeader ? (
-                <h2 className="text-[15px] font-bold text-[#0f172a] tracking-tight">{getPageTitle()}</h2>
-              ) : (
-                <>
-                  <h2 className="text-xl font-extrabold text-[#0f172a] tracking-tight">{getPageTitle()}</h2>
-                  <nav className="flex items-center gap-2 text-xs font-medium text-slate-400 mt-0.5">
-                    <span>Home</span>
-                    <span>/</span>
-                    <span className="text-slate-600">{getPageTitle()}</span>
-                  </nav>
-                </>
-              )}
-            </div>
+          {/* Desktop Title */}
+          <div className="hidden lg:block">
+            {isCleanHeader ? (
+              <h2 className="text-[15px] font-bold text-[#0f172a] tracking-tight">{getPageTitle()}</h2>
+            ) : (
+              <>
+                <h2 className="text-xl font-extrabold text-[#0f172a] tracking-tight">{getPageTitle()}</h2>
+                <nav className="flex items-center gap-2 text-xs font-medium text-slate-400 mt-0.5">
+                  <span>Home</span>
+                  <span>/</span>
+                  <span className="text-slate-600">{getPageTitle()}</span>
+                </nav>
+              </>
+            )}
           </div>
 
           {/* Desktop Right Info */}
@@ -210,7 +198,7 @@ const Layout = () => {
 
         </header>
 
-        <main className="p-4 sm:p-6 md:p-10 pb-24 md:pb-10 max-w-[1200px] w-full mx-auto">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-10 pb-24 md:pb-10 w-full min-w-0">
           <Outlet />
         </main>
       </div>
