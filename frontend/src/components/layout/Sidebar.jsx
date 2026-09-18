@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 
 const navGroups = [
   {
@@ -207,8 +207,13 @@ const navGroups = [
   }
 ];
 
-const SidebarItem = ({ item, onClickItem }) => {
+const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
+  const location = useLocation();
+
   if (item.type === 'section') {
+    if (isCollapsed) {
+      return <div className="my-3 border-t border-slate-200/80 mx-2" title={item.title} />;
+    }
     return (
       <h3 className="px-4 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mt-8 mb-3">
         {item.title}
@@ -221,30 +226,85 @@ const SidebarItem = ({ item, onClickItem }) => {
       <NavLink
         to={item.path}
         onClick={onClickItem}
+        title={item.name}
         className={({ isActive }) =>
-          `sidebar-item ${isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'}`
+          `sidebar-item ${isCollapsed ? 'justify-center px-0 h-11 w-11 mx-auto' : ''} ${
+            isActive ? 'sidebar-item-active' : 'sidebar-item-inactive'
+          }`
         }
       >
-        <span className="text-lg opacity-80 w-6 flex items-center justify-center">{item.icon}</span>
-        {item.name}
+        <span className="text-lg opacity-80 w-6 flex items-center justify-center shrink-0">{item.icon}</span>
+        {!isCollapsed && <span className="truncate">{item.name}</span>}
       </NavLink>
     );
   }
 
   if (item.type === 'group') {
     const [isOpen, setIsOpen] = useState(false);
+    const [isHovered, setIsHovered] = useState(false);
+
+    const isChildActive = item.items.some(sub => sub.path === location.pathname);
+
+    if (isCollapsed) {
+      return (
+        <div 
+          className="relative group/flyout"
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+        >
+          <button
+            onClick={() => setIsOpen(!isOpen)}
+            title={item.title}
+            className={`sidebar-item justify-center px-0 h-11 w-11 mx-auto ${
+              isChildActive || isOpen ? 'sidebar-item-active' : 'sidebar-item-inactive'
+            }`}
+          >
+            <span className="text-lg opacity-80 w-6 flex items-center justify-center shrink-0">{item.icon}</span>
+          </button>
+
+          {(isHovered || isOpen) && (
+            <div className="absolute left-full top-0 ml-3 z-50 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-2 min-w-[200px] animate-fade-in">
+              <div className="px-3 py-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1 flex items-center gap-2">
+                <span>{item.icon}</span>
+                <span>{item.title}</span>
+              </div>
+              <div className="space-y-1">
+                {item.items.map((sub, idx) => (
+                  <NavLink
+                    key={idx}
+                    to={sub.path}
+                    onClick={() => {
+                      setIsOpen(false);
+                      setIsHovered(false);
+                      if (onClickItem) onClickItem();
+                    }}
+                    className={({ isActive }) =>
+                      `block px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
+                        isActive ? 'text-primary bg-primary/10 font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      }`
+                    }
+                  >
+                    {sub.name}
+                  </NavLink>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
     
     return (
       <div className="space-y-1">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`sidebar-item w-full flex items-center justify-between ${isOpen ? 'text-slate-900 bg-slate-50/50' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+          className={`sidebar-item w-full flex items-center justify-between ${isOpen || isChildActive ? 'text-slate-900 bg-slate-50/50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
         >
-          <div className="flex items-center gap-3">
-            <span className="text-lg opacity-80 w-6 flex items-center justify-center">{item.icon}</span>
-            {item.title}
+          <div className="flex items-center gap-3 overflow-hidden">
+            <span className="text-lg opacity-80 w-6 flex items-center justify-center shrink-0">{item.icon}</span>
+            <span className="truncate">{item.title}</span>
           </div>
-          <span className={`text-[10px] transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}>
+          <span className={`text-[10px] transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-90' : ''}`}>
             ▶
           </span>
         </button>
@@ -273,7 +333,7 @@ const SidebarItem = ({ item, onClickItem }) => {
   return null;
 };
 
-const Sidebar = ({ isOpen, onClose }) => {
+const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
 
   const currentLoggedUser = localStorage.getItem('kemps_username') || '';
@@ -310,20 +370,37 @@ const Sidebar = ({ isOpen, onClose }) => {
   });
 
   return (
-    <aside className="w-72 bg-white border-r border-slate-200/60 h-screen flex flex-col shrink-0 sticky top-0 overflow-hidden">
-      <div className="p-8 shrink-0 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic">
+    <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-screen flex flex-col shrink-0 sticky top-0 overflow-hidden transition-all duration-300 ease-in-out`}>
+      <div className={`shrink-0 flex items-center ${isCollapsed ? 'flex-col gap-3 p-4' : 'justify-between p-8'}`}>
+        <div 
+          onClick={() => navigate('/dashboard')} 
+          className={`flex items-center cursor-pointer ${isCollapsed ? 'flex-col gap-1' : 'gap-3'}`}
+        >
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic shrink-0">
             K
           </div>
-          <div>
-            <h1 className="text-xl font-extrabold text-[#0f172a] tracking-tight leading-none italic">
-              Kemp's<span className="text-primary">.</span>
-            </h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management</p>
-          </div>
+          {!isCollapsed && (
+            <div>
+              <h1 className="text-xl font-extrabold text-[#0f172a] tracking-tight leading-none italic">
+                Kemp's<span className="text-primary">.</span>
+              </h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Inventory Management</p>
+            </div>
+          )}
         </div>
         
+        {/* ChatGPT-Style Sidebar Toggle Button for Desktop */}
+        <button 
+          onClick={onToggleCollapse}
+          title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="hidden lg:flex w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 items-center justify-center transition-all active:scale-95 shrink-0"
+        >
+          <svg className={`w-4 h-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
+
         {/* Mobile Close Button */}
         <button 
           onClick={onClose}
@@ -333,37 +410,51 @@ const Sidebar = ({ isOpen, onClose }) => {
         </button>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 pb-12 space-y-1 scrollbar-hide">
+      <nav className={`flex-1 overflow-y-auto pb-12 space-y-1 scrollbar-hide ${isCollapsed ? 'px-2' : 'px-4'}`}>
         {filteredNavGroups.map((item, idx) => (
-          <SidebarItem key={idx} item={item} onClickItem={handleItemClick} />
+          <SidebarItem key={idx} item={item} onClickItem={handleItemClick} isCollapsed={isCollapsed} />
         ))}
       </nav>
       
-      <div className="p-6 border-t border-slate-100 shrink-0">
-        <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
+      <div className={`border-t border-slate-100 shrink-0 ${isCollapsed ? 'p-3' : 'p-6'}`}>
+        {isCollapsed ? (
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0" title={fullName}>
               {userInitials}
             </div>
-            <div className="overflow-hidden">
-              <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
-              <p className="text-[10px] text-slate-500 font-medium">
-                {isAdmin ? 'Administrator' : 'Operator'}
-              </p>
-            </div>
+            <button 
+              onClick={handleLogout}
+              title="Log Out"
+              className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0"
+            >
+              ➔
+            </button>
           </div>
-          <button 
-            onClick={handleLogout}
-            title="Log Out"
-            className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-450 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0 ml-1"
-          >
-            ➔
-          </button>
-        </div>
+        ) : (
+          <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
+                {userInitials}
+              </div>
+              <div className="overflow-hidden">
+                <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
+                <p className="text-[10px] text-slate-500 font-medium">
+                  {isAdmin ? 'Administrator' : 'Operator'}
+                </p>
+              </div>
+            </div>
+            <button 
+              onClick={handleLogout}
+              title="Log Out"
+              className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-450 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0 ml-1"
+            >
+              ➔
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
 };
-
 
 export default Sidebar;

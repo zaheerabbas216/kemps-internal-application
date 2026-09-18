@@ -1,0 +1,80 @@
+# ── Kemps Internal Application — Docker Compose ─────────────────
+# Usage:
+#   docker compose up -d            # Start all services
+#   docker compose up -d --build    # Rebuild and start
+#   docker compose down             # Stop all services
+#   docker compose logs -f          # Follow logs
+
+services:
+  # ── MySQL Database ──────────────────────────────────────────────
+  db:
+    image: mysql:8.0
+    container_name: kemps-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD:-kemps_root_pass}
+      MYSQL_DATABASE: ${DB_NAME:-kemps_inventory}
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-kemps_root_pass}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ── Backend (Express API) ───────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kemps-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: 8000
+      DB_HOST: db
+      DB_PORT: ${DB_PORT:-3306}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-kemps_root_pass}
+      DB_NAME: ${DB_NAME:-kemps_inventory}
+      JWT_SECRET: ${JWT_SECRET:-change_this_for_production}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-5}
+      DB_CONNECTION_LIMIT: ${DB_CONNECTION_LIMIT:-10}
+      UPLOAD_STORAGE: ${UPLOAD_STORAGE:-local}
+      UPLOAD_LOCAL_DIR: /app/uploads
+      UPLOAD_MAX_FILE_SIZE: ${UPLOAD_MAX_FILE_SIZE:-5242880}
+      AWS_REGION: ${AWS_REGION:-ap-south-1}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_UPLOAD_PREFIX: ${S3_UPLOAD_PREFIX:-inventory}
+      S3_PUBLIC_BASE_URL: ${S3_PUBLIC_BASE_URL:-}
+    volumes:
+      - inventory_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── Frontend (React via Nginx) ──────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
+    container_name: kemps-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:
+    driver: local
+  inventory_uploads:
+    driver: local
