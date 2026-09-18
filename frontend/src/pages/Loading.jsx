@@ -63,6 +63,15 @@ const Loading = () => {
   const todayHistoryLimit = 10;
 
   // ==========================================
+  // PAST UNBILLED / PENDING SESSIONS STATE
+  // ==========================================
+  const [pastPendingSessions, setPastPendingSessions] = useState([]);
+  const [loadingPastPending, setLoadingPastPending] = useState(false);
+  const [pastPendingCount, setPastPendingCount] = useState(0);
+  const [pastPendingPage, setPastPendingPage] = useState(1);
+  const pastPendingLimit = 10;
+
+  // ==========================================
   // HISTORY STATE
   // ==========================================
   const [historySessions, setHistorySessions] = useState([]);
@@ -109,7 +118,30 @@ const Loading = () => {
   const [returnError, setReturnError] = useState('');
 
   const handleOpenReturnModal = (session) => {
-    setReturnSession(session);
+    const rawItems = session.items || session.consolidatedItems || [];
+    const normalizedItems = rawItems.map(it => {
+      let pId = it.finishedProductId;
+      if ((!pId || pId === 'undefined') && it.productName && finishedProducts.length > 0) {
+        const found = finishedProducts.find(fp =>
+          fp.name.toLowerCase().trim() === String(it.productName).toLowerCase().trim()
+        );
+        if (found) pId = found.id;
+      }
+      const netQty = (it.netLoadingQty !== undefined && it.netLoadingQty !== null)
+        ? parseInt(it.netLoadingQty, 10)
+        : ((parseInt(it.quantity, 10) || 0) - (parseInt(it.returnQty, 10) || 0));
+
+      return {
+        ...it,
+        finishedProductId: pId ? String(pId) : '',
+        netLoadingQty: netQty
+      };
+    });
+
+    setReturnSession({
+      ...session,
+      items: normalizedItems
+    });
     setReturnError('');
     setReturnFormItems([
       { id: Math.random().toString(36).substring(2, 9), finishedProductId: '', quantity: '' }
@@ -144,7 +176,7 @@ const Loading = () => {
     }
 
     const loadedItemsList = returnSession?.items || returnSession?.consolidatedItems || [];
-    const loadedItems = loadedItemsList.filter(item => item.quantity > 0);
+    const loadedItems = loadedItemsList.filter(item => (item.netLoadingQty !== undefined ? item.netLoadingQty : item.quantity) > 0);
 
     const itemsPayload = [];
     const seenProductIds = new Set();
@@ -167,7 +199,7 @@ const Loading = () => {
         return;
       }
 
-      const maxAvailable = selectedItem.netLoadingQty;
+      const maxAvailable = selectedItem.netLoadingQty !== undefined ? selectedItem.netLoadingQty : selectedItem.quantity;
       const qtyNum = parseInt(item.quantity, 10);
       if (isNaN(qtyNum) || qtyNum <= 0) {
         setReturnError('Quantity must be greater than 0 for all rows.');
@@ -201,6 +233,7 @@ const Loading = () => {
         }
         // Refresh lists
         fetchActiveProfiles();
+        fetchTodayHistory();
         fetchHistory();
       } else {
         setReturnError(res.data.error || 'Failed to record return.');
@@ -220,6 +253,7 @@ const Loading = () => {
     fetchDropdownMasters();
     fetchActiveProfiles();
     fetchTodayHistory();
+    fetchPastPending();
   }, []);
 
   useEffect(() => {
@@ -281,10 +315,11 @@ const Loading = () => {
     if (activeTab === 'active-profiles') {
       fetchActiveProfiles();
       fetchTodayHistory();
+      fetchPastPending();
     } else if (activeTab === 'history') {
       fetchHistory();
     }
-  }, [activeTab, historyPage, todayHistoryPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
+  }, [activeTab, historyPage, todayHistoryPage, pastPendingPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
 
   const fetchGoodsLedgerStock = async () => {
     try {
@@ -362,6 +397,26 @@ const Loading = () => {
       console.error('Failed to load today history:', err);
     } finally {
       setLoadingTodayHistory(false);
+    }
+  };
+
+  const fetchPastPending = async () => {
+    try {
+      setLoadingPastPending(true);
+      const res = await api.get('/loading/pending-past', {
+        params: {
+          page: pastPendingPage,
+          limit: pastPendingLimit
+        }
+      });
+      if (res.data.ok) {
+        setPastPendingSessions(res.data.sessions || []);
+        setPastPendingCount(res.data.total || 0);
+      }
+    } catch (err) {
+      console.error('Failed to load past pending sessions:', err);
+    } finally {
+      setLoadingPastPending(false);
     }
   };
 
@@ -807,14 +862,29 @@ const Loading = () => {
   // ==========================================
   const handleGenerateBill = (session) => {
     // Collect aggregated items
-    const preloadItems = session.items.map(item => ({
-      finishedProductId: item.finishedProductId,
-      productName: item.productName,
-      quantity: item.quantity
-    })).filter(i => i.quantity > 0);
+    const sessionItems = session.items || session.consolidatedItems || [];
+    const preloadItems = sessionItems.map(item => {
+      let pId = item.finishedProductId;
+      if ((!pId || pId === 'undefined') && item.productName && finishedProducts.length > 0) {
+        const found = finishedProducts.find(fp =>
+          fp.name.toLowerCase().trim() === String(item.productName).toLowerCase().trim()
+        );
+        if (found) pId = found.id;
+      }
+
+      const netQty = (item.netLoadingQty !== undefined && item.netLoadingQty !== null)
+        ? parseInt(item.netLoadingQty, 10)
+        : ((parseInt(item.quantity, 10) || 0) - (parseInt(item.returnQty, 10) || 0));
+
+      return {
+        finishedProductId: pId ? String(pId) : '',
+        productName: item.productName || '',
+        quantity: netQty > 0 ? netQty : (parseInt(item.quantity, 10) || 0)
+      };
+    }).filter(i => i.quantity > 0);
 
     if (preloadItems.length === 0) {
-      alert("This customer's loading session has no loaded quantities. Cannot generate bill.");
+      alert("This customer's loading session has no loaded or net quantities remaining. Cannot generate bill.");
       return;
     }
 
@@ -827,8 +897,8 @@ const Loading = () => {
             id: session.customer_id,
             name: session.customer_name,
             phone: session.customer_phone,
-            gstin: session.customer_gstin,
-            address: session.customer_address
+            gstin: session.customer_gstin || session.gstin || '',
+            address: session.customer_address || session.address || ''
           },
           items: preloadItems
         }
@@ -848,6 +918,7 @@ const Loading = () => {
         setSessionDetail(null);
         fetchActiveProfiles();
         fetchTodayHistory();
+        fetchPastPending();
         fetchHistory();
       } else {
         alert(res.data.error || 'Failed to complete session.');
@@ -911,6 +982,11 @@ const Loading = () => {
                   }`}
                 >
                   ⚡ Active Today ({activeProfiles.length})
+                  {pastPendingCount > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-amber-100 border border-amber-200 text-amber-800 font-extrabold">
+                      {pastPendingCount} Past Pending
+                    </span>
+                  )}
                 </button>
                 <button
                   type="button"
@@ -1555,6 +1631,22 @@ const Loading = () => {
                             >
                               👁 View Details
                             </button>
+                            {session.status !== 'BILLED' && (
+                              <>
+                                <button 
+                                  onClick={() => handleOpenReturnModal(session)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold transition-all text-xs"
+                                >
+                                  🔄 Return
+                                </button>
+                                <button 
+                                  onClick={() => handleGenerateBill(session)}
+                                  className="px-2.5 py-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-600 font-bold transition-all text-xs"
+                                >
+                                  🧾 Bill
+                                </button>
+                              </>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1580,6 +1672,172 @@ const Loading = () => {
                   <button
                     disabled={todayHistoryPage === Math.ceil(todayHistoryCount / todayHistoryLimit)}
                     onClick={() => setTodayHistoryPage(prev => Math.min(Math.ceil(todayHistoryCount / todayHistoryLimit), prev + 1))}
+                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Table 3: Uncompleted / Pending Past Loading Entries (Past Unbilled) */}
+          <div className="border border-amber-200/80 bg-white rounded-2xl shadow-sm overflow-hidden animate-fade-in">
+            <div className="p-4 border-b border-amber-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-amber-50/40">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⏳</span>
+                  <h3 className="text-sm font-black text-amber-900 uppercase tracking-tight">
+                    Uncompleted / Pending Past Loading Entries
+                  </h3>
+                  <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-lg border uppercase ${
+                    pastPendingCount > 0 
+                      ? 'bg-amber-100 border-amber-200 text-amber-800' 
+                      : 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                  }`}>
+                    {pastPendingCount} {pastPendingCount === 1 ? 'Unbilled Entry' : 'Unbilled Entries'}
+                  </span>
+                </div>
+                <p className="text-[11px] font-semibold text-amber-800/80 mt-0.5">
+                  Loading sheets from past dates where billing is still pending. You can log returns or generate invoices directly.
+                </p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
+                    <th className="py-4 px-5">Loading ID</th>
+                    <th className="py-4 px-5">Date</th>
+                    <th className="py-4 px-5">Customer details</th>
+                    <th className="py-4 px-5">Godowns</th>
+                    <th className="py-4 px-5">Trips</th>
+                    <th className="py-4 px-5">Consolidated Loadings</th>
+                    <th className="py-4 px-5">Status</th>
+                    <th className="py-4 px-5 text-center">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
+                  {loadingPastPending ? (
+                    <tr>
+                      <td colSpan="8" className="py-24 text-center">
+                        <div className="flex flex-col items-center gap-3">
+                          <span className="loading loading-spinner text-amber-500"></span>
+                          <span className="text-slate-400 text-sm font-medium">Fetching pending past loading entries...</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : pastPendingSessions.length === 0 ? (
+                    <tr>
+                      <td colSpan="8" className="py-12 text-center text-slate-400 font-semibold text-xs bg-slate-50/20">
+                        <div className="flex flex-col items-center gap-1.5 py-2">
+                          <span className="text-emerald-600 text-lg">✓</span>
+                          <span className="text-slate-600 font-bold">No uncompleted or pending past loading entries found. All past entries are fully billed!</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : (
+                    pastPendingSessions.map(session => (
+                      <tr key={session.id} className="hover:bg-amber-50/20 transition-colors">
+                        <td className="py-4 px-5 font-bold text-slate-650">{session.id}</td>
+                        <td className="py-4 px-5 font-bold text-amber-700">
+                          {formatDateDDMMYYYY(session.loading_date)}
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="font-extrabold text-slate-800">{session.customer_name}</div>
+                          <div className="text-[10px] font-bold text-slate-400 mt-0.5">{session.customer_phone}</div>
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="flex flex-wrap gap-1">
+                            {session.godowns && session.godowns.map((gd, gdIdx) => (
+                              <span 
+                                key={gdIdx} 
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${gd === 'KI' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}
+                              >
+                                {gd}
+                              </span>
+                            ))}
+                            {(!session.godowns || session.godowns.length === 0) && (
+                              <span className="text-slate-400 italic">—</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-4 px-5">
+                          <span className="bg-slate-100 border border-slate-200 text-slate-700 px-2 py-0.5 rounded text-[10px] font-extrabold">
+                            {session.tripCount} trips
+                          </span>
+                        </td>
+                        <td className="py-4 px-5 max-w-xs">
+                          <div className="flex flex-wrap gap-1.5">
+                            {session.items && session.items.map((item, idx) => (
+                              <span key={idx} className="bg-white border border-slate-200 rounded px-1.5 py-0.5 text-[9px] font-bold text-slate-700">
+                                {item.productName}: <span className="text-primary font-black">{item.netLoadingQty !== undefined ? item.netLoadingQty : item.quantity}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="py-4 px-5">
+                          <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-extrabold uppercase ${
+                            session.status === 'ACTIVE' 
+                              ? 'bg-amber-50 border-amber-200 text-amber-700' 
+                              : 'bg-slate-100 border-slate-200 text-slate-650'
+                          }`}>
+                            {session.status} (Unbilled)
+                          </span>
+                        </td>
+                        <td className="py-4 px-5">
+                          <div className="flex justify-center gap-1.5">
+                            <button 
+                              onClick={() => handleOpenSessionDetail(session.id)}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-700 font-bold transition-all text-xs"
+                            >
+                              👁 View Details
+                            </button>
+                            <button 
+                              onClick={() => handleOpenReturnModal(session)}
+                              className="px-2.5 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-600 font-bold transition-all text-xs"
+                            >
+                              🔄 Return
+                            </button>
+                            <button 
+                              onClick={() => handleGenerateBill(session)}
+                              className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold transition-all text-xs shadow-sm flex items-center gap-1"
+                            >
+                              🧾 Generate Bill
+                            </button>
+                            {session.status === 'ACTIVE' && (
+                              <button 
+                                onClick={() => handleMarkCompleted(session)}
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 font-bold transition-all text-xs"
+                              >
+                                ✅ Completed
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Past Pending Pagination */}
+            {!loadingPastPending && pastPendingCount > pastPendingLimit && (
+              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
+                <div className="text-xs font-bold text-slate-400 uppercase">
+                  Page {pastPendingPage} of {Math.ceil(pastPendingCount / pastPendingLimit) || 1} ({pastPendingCount} records)
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    disabled={pastPendingPage === 1}
+                    onClick={() => setPastPendingPage(prev => Math.max(1, prev - 1))}
+                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    disabled={pastPendingPage === Math.ceil(pastPendingCount / pastPendingLimit)}
+                    onClick={() => setPastPendingPage(prev => Math.min(Math.ceil(pastPendingCount / pastPendingLimit), prev + 1))}
                     className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
                   >
                     Next
@@ -1736,7 +1994,7 @@ const Loading = () => {
                             >
                               👁 View
                             </button>
-                            {session.status === 'ACTIVE' && (
+                            {session.status !== 'BILLED' && (
                               <>
                                 <button 
                                   onClick={() => handleOpenReturnModal(session)}
@@ -1750,13 +2008,15 @@ const Loading = () => {
                                 >
                                   🧾 Bill
                                 </button>
-                                <button 
-                                  onClick={() => handleMarkCompleted(session)}
-                                  className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 font-bold transition-all text-xs"
-                                >
-                                  ✅ Completed
-                                </button>
                               </>
+                            )}
+                            {session.status === 'ACTIVE' && (
+                              <button 
+                                onClick={() => handleMarkCompleted(session)}
+                                className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-600 font-bold transition-all text-xs"
+                              >
+                                ✅ Completed
+                              </button>
                             )}
                           </div>
                         </td>
@@ -2014,7 +2274,7 @@ const Loading = () => {
 
               {/* Footer buttons */}
               <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-                {sessionDetail.session.status === 'ACTIVE' && (
+                {sessionDetail.session.status !== 'BILLED' && (
                   <>
                     <button 
                       onClick={() => {
@@ -2033,15 +2293,17 @@ const Loading = () => {
                     >
                       🧾 Generate Consolidated Bill
                     </button>
-                    <button 
-                      onClick={() => {
-                        handleMarkCompleted(sessionDetail.session);
-                      }}
-                      className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all duration-200"
-                    >
-                      ✅ Completed
-                    </button>
                   </>
+                )}
+                {sessionDetail.session.status === 'ACTIVE' && (
+                  <button 
+                    onClick={() => {
+                      handleMarkCompleted(sessionDetail.session);
+                    }}
+                    className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all duration-200"
+                  >
+                    ✅ Completed
+                  </button>
                 )}
                 <button 
                   onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}

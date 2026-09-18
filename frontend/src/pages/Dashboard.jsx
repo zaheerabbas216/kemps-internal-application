@@ -75,6 +75,7 @@ const PRIORITY_DOT = {
 // ─── Quick Access tiles ────────────────────────────────────────────────────────
 
 const quickTiles = [
+  { label: 'IMP Work',      sub: 'Urgent task manager', icon: '🚨', path: '/imp-work',            bg: 'bg-red-50 border-red-200', iconBg: 'bg-red-600 text-white font-black' },
   { label: 'Billing',       sub: 'Create invoices',    icon: '🧾', path: '/billing',             bg: 'bg-blue-50',    iconBg: 'bg-blue-100 text-blue-600' },
   { label: 'Expense',       sub: 'Track expenses',      icon: '💸', path: '/expense',             bg: 'bg-red-50',     iconBg: 'bg-red-100 text-red-600' },
   { label: 'Inventory',     sub: 'Stock entry',         icon: '📦', path: '/inventory',           bg: 'bg-purple-50',  iconBg: 'bg-purple-100 text-purple-600' },
@@ -308,6 +309,13 @@ const Dashboard = () => {
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/imp-work')}
+            className="text-[12px] font-black text-white bg-red-600 hover:bg-red-700 active:scale-95 rounded-xl px-4 py-2 transition-all flex items-center gap-2 h-11 shadow-md shadow-red-500/25 border border-red-500"
+          >
+            <span className="text-base animate-pulse">🚨</span>
+            <span>IMP Work</span>
+          </button>
           <button
             onClick={handleOpenSalesHistory}
             className="text-[11px] font-bold text-primary bg-blue-50 border border-blue-100 rounded-xl px-4 py-2 hover:text-blue-700 hover:bg-blue-100 transition-all flex items-center gap-1.5 h-11 shadow-sm"

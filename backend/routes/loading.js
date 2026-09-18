@@ -249,6 +249,96 @@ router.get('/active', async (req, res) => {
   }
 });
 
+// GET /api/loading/pending-past - Get all unbilled/uncompleted past loading sessions (date < today and status != 'BILLED')
+router.get('/pending-past', async (req, res) => {
+  try {
+    const todayStr = getTodayISTDateStr();
+    let { page = 1, limit = 10 } = req.query;
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 10;
+    const offset = (page - 1) * limit;
+
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) as count 
+       FROM loading_sessions ls 
+       JOIN customers c ON ls.customer_id = c.id
+       WHERE ls.loading_date < ? AND ls.status != 'BILLED'`,
+      [todayStr]
+    );
+    const total = countRows[0].count;
+
+    const [rows] = await pool.query(
+      `SELECT 
+         ls.id,
+         ls.customer_id,
+         c.name AS customer_name,
+         c.phone AS customer_phone,
+         c.gstin AS customer_gstin,
+         c.address AS customer_address,
+         DATE_FORMAT(ls.loading_date, '%Y-%m-%d') as loading_date,
+         ls.status,
+         ls.remarks,
+         ls.bill_id,
+         ls.created_at
+       FROM loading_sessions ls
+       JOIN customers c ON ls.customer_id = c.id
+       WHERE ls.loading_date < ? AND ls.status != 'BILLED'
+       ORDER BY ls.loading_date DESC, ls.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [todayStr, limit, offset]
+    );
+
+    const sessionsWithStats = [];
+    for (const session of rows) {
+      const [tripCountRows] = await pool.query(
+        `SELECT COUNT(*) as count FROM loading_trips WHERE session_id = ?`,
+        [session.id]
+      );
+      const tripCount = tripCountRows[0].count;
+
+      const [items] = await pool.query(
+        `SELECT 
+           lti.finished_product_id AS finishedProductId,
+           fp.name AS productName,
+           COALESCE(SUM(lti.quantity), 0) AS quantity,
+           COALESCE(SUM(lti.return_qty), 0) AS returnQty,
+           (COALESCE(SUM(lti.quantity), 0) - COALESCE(SUM(lti.return_qty), 0)) AS netLoadingQty
+         FROM loading_trips lt
+         JOIN loading_trip_items lti ON lt.id = lti.trip_id
+         JOIN finished_products fp ON lti.finished_product_id = fp.id
+         WHERE lt.session_id = ?
+         GROUP BY lti.finished_product_id, fp.name`,
+        [session.id]
+      );
+
+      const [godownsRows] = await pool.query(
+        `SELECT DISTINCT godown FROM loading_trips WHERE session_id = ?`,
+        [session.id]
+      );
+      const godowns = godownsRows.map(r => r.godown);
+
+      sessionsWithStats.push({
+        ...session,
+        tripCount,
+        items,
+        godowns
+      });
+    }
+
+    res.json({
+      ok: true,
+      sessions: sessionsWithStats,
+      total,
+      page,
+      limit
+    });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 // GET /api/loading/history - Retrieve list of past loading sessions with pagination/filters
 router.get('/history', async (req, res) => {
   try {
@@ -332,6 +422,7 @@ router.get('/history', async (req, res) => {
 
       const [items] = await pool.query(
         `SELECT 
+           lti.finished_product_id AS finishedProductId,
            fp.name AS productName,
            COALESCE(SUM(lti.quantity), 0) AS quantity,
            COALESCE(SUM(lti.return_qty), 0) AS returnQty,
@@ -612,8 +703,8 @@ router.post('/session/:id/return', async (req, res) => {
     if (sessionRows.length === 0) {
       throw new Error('Loading session not found.');
     }
-    if (sessionRows[0].status !== 'ACTIVE') {
-      throw new Error('Cannot log return for a session that is already billed or completed.');
+    if (sessionRows[0].status === 'BILLED') {
+      throw new Error('Cannot log return for a session that is already billed.');
     }
 
     // 2. Find the last trip in the session to copy godown information

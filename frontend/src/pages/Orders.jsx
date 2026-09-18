@@ -553,33 +553,39 @@ const Orders = () => {
       {/* HEADER BAR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Order Management</h1>
-          <p className="text-slate-500 text-sm font-medium mt-1">Book advanced customer orders and track delivery schedules</p>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Function Orders</h1>
+          <p className="text-slate-500 text-sm font-medium mt-1">Book advanced customer function orders and track delivery schedules</p>
         </div>
-        <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40 shrink-0">
-          <button
-            onClick={() => { setActiveTab('upcoming'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'upcoming' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 Upcoming Orders
-          </button>
+        <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/60 shrink-0">
+            <button
+              onClick={() => { setActiveTab('upcoming'); handleResetForm(); }}
+              className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${
+                activeTab === 'upcoming' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 Upcoming Orders
+            </button>
+            <button
+              onClick={() => { setActiveTab('history'); handleResetForm(); }}
+              className={`px-3.5 py-2 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ⏳ History
+            </button>
+          </div>
+
           <button
             onClick={() => setActiveTab('new-order')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'new-order' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            className={`h-11 px-6 rounded-xl font-black text-sm tracking-wide transition-all uppercase flex items-center gap-2 active:scale-95 shadow-md ${
+              activeTab === 'new-order'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 ring-2 ring-blue-400 ring-offset-2 border border-blue-600'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-500/20 border border-blue-600'
             }`}
           >
-            {isEditing ? '✏️ Edit Order' : '🛍️ New Order'}
-          </button>
-          <button
-            onClick={() => { setActiveTab('history'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ⏳ History
+            <span className="text-base">{isEditing ? '✏️' : '🛍️'}</span>
+            <span className="text-white font-extrabold">{isEditing ? 'Edit Order' : '+ New Order'}</span>
           </button>
         </div>
       </div>

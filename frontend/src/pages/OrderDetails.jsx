@@ -332,7 +332,7 @@ const OrderDetails = () => {
 
     const rows = orders.map((o) => {
       const itemsSummary = (o.items || []).map(it => `${it.productName || 'Product'} (x${it.quantity})`).join('; ');
-      const source = o.customer_type === 'Distributor' ? 'Distribution Order' : 'Order Management';
+      const source = o.customer_type === 'Distributor' ? 'Distribution Order' : 'Function Orders';
       const isScheduled = hasValidDeliverySchedule(o);
       return [
         o.id,
@@ -688,7 +688,7 @@ const OrderDetails = () => {
               Distribution Order
             </button>
 
-            {/* BUTTON 2: ORDER MANAGEMENT */}
+            {/* BUTTON 2: FUNCTION ORDERS */}
             <button
               onClick={() => {
                 setModuleFilter('ORDER_MANAGEMENT');
@@ -701,7 +701,7 @@ const OrderDetails = () => {
               }`}
             >
               <span>🛒</span>
-              Order Management
+              Function Orders
             </button>
           </div>
         </div>
@@ -1091,7 +1091,7 @@ const OrderDetails = () => {
                       </span>
                     ) : (
                       <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                        🛒 Order Management
+                        🛒 Function Orders
                       </span>
                     )}
                   </div>

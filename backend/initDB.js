@@ -26,10 +26,18 @@ async function initDB() {
         username VARCHAR(50) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         name VARCHAR(100),
+        permissions JSON NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Ensure permissions column exists for existing installations
+    try {
+      await connection.query('ALTER TABLE admins ADD COLUMN permissions JSON NULL AFTER name');
+    } catch (e) {
+      // Column already exists
+    }
 
     // Seed default admin if none exists
     const [existingAdmins] = await connection.query('SELECT COUNT(*) as count FROM admins');

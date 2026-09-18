@@ -91,20 +91,28 @@ export async function calculateDynamicRow(connection, productName, targetDate) {
 
   const closingStock = openingStock + stockIn - stockOut;
 
-  // Fetch recent machine / company info for reference
+  // Fetch recent machine / company info and latest rate for reference
   const [metaRow] = await connection.query(
-    `SELECT machine_name, company_name, unit 
+    `SELECT machine_name, company_name, unit, rate_per_unit 
      FROM tools_inventory_transactions 
-     WHERE product_name = ? 
+     WHERE product_name = ? AND transaction_date <= ?
      ORDER BY transaction_date DESC, id DESC LIMIT 1`,
-    [productName]
+    [productName, targetDate]
   );
+
+  const ratePerUnit = metaRow[0]?.rate_per_unit !== undefined && metaRow[0]?.rate_per_unit !== null
+    ? parseFloat(metaRow[0].rate_per_unit)
+    : 0;
+
+  const totalValue = parseFloat((closingStock * ratePerUnit).toFixed(2));
 
   return {
     product_name: productName,
     machine_name: metaRow[0]?.machine_name || '—',
     company_name: metaRow[0]?.company_name || '—',
     unit: metaRow[0]?.unit || 'PCS',
+    rate_per_unit: parseFloat(ratePerUnit.toFixed(2)),
+    total_value: totalValue,
     opening_stock: parseFloat(openingStock.toFixed(2)),
     stock_in: parseFloat(stockIn.toFixed(2)),
     stock_out: parseFloat(stockOut.toFixed(2)),
@@ -196,20 +204,24 @@ export async function autoClosePendingDays(externalConn = null) {
             const calc = await calculateDynamicRow(connection, p.product_name, currentDate);
             await connection.query(
               `INSERT INTO tools_inventory_ledger_snapshots 
-               (ledger_date, product_name, opening_stock, stock_in, stock_out, closing_stock)
-               VALUES (?, ?, ?, ?, ?, ?)
+               (ledger_date, product_name, opening_stock, stock_in, stock_out, closing_stock, rate_per_unit, total_value)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                ON DUPLICATE KEY UPDATE
                  opening_stock = VALUES(opening_stock),
                  stock_in = VALUES(stock_in),
                  stock_out = VALUES(stock_out),
-                 closing_stock = VALUES(closing_stock)`,
+                 closing_stock = VALUES(closing_stock),
+                 rate_per_unit = VALUES(rate_per_unit),
+                 total_value = VALUES(total_value)`,
               [
                 currentDate,
                 p.product_name,
                 calc.opening_stock,
                 calc.stock_in,
                 calc.stock_out,
-                calc.closing_stock
+                calc.closing_stock,
+                calc.rate_per_unit,
+                calc.total_value
               ]
             );
           }

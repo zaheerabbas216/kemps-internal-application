@@ -49,15 +49,15 @@
 }
 
 .sidebar-item {
-  @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-medium transition-all duration-200;
+  @apply flex items-center gap-3 px-4 py-2.5 rounded-xl text-[14px] font-bold transition-all duration-200 text-white;
 }
 
 .sidebar-item-active {
-  @apply bg-primary/10 text-primary shadow-sm shadow-primary/5 font-semibold;
+  @apply bg-primary text-white shadow-md shadow-primary/20 font-black;
 }
 
 .sidebar-item-inactive {
-  @apply text-slate-500 hover:bg-slate-100/80 hover:text-slate-900;
+  @apply text-white hover:bg-slate-800/80 hover:text-white font-bold;
 }
 
 @keyframes fadeIn {

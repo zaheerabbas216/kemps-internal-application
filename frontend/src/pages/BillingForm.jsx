@@ -107,6 +107,25 @@ const BillingForm = () => {
     }
   }, [finishedProducts, preloadCanSupply]);
 
+  // Hook to ensure preloadLoading product IDs are cleanly linked once finishedProducts master loads
+  useEffect(() => {
+    if (preloadLoading && finishedProducts.length > 0 && items.length > 0) {
+      setItems(prevItems =>
+        prevItems.map(item => {
+          if (!item.finishedProductId || item.finishedProductId === 'undefined') {
+            const match = finishedProducts.find(fp =>
+              fp.name.toLowerCase().trim() === String(item.productName || '').toLowerCase().trim()
+            );
+            if (match) {
+              return { ...item, finishedProductId: String(match.id) };
+            }
+          }
+          return item;
+        })
+      );
+    }
+  }, [finishedProducts, preloadLoading]);
+
   const fetchCustomerCreditBalance = async (phone, custId) => {
     try {
       if (phone) {
@@ -209,14 +228,14 @@ const BillingForm = () => {
     const dd = String(istDate.getDate()).padStart(2, '0');
     const todayFormatted = `${yyyy}-${mm}-${dd}`;
 
-    const cust = preloadLoading.customer;
+    const cust = preloadLoading.customer || {};
     setBillingInfo({
       billingDate: todayFormatted,
       company: 'Kempannavar Industries',
       customerType: 'General Customer',
       customerId: cust.id || '',
-      customerName: cust.name,
-      customerPhone: cust.phone,
+      customerName: cust.name || '',
+      customerPhone: cust.phone || '',
       customerGstin: cust.gstin || '',
       customerAddress: cust.address || '',
       paymentMode: 'Cash',
@@ -230,19 +249,33 @@ const BillingForm = () => {
       loadingSessionId: preloadLoading.loadingSessionId
     });
 
-    const loadedItems = preloadLoading.items.map(i => ({
-      id: Math.random().toString(36).substring(2, 9),
-      finishedProductId: String(i.finishedProductId),
-      quantity: String(i.quantity),
-      rateWithTax: '',
-      taxPercent: 18,
-      basicRate: 0,
-      totalAmount: 0
-    }));
+    const loadedItems = (preloadLoading.items || []).map(i => {
+      let resolvedId = (i.finishedProductId && String(i.finishedProductId) !== 'undefined')
+        ? String(i.finishedProductId)
+        : '';
+
+      if (!resolvedId && i.productName && finishedProducts.length > 0) {
+        const match = finishedProducts.find(fp =>
+          fp.name.toLowerCase().trim() === String(i.productName).toLowerCase().trim()
+        );
+        if (match) resolvedId = String(match.id);
+      }
+
+      return {
+        id: Math.random().toString(36).substring(2, 9),
+        finishedProductId: resolvedId,
+        productName: i.productName || '',
+        quantity: String(i.quantity || '0'),
+        rateWithTax: '',
+        taxPercent: 18,
+        basicRate: 0,
+        totalAmount: 0
+      };
+    });
 
     setItems(loadedItems);
-    setNameSearchText(cust.name);
-    setPhoneSearchText(cust.phone);
+    setNameSearchText(cust.name || '');
+    setPhoneSearchText(cust.phone || '');
   };
 
   const loadBillFromCanSupply = (preload) => {
@@ -1026,9 +1059,9 @@ const BillingForm = () => {
                   {preloadLoading ? (
                     <input 
                       type="text"
-                      value={finishedProducts.find(fp => String(fp.id) === String(row.finishedProductId))?.name || 'Loading product...'}
+                      value={finishedProducts.find(fp => String(fp.id) === String(row.finishedProductId))?.name || row.productName || 'Product'}
                       readOnly
-                      className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-550 font-bold outline-none text-xs cursor-not-allowed"
+                      className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-750 font-bold outline-none text-xs cursor-not-allowed"
                     />
                   ) : (
                     <SearchableSelect

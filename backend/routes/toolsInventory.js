@@ -23,6 +23,8 @@ const initTables = async () => {
         bill_no VARCHAR(100) NULL,
         quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         unit VARCHAR(20) NOT NULL DEFAULT 'PCS',
+        rate_per_unit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_rate DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
         notes TEXT NULL,
         created_by VARCHAR(100) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -34,6 +36,17 @@ const initTables = async () => {
         INDEX idx_ti_company (company_name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Add rate columns if existing table doesn't have them
+    try {
+      await pool.query(`
+        ALTER TABLE tools_inventory_transactions 
+        ADD COLUMN rate_per_unit DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER unit,
+        ADD COLUMN total_rate DECIMAL(14, 2) NOT NULL DEFAULT 0.00 AFTER rate_per_unit
+      `);
+    } catch (e) {
+      // Columns likely already exist
+    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS tools_inventory_manual_opening (
@@ -64,10 +77,23 @@ const initTables = async () => {
         stock_in DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         stock_out DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         closing_stock DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        rate_per_unit DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_value DECIMAL(14, 2) NOT NULL DEFAULT 0.00,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE KEY uk_tils_date_product (ledger_date, product_name)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Add snapshot rate columns if existing table doesn't have them
+    try {
+      await pool.query(`
+        ALTER TABLE tools_inventory_ledger_snapshots 
+        ADD COLUMN rate_per_unit DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER closing_stock,
+        ADD COLUMN total_value DECIMAL(14, 2) NOT NULL DEFAULT 0.00 AFTER rate_per_unit
+      `);
+    } catch (e) {
+      // Columns likely already exist
+    }
   } catch (err) {
     console.error('Failed to init tools inventory tables:', err);
   }
@@ -111,13 +137,13 @@ async function generateId(prefix, table, idColumn) {
   return `${prefix}-${yyyy}-${String(seq).padStart(5, '0')}`;
 }
 
-// GET /api/tools-inventory/dropdowns - Dropdowns populated from Stock IN with live stock
+// GET /api/tools-inventory/dropdowns - Dropdowns populated from Stock IN with live stock & rates
 router.get('/dropdowns', async (req, res) => {
   const connection = await pool.getConnection();
   try {
     const today = getTodayISTStr();
 
-    // 1. Distinct product names with current stock
+    // 1. Distinct product names with current stock and unit rates
     const [prodRows] = await connection.query(`
       SELECT DISTINCT product_name 
       FROM tools_inventory_transactions 
@@ -133,6 +159,8 @@ router.get('/dropdowns', async (req, res) => {
         machine_name: calc.machine_name,
         company_name: calc.company_name,
         unit: calc.unit,
+        rate_per_unit: calc.rate_per_unit || 0,
+        total_value: calc.total_value || 0,
         current_stock: calc.closing_stock
       });
     }
@@ -180,6 +208,8 @@ router.post('/stock-in', async (req, res) => {
       billNo,
       quantity,
       unit = 'PCS',
+      ratePerUnit = 0,
+      totalRate = 0,
       date,
       time,
       notes
@@ -193,6 +223,11 @@ router.post('/stock-in', async (req, res) => {
       throw new Error('Quantity must be greater than 0.');
     }
 
+    const parsedRate = parseFloat(ratePerUnit) || 0;
+    const computedTotal = totalRate && !isNaN(parseFloat(totalRate)) && parseFloat(totalRate) > 0
+      ? parseFloat(totalRate)
+      : parseFloat((parsedQty * parsedRate).toFixed(2));
+
     const { dateStr, timeStr } = getISTDateAndTime();
     const finalDate = date || dateStr;
     const finalTime = time || timeStr;
@@ -202,8 +237,8 @@ router.post('/stock-in', async (req, res) => {
 
     await connection.query(
       `INSERT INTO tools_inventory_transactions 
-       (id, transaction_type, transaction_date, transaction_time, product_name, machine_name, company_name, bill_no, quantity, unit, notes, created_by, created_at)
-       VALUES (?, 'STOCK_IN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       (id, transaction_type, transaction_date, transaction_time, product_name, machine_name, company_name, bill_no, quantity, unit, rate_per_unit, total_rate, notes, created_by, created_at)
+       VALUES (?, 'STOCK_IN', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         recordId,
         finalDate,
@@ -214,6 +249,8 @@ router.post('/stock-in', async (req, res) => {
         billNo ? billNo.trim() : null,
         parsedQty,
         unit ? unit.trim() : 'PCS',
+        parsedRate,
+        computedTotal,
         notes ? notes.trim() : null,
         createdBy
       ]
@@ -246,6 +283,8 @@ router.post('/stock-out', async (req, res) => {
       companyName,
       quantity,
       unit = 'PCS',
+      ratePerUnit,
+      totalRate,
       date,
       time,
       notes
@@ -264,7 +303,7 @@ router.post('/stock-out', async (req, res) => {
     const finalTime = time || timeStr;
     const createdBy = req.admin?.name || req.admin?.username || 'Admin';
 
-    // Check available stock
+    // Check available stock and get latest rate
     const calc = await calculateDynamicRow(connection, productName.trim(), finalDate);
     if (parsedQty > calc.closing_stock) {
       throw new Error(
@@ -272,12 +311,20 @@ router.post('/stock-out', async (req, res) => {
       );
     }
 
+    const parsedRate = ratePerUnit !== undefined && ratePerUnit !== null && !isNaN(parseFloat(ratePerUnit))
+      ? parseFloat(ratePerUnit)
+      : calc.rate_per_unit || 0;
+
+    const computedTotal = totalRate !== undefined && totalRate !== null && !isNaN(parseFloat(totalRate)) && parseFloat(totalRate) > 0
+      ? parseFloat(totalRate)
+      : parseFloat((parsedQty * parsedRate).toFixed(2));
+
     const recordId = await generateId('TOUT', 'tools_inventory_transactions', 'id');
 
     await connection.query(
       `INSERT INTO tools_inventory_transactions 
-       (id, transaction_type, transaction_date, transaction_time, product_name, machine_name, company_name, bill_no, quantity, unit, notes, created_by, created_at)
-       VALUES (?, 'STOCK_OUT', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, NOW())`,
+       (id, transaction_type, transaction_date, transaction_time, product_name, machine_name, company_name, bill_no, quantity, unit, rate_per_unit, total_rate, notes, created_by, created_at)
+       VALUES (?, 'STOCK_OUT', ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NOW())`,
       [
         recordId,
         finalDate,
@@ -287,6 +334,8 @@ router.post('/stock-out', async (req, res) => {
         companyName ? companyName.trim() : null,
         parsedQty,
         unit ? unit.trim() : 'PCS',
+        parsedRate,
+        computedTotal,
         notes ? notes.trim() : null,
         createdBy
       ]
@@ -307,7 +356,7 @@ router.post('/stock-out', async (req, res) => {
   }
 });
 
-// GET /api/tools-inventory/ledger - Get dynamic daily inventory ledger
+// GET /api/tools-inventory/ledger - Get dynamic daily inventory ledger with valuation & item search
 router.get('/ledger', async (req, res) => {
   const connection = await pool.getConnection();
   try {
@@ -336,7 +385,9 @@ router.get('/ledger', async (req, res) => {
           s.opening_stock,
           s.stock_in,
           s.stock_out,
-          s.closing_stock
+          s.closing_stock,
+          s.rate_per_unit,
+          s.total_value
         FROM tools_inventory_ledger_snapshots s
         WHERE s.ledger_date = ?
         ORDER BY s.product_name ASC
@@ -344,21 +395,32 @@ router.get('/ledger', async (req, res) => {
 
       for (const r of snapRows) {
         const [meta] = await connection.query(`
-          SELECT machine_name, company_name, unit 
+          SELECT machine_name, company_name, unit, rate_per_unit 
           FROM tools_inventory_transactions 
           WHERE product_name = ? AND transaction_date <= ?
           ORDER BY transaction_date DESC, id DESC LIMIT 1
         `, [r.product_name, targetDate]);
+
+        const ratePerUnit = parseFloat(r.rate_per_unit || 0) > 0
+          ? parseFloat(r.rate_per_unit)
+          : parseFloat(meta[0]?.rate_per_unit || 0);
+
+        const closingStock = parseFloat(r.closing_stock || 0);
+        const totalValue = parseFloat(r.total_value || 0) > 0
+          ? parseFloat(r.total_value)
+          : parseFloat((closingStock * ratePerUnit).toFixed(2));
 
         rows.push({
           product_name: r.product_name,
           machine_name: meta[0]?.machine_name || '—',
           company_name: meta[0]?.company_name || '—',
           unit: meta[0]?.unit || 'PCS',
+          rate_per_unit: ratePerUnit,
+          total_value: totalValue,
           opening_stock: parseFloat(r.opening_stock || 0),
           stock_in: parseFloat(r.stock_in || 0),
           stock_out: parseFloat(r.stock_out || 0),
-          closing_stock: parseFloat(r.closing_stock || 0)
+          closing_stock: closingStock
         });
       }
     } else {
@@ -379,27 +441,36 @@ router.get('/ledger', async (req, res) => {
     }
 
     // Filter by search if provided
+    let filteredRows = rows;
     if (search.trim()) {
       const s = search.trim().toLowerCase();
-      rows = rows.filter(r =>
+      filteredRows = rows.filter(r =>
         r.product_name.toLowerCase().includes(s) ||
         r.machine_name.toLowerCase().includes(s) ||
         r.company_name.toLowerCase().includes(s)
       );
     }
 
-    // Calculate totals
-    const summary = rows.reduce((acc, r) => ({
+    // Calculate totals for all displayed rows
+    const summary = filteredRows.reduce((acc, r) => ({
       totalOpening: acc.totalOpening + r.opening_stock,
       totalIn: acc.totalIn + r.stock_in,
       totalOut: acc.totalOut + r.stock_out,
       totalClosing: acc.totalClosing + r.closing_stock,
+      totalOpeningValue: acc.totalOpeningValue + (r.opening_stock * (r.rate_per_unit || 0)),
+      totalInValue: acc.totalInValue + (r.stock_in * (r.rate_per_unit || 0)),
+      totalOutValue: acc.totalOutValue + (r.stock_out * (r.rate_per_unit || 0)),
+      totalClosingValue: acc.totalClosingValue + (r.total_value || (r.closing_stock * (r.rate_per_unit || 0))),
       itemCount: acc.itemCount + 1
     }), {
       totalOpening: 0,
       totalIn: 0,
       totalOut: 0,
       totalClosing: 0,
+      totalOpeningValue: 0,
+      totalInValue: 0,
+      totalOutValue: 0,
+      totalClosingValue: 0,
       itemCount: 0
     });
 
@@ -407,7 +478,8 @@ router.get('/ledger', async (req, res) => {
       ok: true,
       date: targetDate,
       isClosed,
-      ledger: rows,
+      ledger: filteredRows,
+      allProducts: rows.map(r => r.product_name),
       summary
     });
   } catch (error) {
@@ -418,7 +490,7 @@ router.get('/ledger', async (req, res) => {
   }
 });
 
-// GET /api/tools-inventory/history - Unified history log
+// GET /api/tools-inventory/history - Unified history log with rate & valuation
 router.get('/history', async (req, res) => {
   try {
     const {
@@ -459,11 +531,13 @@ router.get('/history', async (req, res) => {
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
-    // Count
+    // Count & Value aggregations
     const [countRows] = await pool.query(
       `SELECT COUNT(*) as total, 
               COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN quantity ELSE 0 END), 0) AS totalIn,
-              COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END), 0) AS totalOut
+              COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN quantity ELSE 0 END), 0) AS totalOut,
+              COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN total_rate ELSE 0 END), 0) AS totalInValue,
+              COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_OUT' THEN total_rate ELSE 0 END), 0) AS totalOutValue
        FROM tools_inventory_transactions 
        ${whereStr}`,
       queryParams
@@ -472,6 +546,8 @@ router.get('/history', async (req, res) => {
     const totalCount = parseInt(countRows[0]?.total || 0, 10);
     const totalIn = parseFloat(countRows[0]?.totalIn || 0);
     const totalOut = parseFloat(countRows[0]?.totalOut || 0);
+    const totalInValue = parseFloat(countRows[0]?.totalInValue || 0);
+    const totalOutValue = parseFloat(countRows[0]?.totalOutValue || 0);
 
     // Rows
     const [rows] = await pool.query(
@@ -486,6 +562,8 @@ router.get('/history', async (req, res) => {
          bill_no,
          quantity,
          unit,
+         rate_per_unit,
+         total_rate,
          notes,
          created_by,
          created_at
@@ -500,7 +578,9 @@ router.get('/history', async (req, res) => {
       ok: true,
       transactions: rows.map(r => ({
         ...r,
-        quantity: parseFloat(r.quantity || 0)
+        quantity: parseFloat(r.quantity || 0),
+        rate_per_unit: parseFloat(r.rate_per_unit || 0),
+        total_rate: parseFloat(r.total_rate || 0)
       })),
       total: totalCount,
       totalPages: Math.ceil(totalCount / parsedLimit) || 1,
@@ -509,7 +589,9 @@ router.get('/history', async (req, res) => {
       summary: {
         totalCount,
         totalIn,
-        totalOut
+        totalOut,
+        totalInValue,
+        totalOutValue
       }
     });
   } catch (error) {
@@ -518,62 +600,171 @@ router.get('/history', async (req, res) => {
   }
 });
 
-// GET /api/tools-inventory/summary - KPI summary metrics
+// GET /api/tools-inventory/summary - KPI summary metrics & overall valuation dashboard
 router.get('/summary', async (req, res) => {
+  const connection = await pool.getConnection();
   try {
     const today = getTodayISTStr();
 
     // Today metrics
-    const [todayIn] = await pool.query(
-      `SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as total 
+    const [todayIn] = await connection.query(
+      `SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as totalQty, COALESCE(SUM(total_rate), 0) as totalVal 
        FROM tools_inventory_transactions 
        WHERE transaction_type = 'STOCK_IN' AND transaction_date = ?`,
       [today]
     );
 
-    const [todayOut] = await pool.query(
-      `SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as total 
+    const [todayOut] = await connection.query(
+      `SELECT COUNT(*) as count, COALESCE(SUM(quantity), 0) as totalQty, COALESCE(SUM(total_rate), 0) as totalVal 
        FROM tools_inventory_transactions 
        WHERE transaction_type = 'STOCK_OUT' AND transaction_date = ?`,
       [today]
     );
 
-    // Overall metrics
-    const [totalTools] = await pool.query(`
-      SELECT COUNT(DISTINCT product_name) as count 
+    // Lifetime transactions
+    const [lifetimeIn] = await connection.query(
+      `SELECT COALESCE(SUM(quantity), 0) as totalQty, COALESCE(SUM(total_rate), 0) as totalVal 
+       FROM tools_inventory_transactions WHERE transaction_type = 'STOCK_IN'`
+    );
+
+    const [lifetimeOut] = await connection.query(
+      `SELECT COALESCE(SUM(quantity), 0) as totalQty, COALESCE(SUM(total_rate), 0) as totalVal 
+       FROM tools_inventory_transactions WHERE transaction_type = 'STOCK_OUT'`
+    );
+
+    // Distinct items and calculate live total inventory valuation
+    const [prodRows] = await connection.query(`
+      SELECT DISTINCT product_name 
       FROM tools_inventory_transactions
     `);
 
-    const [overallStock] = await pool.query(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN transaction_type = 'STOCK_IN' THEN quantity ELSE -quantity END), 0) as netStock
-      FROM tools_inventory_transactions
-    `);
+    let totalTools = prodRows.length;
+    let totalStockQty = 0;
+    let totalInventoryValue = 0;
+    let inStockCount = 0;
+    let lowStockCount = 0;
+    let outOfStockCount = 0;
+
+    for (const r of prodRows) {
+      const calc = await calculateDynamicRow(connection, r.product_name, today);
+      totalStockQty += calc.closing_stock;
+      totalInventoryValue += calc.total_value || (calc.closing_stock * calc.rate_per_unit);
+      if (calc.closing_stock > 2) inStockCount++;
+      else if (calc.closing_stock > 0) lowStockCount++;
+      else outOfStockCount++;
+    }
 
     res.json({
       ok: true,
       today: {
         date: today,
         stockInCount: parseInt(todayIn[0]?.count || 0, 10),
-        stockInQty: parseFloat(todayIn[0]?.total || 0),
+        stockInQty: parseFloat(todayIn[0]?.totalQty || 0),
+        stockInValue: parseFloat(todayIn[0]?.totalVal || 0),
         stockOutCount: parseInt(todayOut[0]?.count || 0, 10),
-        stockOutQty: parseFloat(todayOut[0]?.total || 0)
+        stockOutQty: parseFloat(todayOut[0]?.totalQty || 0),
+        stockOutValue: parseFloat(todayOut[0]?.totalVal || 0)
       },
       overall: {
-        totalTools: parseInt(totalTools[0]?.count || 0, 10),
-        netStock: parseFloat(overallStock[0]?.netStock || 0)
+        totalTools,
+        totalStockQty: parseFloat(totalStockQty.toFixed(2)),
+        totalInventoryValue: parseFloat(totalInventoryValue.toFixed(2)),
+        totalInQty: parseFloat(lifetimeIn[0]?.totalQty || 0),
+        totalInValue: parseFloat(lifetimeIn[0]?.totalVal || 0),
+        totalOutQty: parseFloat(lifetimeOut[0]?.totalQty || 0),
+        totalOutValue: parseFloat(lifetimeOut[0]?.totalVal || 0),
+        inStockCount,
+        lowStockCount,
+        outOfStockCount
       }
     });
   } catch (error) {
     console.error('Fetch tools summary error:', error);
     res.status(500).json({ ok: false, error: error.message });
+  } finally {
+    connection.release();
   }
 });
 
-// PUT /api/tools-inventory/transaction/:id - Edit transaction
+// GET /api/tools-inventory/today-entries - Fetch today's transactions for the home forms
+router.get('/today-entries', async (req, res) => {
+  try {
+    const today = getTodayISTStr();
+    const { type } = req.query; // optional: 'STOCK_IN' or 'STOCK_OUT'
+
+    let sql = `
+      SELECT 
+        id,
+        transaction_type,
+        DATE_FORMAT(transaction_date, '%Y-%m-%d') AS transaction_date,
+        TIME_FORMAT(transaction_time, '%H:%i:%s') AS transaction_time,
+        product_name,
+        machine_name,
+        company_name,
+        bill_no,
+        quantity,
+        unit,
+        rate_per_unit,
+        total_rate,
+        notes,
+        created_by,
+        created_at
+      FROM tools_inventory_transactions
+      WHERE transaction_date = ?
+    `;
+    const params = [today];
+
+    if (type && type !== 'ALL') {
+      sql += ' AND transaction_type = ?';
+      params.push(type);
+    }
+
+    sql += ' ORDER BY transaction_time DESC, id DESC';
+
+    const [rows] = await pool.query(sql, params);
+
+    res.json({
+      ok: true,
+      date: today,
+      entries: rows.map(r => ({
+        ...r,
+        quantity: parseFloat(r.quantity || 0),
+        rate_per_unit: parseFloat(r.rate_per_unit || 0),
+        total_rate: parseFloat(r.total_rate || 0)
+      }))
+    });
+  } catch (error) {
+    console.error('Fetch today tools entries error:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// PUT /api/tools-inventory/transaction/:id - Edit transaction (Only permitted for today's entries)
 router.put('/transaction/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const today = getTodayISTStr();
+
+    // Check existing record and its date
+    const [existing] = await pool.query(
+      `SELECT DATE_FORMAT(transaction_date, '%Y-%m-%d') AS transaction_date 
+       FROM tools_inventory_transactions 
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Transaction record not found.' });
+    }
+
+    const recDate = existing[0].transaction_date;
+    if (recDate !== today) {
+      return res.status(403).json({
+        ok: false,
+        error: `Editing locked: This record is from ${recDate}. Only today's entries (${today}) can be edited.`
+      });
+    }
+
     const {
       productName,
       machineName,
@@ -581,7 +772,8 @@ router.put('/transaction/:id', async (req, res) => {
       billNo,
       quantity,
       unit = 'PCS',
-      date,
+      ratePerUnit = 0,
+      totalRate = 0,
       time,
       notes
     } = req.body;
@@ -594,6 +786,11 @@ router.put('/transaction/:id', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Quantity must be greater than 0.' });
     }
 
+    const parsedRate = parseFloat(ratePerUnit) || 0;
+    const computedTotal = totalRate && !isNaN(parseFloat(totalRate)) && parseFloat(totalRate) > 0
+      ? parseFloat(totalRate)
+      : parseFloat((parsedQty * parsedRate).toFixed(2));
+
     await pool.query(
       `UPDATE tools_inventory_transactions 
        SET product_name = ?,
@@ -602,8 +799,9 @@ router.put('/transaction/:id', async (req, res) => {
            bill_no = ?,
            quantity = ?,
            unit = ?,
-           transaction_date = ?,
-           transaction_time = ?,
+           rate_per_unit = ?,
+           total_rate = ?,
+           transaction_time = COALESCE(?, transaction_time),
            notes = ?
        WHERE id = ?`,
       [
@@ -613,31 +811,54 @@ router.put('/transaction/:id', async (req, res) => {
         billNo ? billNo.trim() : null,
         parsedQty,
         unit || 'PCS',
-        date,
-        time,
+        parsedRate,
+        computedTotal,
+        time || null,
         notes ? notes.trim() : null,
         id
       ]
     );
 
-    res.json({ ok: true, message: 'Transaction updated successfully.' });
+    res.json({ ok: true, message: 'Today\'s transaction updated successfully.' });
   } catch (error) {
     console.error('Update tools transaction error:', error);
     res.status(500).json({ ok: false, error: error.message });
   }
 });
 
-// DELETE /api/tools-inventory/transaction/:id - Delete transaction
+// DELETE /api/tools-inventory/transaction/:id - Delete transaction (Only permitted for today's entries)
 router.delete('/transaction/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const today = getTodayISTStr();
+
+    // Check existing record and its date
+    const [existing] = await pool.query(
+      `SELECT DATE_FORMAT(transaction_date, '%Y-%m-%d') AS transaction_date 
+       FROM tools_inventory_transactions 
+       WHERE id = ?`,
+      [id]
+    );
+
+    if (existing.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Transaction record not found.' });
+    }
+
+    const recDate = existing[0].transaction_date;
+    if (recDate !== today) {
+      return res.status(403).json({
+        ok: false,
+        error: `Deletion locked: This record is from ${recDate}. Only today's entries (${today}) can be deleted.`
+      });
+    }
+
     const [result] = await pool.query('DELETE FROM tools_inventory_transactions WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ ok: false, error: 'Transaction not found.' });
     }
 
-    res.json({ ok: true, message: 'Transaction deleted successfully.' });
+    res.json({ ok: true, message: 'Today\'s transaction deleted successfully.' });
   } catch (error) {
     console.error('Delete tools transaction error:', error);
     res.status(500).json({ ok: false, error: error.message });

@@ -27,11 +27,25 @@ const Login = () => {
       });
 
       if (response.data.ok) {
+        const user = response.data.user;
+        const isAdmin = user.is_admin || user.username.toLowerCase() === 'admin';
+        const permissions = user.permissions || null;
+
         localStorage.setItem('kemps_logged_in', 'true');
-        localStorage.setItem('kemps_username', response.data.user.username);
-        localStorage.setItem('kemps_name', response.data.user.name || response.data.user.username);
+        localStorage.setItem('kemps_username', user.username);
+        localStorage.setItem('kemps_name', user.name || user.username);
         localStorage.setItem('kemps_auth_token', response.data.token);
-        navigate('/customer');
+        localStorage.setItem('kemps_is_admin', String(isAdmin));
+        localStorage.setItem('kemps_permissions', JSON.stringify(permissions));
+
+        // Determine destination: if admin or has access to /dashboard, go to /dashboard (or first allowed path)
+        if (isAdmin || !permissions || permissions.includes('/dashboard')) {
+          navigate('/dashboard');
+        } else if (permissions && permissions.length > 0) {
+          navigate(permissions[0]);
+        } else {
+          navigate('/dashboard');
+        }
       } else {
         setError(response.data.error || 'Invalid username or password.');
       }

@@ -6,6 +6,16 @@ const StockDashboard = () => {
 
   const shortcuts = [
     {
+      title: 'IMP Work',
+      tag: 'Urgent Task Manager',
+      path: '/imp-work',
+      icon: '🚨',
+      color: 'from-red-600 to-rose-600',
+      bgGlow: 'bg-red-500/10 border-red-200/80 hover:border-red-500 ring-2 ring-red-500/20',
+      tagColor: 'bg-red-100 text-red-700 border-red-300 font-black',
+      description: 'Assign urgent plant tasks, follow up on stock discrepancies, maintenance repairs, and track tasks to completion history.'
+    },
+    {
       title: 'Raw Material Ledger',
       tag: 'Live Stock & Consumption',
       path: '/raw-material-ledger',
@@ -69,6 +79,12 @@ const StockDashboard = () => {
           </div>
 
           <div className="flex items-center gap-3 self-start sm:self-center">
+            <button
+              onClick={() => navigate('/imp-work')}
+              className="h-10 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs transition-all shadow-md shadow-red-500/30 flex items-center gap-2 active:scale-95 border border-red-500"
+            >
+              <span className="animate-pulse text-sm">🚨</span> IMP Work
+            </button>
             <button
               onClick={() => navigate('/dashboard')}
               className="h-10 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all border border-white/10 flex items-center gap-1.5 active:scale-95"
