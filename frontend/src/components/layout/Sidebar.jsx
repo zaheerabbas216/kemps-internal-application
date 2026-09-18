@@ -74,7 +74,8 @@ const navGroups = [
     items: [
       { name: 'Inventory', path: '/inventory' },
       { name: 'Pet Bottle', path: '/pet-bottle' },
-      { name: 'Stock Correction', path: '/stock-correction' }
+      { name: 'Stock Correction', path: '/stock-correction' },
+      { name: 'Wastage', path: '/wastage' }
     ]
   },
   {

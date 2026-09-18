@@ -89,6 +89,7 @@ const quickTiles = [
   { label: 'Bank Deposit',  sub: 'Bank deposits',       icon: '🏦', path: '/bank-deposit',        bg: 'bg-slate-50',   iconBg: 'bg-slate-100 text-slate-600' },
   { label: 'Maintenance',   sub: 'Service log',         icon: '🔧', path: '/maintenance-form',    bg: 'bg-lime-50',    iconBg: 'bg-lime-100 text-lime-600' },
   { label: 'Supplier Pmts', sub: 'Settle payments',     icon: '💳', path: '/supplier-payments',   bg: 'bg-violet-50',  iconBg: 'bg-violet-100 text-violet-600' },
+  { label: 'Wastage',       sub: 'Loss & scrap audit',  icon: '🗑️', path: '/wastage',             bg: 'bg-rose-50',    iconBg: 'bg-rose-100 text-rose-600' },
 ];
 
 // ─── Main Component ────────────────────────────────────────────────────────────

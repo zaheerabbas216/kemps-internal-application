@@ -49,6 +49,12 @@ const RawMaterialLedger = () => {
   });
   const [loadingDrill, setLoadingDrill] = useState(false);
 
+  // Valuation Breakdown Modal states
+  const [isValuationOpen, setIsValuationOpen] = useState(false);
+  const [valSearch, setValSearch] = useState('');
+  const [valCategory, setValCategory] = useState('ALL');
+  const [valOnlyWithStock, setValOnlyWithStock] = useState(true);
+
   useEffect(() => {
     fetchLedger();
     setRmCurrentPages({});
@@ -75,6 +81,7 @@ const RawMaterialLedger = () => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setIsDrillOpen(false);
+        setIsValuationOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -579,16 +586,34 @@ const RawMaterialLedger = () => {
             </div>
 
             {/* Closing Value */}
-            <div className="card-premium flex items-center justify-between p-5">
-              <div>
-                <p className="text-[10px] font-black text-slate-450 uppercase tracking-widest">
-                  Closing Value
-                </p>
-                <h3 className="text-lg font-extrabold text-[#0066cc] mt-1">
-                  ₹{(ledgerData.summary?.closingStockValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                </h3>
+            <div className="card-premium flex flex-col justify-between p-4 relative group hover:border-blue-300 transition-all shadow-sm">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-[10px] font-black text-slate-450 uppercase tracking-widest">
+                    Closing Value
+                  </p>
+                  <h3 className="text-lg font-extrabold text-[#0066cc] mt-1">
+                    ₹{(ledgerData.summary?.closingStockValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                  </h3>
+                </div>
+                <div className="text-xl">🏦</div>
               </div>
-              <div className="text-xl">🏦</div>
+              <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400">Rate × Qty</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setValSearch('');
+                    setValCategory('ALL');
+                    setValOnlyWithStock(true);
+                    setIsValuationOpen(true);
+                  }}
+                  className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/80 rounded-lg text-[10px] font-extrabold transition-all flex items-center gap-1 shadow-xs hover:scale-105 active:scale-95 cursor-pointer"
+                  title="View calculation breakdown"
+                >
+                  <span>👁️</span> View
+                </button>
+              </div>
             </div>
           </div>
 
@@ -970,6 +995,164 @@ const RawMaterialLedger = () => {
                 </span>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* CLOSING VALUE CALCULATION BREAKDOWN MODAL */}
+      {isValuationOpen && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-xs pointer-events-auto p-4"
+          onClick={() => setIsValuationOpen(false)}
+        >
+          <div 
+            className="bg-white rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.25)] border border-slate-200 w-full max-w-4xl max-h-[88vh] p-6 md:p-7 flex flex-col overflow-hidden pointer-events-auto relative animate-fade-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setIsValuationOpen(false)}
+              className="absolute right-6 top-6 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-sm text-slate-500 transition-colors"
+            >
+              ✕
+            </button>
+
+            {/* Modal Header */}
+            <div className="pr-10 mb-3">
+              <h3 className="text-xl font-heading font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                <span>🧮</span> Closing Value Breakdown &amp; Calculation
+              </h3>
+              <p className="text-xs text-slate-500 font-bold mt-1">
+                Ledger Date: <span className="text-slate-800 font-extrabold">{formatDateDDMMYYYY(ledgerDate)}</span> &bull; Total Closing Value: <span className="text-blue-700 font-black">₹{(ledgerData.summary?.closingStockValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+              </p>
+            </div>
+
+            {/* Formula Banner */}
+            <div className="bg-[#0b1329] text-white py-2.5 px-4 rounded-xl font-bold flex flex-wrap justify-center items-center gap-2 text-xs mb-3 shadow-xs">
+              <span className="text-slate-400">Formula:</span>
+              <span className="text-white">Closing Value (per item)</span>
+              <span className="text-blue-400">=</span>
+              <span className="text-emerald-400 font-mono">Qty in PCS (closing)</span>
+              <span className="text-slate-400">&times;</span>
+              <span className="text-amber-300 font-mono">Per PC Rate (₹)</span>
+            </div>
+
+            {/* Filter & Search Bar */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-3 mb-3 items-center bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-xs">
+              <div className="md:col-span-4">
+                <select
+                  value={valCategory}
+                  onChange={(e) => setValCategory(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-slate-700 font-bold outline-none cursor-pointer text-xs"
+                >
+                  <option value="ALL">All Categories ({uniqueCategories.length})</option>
+                  {uniqueCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="md:col-span-5">
+                <input
+                  type="text"
+                  placeholder="Search sub product (e.g. 1L BOPP Kemps)..."
+                  value={valSearch}
+                  onChange={(e) => setValSearch(e.target.value)}
+                  className="w-full h-9 px-3 rounded-lg border border-slate-200 bg-white text-slate-800 font-medium outline-none text-xs"
+                />
+              </div>
+              <div className="md:col-span-3 flex items-center justify-end">
+                <label className="flex items-center gap-1.5 cursor-pointer font-bold text-slate-600 select-none">
+                  <input
+                    type="checkbox"
+                    checked={valOnlyWithStock}
+                    onChange={(e) => setValOnlyWithStock(e.target.checked)}
+                    className="checkbox checkbox-xs checkbox-primary"
+                  />
+                  <span>Stock &gt; 0 only</span>
+                </label>
+              </div>
+            </div>
+
+            {/* Breakdown Table */}
+            <div className="flex-1 overflow-y-auto border border-slate-100 rounded-2xl bg-white">
+              {(() => {
+                const breakdown = ledgerData.summary?.breakdown || [];
+                const searchQ = valSearch.trim().toLowerCase();
+                const filtered = breakdown.filter(item => {
+                  const matchCat = valCategory === 'ALL' || item.category_name.toUpperCase() === valCategory.toUpperCase();
+                  const matchSearch = !searchQ || item.sub_product_name.toLowerCase().includes(searchQ) || item.category_name.toLowerCase().includes(searchQ);
+                  const matchStock = !valOnlyWithStock || (item.closing_stock > 0 || item.closing_value > 0);
+                  return matchCat && matchSearch && matchStock;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="py-16 text-center text-slate-400 font-semibold italic text-xs">
+                      No matching sub-products found.
+                    </div>
+                  );
+                }
+
+                return (
+                  <table className="table table-compact w-full text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-100 sticky top-0 z-10">
+                      <tr className="text-slate-555 font-black uppercase tracking-wider text-[10px]">
+                        <th className="py-2.5 px-3 text-left">Category</th>
+                        <th className="py-2.5 px-3 text-left">Sub Product</th>
+                        <th className="py-2.5 px-3 text-right">Closing Qty (PCS)</th>
+                        <th className="py-2.5 px-3 text-right">Per PC Rate</th>
+                        <th className="py-2.5 px-3 text-right">Calculation</th>
+                        <th className="py-2.5 px-3 text-right text-blue-700 bg-blue-50/40">Closing Value</th>
+                        <th className="py-2.5 px-3 text-left">Rate Source</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-medium">
+                      {filtered.map((item, idx) => {
+                        const hasVal = item.closing_value > 0;
+                        return (
+                          <tr key={idx} className={`hover:bg-slate-50/50 transition-colors ${hasVal ? 'bg-blue-50/15' : ''}`}>
+                            <td className="py-2 px-3 text-slate-500 font-bold">
+                              {getCategoryEmoji(item.category_name)} {item.category_name}
+                            </td>
+                            <td className="py-2 px-3 text-slate-800 font-bold">
+                              {item.sub_product_name}
+                            </td>
+                            <td className="py-2 px-3 text-right font-bold text-slate-700">
+                              {item.closing_stock.toLocaleString('en-IN')}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-bold text-amber-700">
+                              ₹{parseFloat(item.per_pc_rate).toFixed(4)}
+                            </td>
+                            <td className="py-2 px-3 text-right text-slate-500 font-mono text-[11px]">
+                              {item.closing_stock.toLocaleString('en-IN')} &times; ₹{parseFloat(item.per_pc_rate).toFixed(4)}
+                            </td>
+                            <td className="py-2 px-3 text-right font-mono font-extrabold text-blue-700 bg-blue-50/40">
+                              ₹{parseFloat(item.closing_value).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-2 px-3 text-slate-400 text-[11px]">
+                              {item.source}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer Banner */}
+            <div className="bg-[#f8fafc] border border-slate-200 rounded-2xl p-3 mt-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
+              <div className="text-slate-500 font-semibold">
+                Calculation breakdown of all raw materials for {formatDateDDMMYYYY(ledgerDate)}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-extrabold text-slate-600 uppercase text-[10px]">Total Closing Value:</span>
+                <span className="font-mono font-black text-sm text-blue-700 bg-blue-50 px-3 py-1 rounded-xl border border-blue-200">
+                  ₹{(ledgerData.summary?.closingStockValue || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
       )}

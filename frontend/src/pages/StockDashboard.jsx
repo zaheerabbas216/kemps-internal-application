@@ -34,6 +34,16 @@ const StockDashboard = () => {
       bgGlow: 'bg-emerald-500/10 border-emerald-200/80 hover:border-emerald-400',
       tagColor: 'bg-emerald-100/80 text-emerald-800 border-emerald-200',
       description: 'Record maintenance logs, equipment repairs, parts replacements, service technician notes, and machinery downtime.'
+    },
+    {
+      title: 'Wastage Loss Tracker',
+      tag: 'Scrap & Damage Valuation',
+      path: '/wastage',
+      icon: '🗑️',
+      color: 'from-rose-600 to-red-600',
+      bgGlow: 'bg-rose-500/10 border-rose-200/80 hover:border-rose-400',
+      tagColor: 'bg-rose-100/80 text-rose-800 border-rose-200',
+      description: 'Audit scrap, damaged preforms, production spillage, and stock correction shortages with financial loss valuation.'
     }
   ];
 

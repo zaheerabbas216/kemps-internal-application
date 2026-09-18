@@ -46,7 +46,7 @@ router.get('/today', async (req, res) => {
       `SELECT 
          COALESCE(SUM(bags_used), 0) as totalBagsUsed,
          COALESCE(SUM(actual_reading), 0) as totalActualReading,
-         COALESCE(SUM(wastage), 0) as totalWastage,
+         COALESCE(SUM(difference_val), 0) as totalWastage,
          COUNT(*) as totalCount 
        FROM pet_bottle_batches 
        WHERE batch_date = ?`,

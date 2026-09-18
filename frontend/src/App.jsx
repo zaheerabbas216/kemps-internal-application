@@ -52,6 +52,7 @@ const Timer = lazy(() => import('./pages/Timer'));
 const TimerHistory = lazy(() => import('./pages/TimerHistory'));
 const SundayLoading = lazy(() => import('./pages/SundayLoading'));
 const SundayLoadingHistory = lazy(() => import('./pages/SundayLoadingHistory'));
+const Wastage = lazy(() => import('./pages/Wastage'));
 
 // Route guard for authenticated pages
 const ProtectedRoute = () => {
@@ -135,6 +136,7 @@ function App() {
               <Route path="/sunday-loading" element={<SundayLoading />} />
               <Route path="/sunday-loading-history" element={<SundayLoadingHistory />} />
               <Route path="/total-sales" element={<TotalSales />} />
+              <Route path="/wastage" element={<Wastage />} />
 
               {/* Admin only routes */}
               <Route element={<AdminRoute />}>

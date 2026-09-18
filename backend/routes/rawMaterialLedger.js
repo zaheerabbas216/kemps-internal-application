@@ -137,6 +137,201 @@ async function getTransactionsForOpening(connection, rawMaterialId, unit, date, 
   return list;
 }
 
+// Helper to fetch latest per-piece rate for all raw materials
+export async function getPerPcRates(connection) {
+  const [ratesRows] = await connection.query(`
+    SELECT rm.id, rm.sub_product_name, rm.unit AS rm_unit, rmc.name AS category_name,
+      bi.per_pc_rate, bi.rate_per_unit, bi.qty_in_pcs, bi.bags_box, bi.total_quantity, bi.amount, bi.unit AS bill_unit,
+      bi.bill_number, bi.bill_date,
+      cs.total_cost AS cs_cost,
+      pbb.unit_cost AS pbb_cost,
+      pbb.raw_material_id AS pbb_rm_id
+    FROM raw_materials rm
+    JOIN raw_material_categories rmc ON rm.category_id = rmc.id
+    LEFT JOIN (
+      SELECT bi1.*, b1.bill_number, DATE_FORMAT(b1.bill_date, '%Y-%m-%d') as bill_date
+      FROM inventory_bill_items bi1
+      JOIN inventory_bills b1 ON bi1.bill_id = b1.id
+      WHERE bi1.id = (
+        SELECT bi2.id
+        FROM inventory_bill_items bi2
+        JOIN inventory_bills b2 ON bi2.bill_id = b2.id
+        WHERE bi2.raw_material_id = bi1.raw_material_id
+        ORDER BY b2.bill_date DESC, bi2.created_at DESC, bi2.id DESC
+        LIMIT 1
+      )
+    ) bi ON rm.id = bi.raw_material_id
+    LEFT JOIN cost_sheets cs ON rm.id = cs.finished_product_id
+    LEFT JOIN (
+      SELECT pbb1.finished_product_id, pbb1.unit_cost, pbb1.raw_material_id
+      FROM pet_bottle_batches pbb1
+      WHERE pbb1.id = (
+        SELECT pbb2.id
+        FROM pet_bottle_batches pbb2
+        WHERE pbb2.finished_product_id = pbb1.finished_product_id
+        ORDER BY pbb2.batch_date DESC, pbb2.created_at DESC, pbb2.id DESC
+        LIMIT 1
+      )
+    ) pbb ON rm.id = pbb.finished_product_id
+    WHERE rm.status = 1
+  `);
+
+  const perPcRateMap = {};
+
+  // First pass: direct purchase bills or cost sheet / pet bottle batches
+  for (const row of ratesRows) {
+    let rate = 0;
+    let source = 'Default (Not billed)';
+    let ratePerUnit = parseFloat(row.rate_per_unit) || 0;
+    const isPreforms = row.category_name.toLowerCase() === 'preforms';
+    const isBottles = row.category_name.toLowerCase() === 'bottles';
+
+    if (row.per_pc_rate !== null && row.per_pc_rate !== undefined && parseFloat(row.per_pc_rate) > 0) {
+      rate = parseFloat(row.per_pc_rate);
+      source = `Bill ${row.bill_number || ''} (${row.bill_date || ''})`;
+    } else if (row.rate_per_unit !== null && parseFloat(row.rate_per_unit) > 0) {
+      const qtyInPcs = parseFloat(row.qty_in_pcs) || 0;
+      const bagsBox = parseFloat(row.bags_box) || 0;
+
+      if (qtyInPcs > 0 && bagsBox > 0) {
+        rate = ratePerUnit / (qtyInPcs / bagsBox);
+        source = `Bill ${row.bill_number || ''} (₹${ratePerUnit}/${row.bill_unit} ÷ ${(qtyInPcs/bagsBox).toFixed(0)} pcs)`;
+      } else if (qtyInPcs > 0 && parseFloat(row.amount) > 0) {
+        rate = parseFloat(row.amount) / qtyInPcs;
+        source = `Bill ${row.bill_number || ''} (₹${parseFloat(row.amount)} ÷ ${qtyInPcs} pcs)`;
+      } else if (isPreforms) {
+        const weight = parseFloat(row.sub_product_name) || 0;
+        if (weight > 0) {
+          rate = ratePerUnit / (1000 / weight);
+          source = `Bill ${row.bill_number || ''} (₹${ratePerUnit}/KG preform)`;
+        } else {
+          rate = ratePerUnit;
+          source = `Bill ${row.bill_number || ''}`;
+        }
+      } else if (row.rm_unit === 'PCS') {
+        rate = ratePerUnit;
+        source = `Bill ${row.bill_number || ''}`;
+      } else {
+        rate = ratePerUnit;
+        source = `Bill ${row.bill_number || ''}`;
+      }
+    } else if (isBottles) {
+      if (row.cs_cost !== null && parseFloat(row.cs_cost) > 0) {
+        rate = parseFloat(row.cs_cost);
+        source = 'Cost Sheet Standard';
+      } else if (row.pbb_cost !== null && parseFloat(row.pbb_cost) > 0) {
+        rate = parseFloat(row.pbb_cost);
+        source = 'PET Bottle Batch Production Cost';
+      }
+    }
+
+    perPcRateMap[row.id] = {
+      rate,
+      source,
+      bill_number: row.bill_number || null,
+      bill_date: row.bill_date || null,
+      rate_per_unit: ratePerUnit,
+      unit: row.bill_unit || row.rm_unit
+    };
+  }
+
+  // Second pass: for bottles without direct rate, check preform rate used
+  for (const row of ratesRows) {
+    if ((!perPcRateMap[row.id] || perPcRateMap[row.id].rate === 0) && row.pbb_rm_id) {
+      const preformRateObj = perPcRateMap[row.pbb_rm_id];
+      if (preformRateObj && preformRateObj.rate > 0) {
+        perPcRateMap[row.id] = {
+          rate: preformRateObj.rate,
+          source: `Preform Rate (${preformRateObj.source})`,
+          bill_number: preformRateObj.bill_number,
+          bill_date: preformRateObj.bill_date,
+          rate_per_unit: preformRateObj.rate_per_unit,
+          unit: 'PCS'
+        };
+      }
+    }
+  }
+
+  return perPcRateMap;
+}
+
+// Helper to calculate summary metrics for raw material ledger items
+export function calculateLedgerSummary(items, perPcRateMap) {
+  let totalStockValue = 0;
+  let totalClosingValue = 0;
+  let totalStockInToday = 0;
+  let totalStockOutToday = 0;
+
+  const processedValuations = new Set();
+  const breakdown = [];
+
+  for (const item of items) {
+    const isPreforms = item.category_name.toLowerCase() === 'preforms';
+    const secondUnit = getSecondUnit(item.category_name);
+    const rateInfo = perPcRateMap[item.raw_material_id] || { rate: 0, source: 'Default / Not billed' };
+    const perPcRate = typeof rateInfo === 'object' ? rateInfo.rate : (rateInfo || 0);
+
+    let isPieceRow = false;
+    if (isPreforms) {
+      isPieceRow = item.unit === 'PCS';
+    } else if (secondUnit) {
+      isPieceRow = item.unit !== secondUnit;
+    } else {
+      isPieceRow = true;
+    }
+
+    if (isPieceRow && !processedValuations.has(item.raw_material_id)) {
+      const openingVal = (item.opening_stock || 0) * perPcRate;
+      const closingVal = (item.closing_stock || 0) * perPcRate;
+      totalStockValue += openingVal;
+      totalClosingValue += closingVal;
+      processedValuations.add(item.raw_material_id);
+
+      breakdown.push({
+        raw_material_id: item.raw_material_id,
+        sub_product_name: item.sub_product_name,
+        category_name: item.category_name,
+        unit: item.unit,
+        opening_stock: item.opening_stock || 0,
+        stock_in: item.stock_in || 0,
+        stock_out: item.stock_out || 0,
+        closing_stock: item.closing_stock || 0,
+        per_pc_rate: perPcRate,
+        opening_value: parseFloat(openingVal.toFixed(2)),
+        closing_value: parseFloat(closingVal.toFixed(2)),
+        source: rateInfo.source || 'Latest Purchase Rate',
+        bill_number: rateInfo.bill_number || null,
+        bill_date: rateInfo.bill_date || null
+      });
+    }
+
+    if (isPieceRow) {
+      totalStockInToday += item.stock_in || 0;
+      totalStockOutToday += item.stock_out || 0;
+    }
+  }
+
+  // Sort breakdown: items with closing_value > 0 first, then closing_stock > 0, then by category and name
+  breakdown.sort((a, b) => {
+    if (b.closing_value !== a.closing_value) {
+      return b.closing_value - a.closing_value;
+    }
+    if (b.closing_stock !== a.closing_stock) {
+      return b.closing_stock - a.closing_stock;
+    }
+    return a.category_name.localeCompare(b.category_name);
+  });
+
+  return {
+    totalCategories: new Set(items.map(i => i.category_name)).size,
+    totalRawMaterialValue: parseFloat(totalStockValue.toFixed(2)),
+    totalStockInToday: parseFloat(totalStockInToday.toFixed(2)),
+    totalStockOutToday: parseFloat(totalStockOutToday.toFixed(2)),
+    closingStockValue: parseFloat(totalClosingValue.toFixed(2)),
+    breakdown
+  };
+}
+
 // GET /api/raw-material-ledger/day
 // Fetches opening, IN, OUT, closing for selected date
 router.get('/day', authMiddleware, async (req, res) => {
@@ -158,23 +353,8 @@ router.get('/day', authMiddleware, async (req, res) => {
     const isClosed = closedRows.length > 0;
     let ledgerItems = [];
 
-    // 2. Fetch latest purchase rates for valuation
-    const [ratesRows] = await connection.query(`
-      SELECT rm.id, 
-        COALESCE(
-          (SELECT bi.rate_per_unit 
-           FROM inventory_bill_items bi 
-           JOIN inventory_bills b ON bi.bill_id = b.id 
-           WHERE bi.raw_material_id = rm.id 
-           ORDER BY b.bill_date DESC, bi.created_at DESC LIMIT 1), 
-          0
-        ) AS latest_rate
-      FROM raw_materials rm
-    `);
-    const ratesMap = {};
-    ratesRows.forEach(row => {
-      ratesMap[row.id] = parseFloat(row.latest_rate);
-    });
+    // 2. Fetch latest per-pc rates for valuation
+    const perPcRateMap = await getPerPcRates(connection);
 
     if (isClosed) {
       // Read directly from snapshots
@@ -235,51 +415,8 @@ router.get('/day', authMiddleware, async (req, res) => {
       }
     }
 
-    // 3. Compute Dashboard Summary values (avoiding double counting preforms/split units)
-    let totalStockValue = 0;
-    let totalStockInToday = 0;
-    let totalStockOutToday = 0;
-    let totalClosingValue = 0;
-
-    // Track valuation uniquely per raw_material_id
-    const processedValuations = new Set();
-
-    ledgerItems.forEach(item => {
-      const rate = ratesMap[item.raw_material_id] || 0;
-      const isPreforms = item.category_name.toLowerCase() === 'preforms';
-      const secondUnit = getSecondUnit(item.category_name);
-
-      if (isPreforms) {
-        if (!processedValuations.has(item.raw_material_id)) {
-          const weight = parseFloat(item.sub_product_name) || 0;
-          if (item.unit === 'PCS' && weight > 0) {
-            const kgOpening = item.opening_stock / (1000 / weight);
-            const kgClosing = item.closing_stock / (1000 / weight);
-            totalStockValue += kgOpening * rate;
-            totalClosingValue += kgClosing * rate;
-            processedValuations.add(item.raw_material_id);
-          }
-        }
-        if (item.unit === 'PCS') {
-          totalStockInToday += item.stock_in;
-          totalStockOutToday += item.stock_out;
-        }
-      } else if (secondUnit && secondUnit !== item.unit) {
-        if (item.unit === secondUnit) {
-          // Skip second unit row for dashboard summary calculation
-        } else {
-          totalStockValue += item.opening_stock * rate;
-          totalClosingValue += item.closing_stock * rate;
-          totalStockInToday += item.stock_in;
-          totalStockOutToday += item.stock_out;
-        }
-      } else {
-        totalStockValue += item.opening_stock * rate;
-        totalClosingValue += item.closing_stock * rate;
-        totalStockInToday += item.stock_in;
-        totalStockOutToday += item.stock_out;
-      }
-    });
+    // 3. Compute Dashboard Summary values (Closing Value = Qty in PCS * Per PC Rate)
+    const summary = calculateLedgerSummary(ledgerItems, perPcRateMap);
 
     res.json({
       ok: true,
@@ -288,13 +425,7 @@ router.get('/day', authMiddleware, async (req, res) => {
       closedBy: isClosed ? closedRows[0].closed_by : null,
       closedAt: isClosed ? closedRows[0].closed_at : null,
       items: ledgerItems,
-      summary: {
-        totalCategories: new Set(ledgerItems.map(i => i.category_name)).size,
-        totalRawMaterialValue: parseFloat(totalStockValue.toFixed(2)),
-        totalStockInToday: parseFloat(totalStockInToday.toFixed(2)),
-        totalStockOutToday: parseFloat(totalStockOutToday.toFixed(2)),
-        closingStockValue: parseFloat(totalClosingValue.toFixed(2))
-      }
+      summary
     });
 
   } catch (error) {
@@ -357,23 +488,8 @@ router.get('/history', authMiddleware, async (req, res) => {
       [...params, limit, offset]
     );
 
-    // Fetch valuation rates
-    const [ratesRows] = await connection.query(`
-      SELECT rm.id, 
-        COALESCE(
-          (SELECT bi.rate_per_unit 
-           FROM inventory_bill_items bi 
-           JOIN inventory_bills b ON bi.bill_id = b.id 
-           WHERE bi.raw_material_id = rm.id 
-           ORDER BY b.bill_date DESC, bi.created_at DESC LIMIT 1), 
-          0
-        ) AS latest_rate
-      FROM raw_materials rm
-    `);
-    const ratesMap = {};
-    ratesRows.forEach(row => {
-      ratesMap[row.id] = parseFloat(row.latest_rate);
-    });
+    // Fetch per-piece valuation rates
+    const perPcRateMap = await getPerPcRates(connection);
 
     const history = [];
 
@@ -414,62 +530,15 @@ router.get('/history', authMiddleware, async (req, res) => {
       }));
 
       // Calculate summary for this closed day
-      let totalStockValue = 0;
-      let totalStockInToday = 0;
-      let totalStockOutToday = 0;
-      let totalClosingValue = 0;
-      const processedValuations = new Set();
-
-      items.forEach(item => {
-        const rate = ratesMap[item.raw_material_id] || 0;
-        const isPreforms = item.category_name.toLowerCase() === 'preforms';
-        const secondUnit = getSecondUnit(item.category_name);
-
-        if (isPreforms) {
-          if (!processedValuations.has(item.raw_material_id)) {
-            const weight = parseFloat(item.sub_product_name) || 0;
-            if (item.unit === 'PCS' && weight > 0) {
-              const kgOpening = item.opening_stock / (1000 / weight);
-              const kgClosing = item.closing_stock / (1000 / weight);
-              totalStockValue += kgOpening * rate;
-              totalClosingValue += kgClosing * rate;
-              processedValuations.add(item.raw_material_id);
-            }
-          }
-          if (item.unit === 'PCS') {
-            totalStockInToday += item.stock_in;
-            totalStockOutToday += item.stock_out;
-          }
-        } else if (secondUnit && secondUnit !== item.unit) {
-          if (item.unit === secondUnit) {
-            // skip second unit from summary totals
-          } else {
-            totalStockValue += item.opening_stock * rate;
-            totalClosingValue += item.closing_stock * rate;
-            totalStockInToday += item.stock_in;
-            totalStockOutToday += item.stock_out;
-          }
-        } else {
-          totalStockValue += item.opening_stock * rate;
-          totalClosingValue += item.closing_stock * rate;
-          totalStockInToday += item.stock_in;
-          totalStockOutToday += item.stock_out;
-        }
-      });
+      const summary = calculateLedgerSummary(items, perPcRateMap);
+      summary.totalItems = items.length;
 
       history.push({
         ledger_date: day.ledger_date,
         closed_by: day.closed_by,
         closed_at: day.closed_at,
         items,
-        summary: {
-          totalCategories: new Set(items.map(i => i.category_name)).size,
-          totalItems: items.length,
-          totalRawMaterialValue: parseFloat(totalStockValue.toFixed(2)),
-          totalStockInToday: parseFloat(totalStockInToday.toFixed(2)),
-          totalStockOutToday: parseFloat(totalStockOutToday.toFixed(2)),
-          closingStockValue: parseFloat(totalClosingValue.toFixed(2))
-        }
+        summary
       });
     }
 
