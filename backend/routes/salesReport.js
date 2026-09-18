@@ -216,6 +216,24 @@ router.get('/kpi', async (req, res) => {
 
     kpi.supplierPayments = totalSpInstalments + totalInvDirect;
 
+    // Total Bank Deposits for the selected date range
+    try {
+      const bankDepClauses = [];
+      const bankDepParams = [];
+      if (startDate) { bankDepClauses.push(`deposit_date >= ?`); bankDepParams.push(startDate); }
+      if (endDate)   { bankDepClauses.push(`deposit_date <= ?`); bankDepParams.push(endDate); }
+      const bankDepWhere = bankDepClauses.length ? `WHERE ${bankDepClauses.join(' AND ')}` : '';
+
+      const [bankDepRows] = await pool.query(
+        `SELECT COALESCE(SUM(amount), 0) AS totalBankDeposits FROM bank_deposits ${bankDepWhere}`,
+        bankDepParams
+      );
+      kpi.totalBankDeposits = parseFloat(bankDepRows[0]?.totalBankDeposits || 0);
+    } catch (err) {
+      console.warn('Bank deposits query notice:', err.message);
+      kpi.totalBankDeposits = 0;
+    }
+
     let companyRowsUpdated = companyRows.map(r => ({
       company: r.company,
       sales: parseFloat(r.sales) || 0,

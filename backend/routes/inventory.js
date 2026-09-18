@@ -94,9 +94,10 @@ router.post('/', async (req, res) => {
     const billId = await generateId('BILL', 'inventory_bills', 'id');
 
     const isCredit = String(paymentMethod).trim().toLowerCase() === 'credit';
-    const status = isCredit ? 'PENDING' : 'SETTLED';
     const advancePaid = parseFloat(req.body.advancePaid) || 0.00;
     const creditNote = parseFloat(req.body.creditNote) || 0.00;
+    const initialBalance = parseFloat(grandTotal || 0) - advancePaid - creditNote;
+    const status = isCredit ? (initialBalance <= 0.009 ? 'SETTLED' : 'PENDING') : 'SETTLED';
 
     // 1. Insert into inventory_bills (Bill Header)
     await connection.query(

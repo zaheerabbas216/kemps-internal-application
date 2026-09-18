@@ -73,7 +73,7 @@ router.get('/', async (req, res) => {
     
     // Get all customers (if needed)
     const [rows] = await pool.query(`SELECT id, name, phone, gstin as gst, address, credit_balance as creditBalance, alternate_phone as alternatePhone, customer_type as customerType, created_at FROM customers ORDER BY created_at DESC`);
-    res.json({ customers: rows });
+    res.json({ ok: true, customers: rows });
   } catch (error) {
     res.status(400).json({ ok: false, exists: false, error: error.message });
   }

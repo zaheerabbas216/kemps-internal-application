@@ -84,6 +84,16 @@ const Wastage = () => {
     fetchCats();
   }, []);
 
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search query to prevent lag
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
   // Main fetch function
   const fetchWastage = async () => {
     try {
@@ -97,7 +107,7 @@ const Wastage = () => {
       if (endDate) params.endDate = endDate;
       if (selectedSource !== 'ALL') params.source = selectedSource;
       if (selectedCategory !== 'ALL') params.categoryId = selectedCategory;
-      if (searchQuery.trim()) params.search = searchQuery.trim();
+      if (debouncedSearch.trim()) params.search = debouncedSearch.trim();
 
       const res = await api.get('/wastage', { params });
       if (res.data.ok) {
@@ -121,7 +131,7 @@ const Wastage = () => {
 
   useEffect(() => {
     fetchWastage();
-  }, [startDate, endDate, selectedSource, selectedCategory, searchQuery, page, limit]);
+  }, [startDate, endDate, selectedSource, selectedCategory, debouncedSearch, page, limit]);
 
   const handleRefresh = async () => {
     setRefreshing(true);

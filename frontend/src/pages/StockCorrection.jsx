@@ -29,6 +29,7 @@ const StockCorrection = () => {
   const [openingStock, setOpeningStock] = useState(0);
   const [openingBagsBox, setOpeningBagsBox] = useState(0);
   const [conversionFactor, setConversionFactor] = useState(1);
+  const [qtyInPcPerKg, setQtyInPcPerKg] = useState(null);
   const [ledgerUnit, setLedgerUnit] = useState('—');
   const [loadingLedger, setLoadingLedger] = useState(false);
 
@@ -66,25 +67,55 @@ const StockCorrection = () => {
       setOpeningStock(0);
       setOpeningBagsBox(0);
       setConversionFactor(1);
+      setQtyInPcPerKg(null);
       setLedgerUnit('—');
     }
   }, [date, selectedRmId]);
 
-  // Handle present bags change for Preforms auto-calculation
-  useEffect(() => {
-    const category = categories.find(c => c.id === parseInt(selectedCategoryId, 10));
-    const isPreforms = category && category.name.toLowerCase() === 'preforms';
+  const selectedCategory = categories.find(c => c.id === parseInt(selectedCategoryId, 10));
+  const selectedMaterial = allMaterials.find(m => m.id === parseInt(selectedRmId, 10));
+  const secondUnitName = selectedCategory ? getSecondUnitName(selectedCategory.name) : null;
+  const isPreforms = selectedCategory && selectedCategory.name.toLowerCase() === 'preforms';
 
-    if (isPreforms) {
-      const bags = parseFloat(physicalBagsBox) || 0;
-      if (bags > 0 && conversionFactor > 0) {
-        const calculatedMain = Math.round(bags * conversionFactor);
-        setPhysicalStock(calculatedMain.toString());
-      } else {
-        setPhysicalStock('0');
-      }
+  // Helper to compute conversion ratio between bags/box/rolls/cuts and main unit
+  const getEffectiveFactor = () => {
+    if (isPreforms && conversionFactor > 0) {
+      return conversionFactor;
     }
-  }, [physicalBagsBox, conversionFactor, selectedRmId, selectedCategoryId, categories]);
+    // 1. Prioritize Product Master defined qty_in_pc_per_kg (e.g. 2000 pcs per kg/roll)
+    if (selectedMaterial && parseFloat(selectedMaterial.qty_in_pc_per_kg) > 0) {
+      return parseFloat(selectedMaterial.qty_in_pc_per_kg);
+    }
+    if (qtyInPcPerKg && parseFloat(qtyInPcPerKg) > 0) {
+      return parseFloat(qtyInPcPerKg);
+    }
+    // 2. Check if backend provided a specific conversion factor
+    if (conversionFactor > 0 && conversionFactor !== 1) {
+      return conversionFactor;
+    }
+    // 3. Fallback to ledger opening stock ratio
+    if (openingBagsBox > 0 && openingStock > 0) {
+      return openingStock / openingBagsBox;
+    }
+    return conversionFactor || 1;
+  };
+
+  // Handle auto-calculation when physicalBagsBox or stock parameters change
+  useEffect(() => {
+    if (physicalBagsBox !== '' && !isNaN(parseFloat(physicalBagsBox))) {
+      const bags = parseFloat(physicalBagsBox);
+      const factor = getEffectiveFactor();
+      if (factor > 0) {
+        const calculated = bags * factor;
+        const formatted = Number.isInteger(calculated)
+          ? calculated.toString()
+          : parseFloat(calculated.toFixed(2)).toString();
+        setPhysicalStock(formatted);
+      }
+    } else if (physicalBagsBox === '') {
+      setPhysicalStock('');
+    }
+  }, [physicalBagsBox, conversionFactor, qtyInPcPerKg, openingStock, openingBagsBox, selectedRmId, selectedCategoryId]);
 
   const fetchProductsAndCategories = async () => {
     try {
@@ -112,6 +143,7 @@ const StockCorrection = () => {
         setOpeningStock(res.data.openingStock);
         setOpeningBagsBox(res.data.openingBagsBox);
         setConversionFactor(res.data.conversionFactor || 1);
+        setQtyInPcPerKg(res.data.qtyInPcPerKg || null);
         setLedgerUnit(res.data.unit);
       }
     } catch (err) {
@@ -190,10 +222,6 @@ const StockCorrection = () => {
   const hasInput = physicalBagsBox !== '' || (physicalStock !== '' && physicalStock !== '0');
   const uiDifference = hasInput ? (parsedPhysical - Math.abs(openingStock)) : 0;
   const showDifference = true;
-
-  const selectedCategory = categories.find(c => c.id === parseInt(selectedCategoryId, 10));
-  const secondUnitName = selectedCategory ? getSecondUnitName(selectedCategory.name) : null;
-  const isPreforms = selectedCategory && selectedCategory.name.toLowerCase() === 'preforms';
 
   return (
     <div className="space-y-6 animate-fade-in max-w-2xl mx-auto pb-12">
@@ -338,14 +366,14 @@ const StockCorrection = () => {
             {/* BAGS/BOX/ROLLS/CUTS input */}
             <div className="space-y-1.5">
               <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                Present BAGS/BOX/ROLLS/CUTS *
+                Present {secondUnitName ? secondUnitName : 'BAGS/BOX/ROLLS/CUTS'} *
               </label>
               <input
                 type="number"
                 step="any"
                 value={physicalBagsBox}
                 onChange={(e) => setPhysicalBagsBox(e.target.value)}
-                placeholder="Enter bags/box/rolls/cuts"
+                placeholder={`Enter ${secondUnitName ? secondUnitName.toLowerCase() : 'bags/box/rolls/cuts'}`}
                 className="input-premium font-medium"
                 disabled={!selectedRmId}
                 required
@@ -355,7 +383,7 @@ const StockCorrection = () => {
             {/* Present Stock pieces/KG input */}
             <div className="space-y-1.5">
               <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
-                Present Stock *
+                Present Stock ({ledgerUnit}) *
               </label>
               <input
                 type="number"
@@ -368,9 +396,16 @@ const StockCorrection = () => {
                 disabled={!selectedRmId}
                 required
               />
-              {isPreforms && (
-                <span className="text-[10px] font-bold text-slate-400 mt-1 block">
-                  Calculated automatically (Bags * 25 * (1000 / weight)).
+              {selectedRmId && (
+                <span className="text-[11px] font-semibold text-slate-500 mt-1.5 flex items-center gap-1">
+                  <span>💡</span>
+                  <span>
+                    {isPreforms
+                      ? `Calculated automatically (${conversionFactor.toLocaleString()} PCS per BAG)`
+                      : secondUnitName
+                        ? `Auto-calculated at ${getEffectiveFactor().toLocaleString(undefined, { maximumFractionDigits: 2 })} ${selectedMaterial?.qty_in_pc_per_kg ? 'PCS' : ledgerUnit} per ${secondUnitName.toLowerCase()}`
+                        : `Physical count in ${ledgerUnit}`}
+                  </span>
                 </span>
               )}
             </div>

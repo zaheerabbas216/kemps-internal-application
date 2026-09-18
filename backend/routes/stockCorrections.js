@@ -226,7 +226,7 @@ router.get('/available-stock', async (req, res) => {
 
     // Fetch raw material details
     const [rmRows] = await connection.query(
-      `SELECT rm.id, rm.sub_product_name, rm.unit, rmc.name AS category_name
+      `SELECT rm.id, rm.sub_product_name, rm.unit, rm.qty_in_pc_per_kg, rmc.name AS category_name
        FROM raw_materials rm
        JOIN raw_material_categories rmc ON rm.category_id = rmc.id
        WHERE rm.id = ?`,
@@ -272,7 +272,8 @@ router.get('/available-stock', async (req, res) => {
       openingStock,
       openingBagsBox,
       conversionFactor,
-      unit
+      unit,
+      qtyInPcPerKg: rm.qty_in_pc_per_kg ? parseFloat(rm.qty_in_pc_per_kg) : null
     });
 
   } catch (error) {

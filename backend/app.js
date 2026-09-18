@@ -34,6 +34,9 @@ import cashLedgerRoutes from './routes/cashLedger.js';
 import timerRoutes from './routes/timer.js';
 import sundayLoadingRoutes from './routes/sundayLoading.js';
 import wastageRoutes from './routes/wastage.js';
+import weightMeasurementRoutes from './routes/weightMeasurement.js';
+import toolsInventoryRoutes from './routes/toolsInventory.js';
+import impWorkRoutes from './routes/impWork.js';
 import authMiddleware from './middleware/auth.js';
 
 const app = express();
@@ -115,6 +118,9 @@ app.use('/api/cash-ledger', authMiddleware, cashLedgerRoutes);
 app.use('/api/timer', authMiddleware, timerRoutes);
 app.use('/api/sunday-loading', authMiddleware, sundayLoadingRoutes);
 app.use('/api/wastage', authMiddleware, wastageRoutes);
+app.use('/api/weight-measurement', authMiddleware, weightMeasurementRoutes);
+app.use('/api/tools-inventory', authMiddleware, toolsInventoryRoutes);
+app.use('/api/imp-work', authMiddleware, impWorkRoutes);
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

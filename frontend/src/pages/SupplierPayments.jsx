@@ -798,7 +798,7 @@ const SupplierPayments = () => {
                 : 0;
 
               return (
-                <div key={bill.id} className="card-premium border-l-4 border-red-500 space-y-4 shadow-sm hover:shadow-md transition-shadow">
+                <div key={bill.id} className={`card-premium border-l-4 ${bill.status === 'SETTLED' ? 'border-emerald-500' : bill.status === 'CANCELLED' ? 'border-slate-300' : 'border-red-500'} space-y-4 shadow-sm hover:shadow-md transition-shadow`}>
                   {/* Card Header */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -863,8 +863,16 @@ const SupplierPayments = () => {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-50">
-                    {bill.status === 'PENDING' && (
+                  <div className="flex justify-end gap-2 pt-2 border-t border-slate-50 items-center">
+                    {bill.status === 'SETTLED' ? (
+                      <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-100">
+                        ✓ Bill Fully Settled
+                      </span>
+                    ) : bill.status === 'CANCELLED' ? (
+                      <span className="text-xs font-bold text-slate-400 italic">
+                        Bill Cancelled
+                      </span>
+                    ) : (
                       <>
                         <button
                           type="button"

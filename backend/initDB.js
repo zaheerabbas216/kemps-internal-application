@@ -245,6 +245,114 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    console.log('Creating weight_measurements table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS weight_measurements (
+        id VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+        measurement_date DATE NOT NULL,
+        measurement_time TIME NULL,
+        product_name VARCHAR(255) NOT NULL,
+        weight_in DECIMAL(12, 3) NOT NULL DEFAULT 0.000,
+        weight_out DECIMAL(12, 3) NOT NULL DEFAULT 0.000,
+        difference_val DECIMAL(12, 3) NOT NULL DEFAULT 0.000,
+        reading_val VARCHAR(255) NULL,
+        per_kg_reading DECIMAL(12, 4) NOT NULL DEFAULT 0.0000,
+        unit VARCHAR(20) NOT NULL DEFAULT 'kg',
+        notes TEXT NULL,
+        created_by VARCHAR(100) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_wm_date (measurement_date),
+        INDEX idx_wm_product (product_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating tools_inventory_transactions table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS tools_inventory_transactions (
+        id VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+        transaction_type ENUM('STOCK_IN', 'STOCK_OUT') NOT NULL,
+        transaction_date DATE NOT NULL,
+        transaction_time TIME NULL,
+        product_name VARCHAR(255) NOT NULL,
+        machine_name VARCHAR(255) NULL,
+        company_name VARCHAR(255) NULL,
+        bill_no VARCHAR(100) NULL,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        unit VARCHAR(20) NOT NULL DEFAULT 'PCS',
+        notes TEXT NULL,
+        created_by VARCHAR(100) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_ti_date (transaction_date),
+        INDEX idx_ti_type (transaction_type),
+        INDEX idx_ti_product (product_name),
+        INDEX idx_ti_machine (machine_name),
+        INDEX idx_ti_company (company_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating tools_inventory_manual_opening table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS tools_inventory_manual_opening (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        product_name VARCHAR(255) NOT NULL,
+        ledger_date DATE NOT NULL,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_timo_date_product (ledger_date, product_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating tools_inventory_ledger_closings table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS tools_inventory_ledger_closings (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ledger_date DATE NOT NULL UNIQUE,
+        closed_by VARCHAR(100) DEFAULT 'System (Auto)',
+        closed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating tools_inventory_ledger_snapshots table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS tools_inventory_ledger_snapshots (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        ledger_date DATE NOT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        opening_stock DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        stock_in DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        stock_out DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        closing_stock DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_tils_date_product (ledger_date, product_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating imp_work_tasks table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS imp_work_tasks (
+        id VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT NULL,
+        assigned_to VARCHAR(150) NOT NULL,
+        assigned_by VARCHAR(150) NOT NULL,
+        priority ENUM('LOW', 'MEDIUM', 'HIGH', 'URGENT') DEFAULT 'HIGH',
+        category VARCHAR(100) DEFAULT 'General',
+        due_date DATE NULL,
+        status ENUM('PENDING', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED') DEFAULT 'PENDING',
+        completed_at DATETIME NULL,
+        completed_by VARCHAR(150) NULL,
+        completed_notes TEXT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_iwt_status (status),
+        INDEX idx_iwt_priority (priority),
+        INDEX idx_iwt_due_date (due_date),
+        INDEX idx_iwt_assigned_to (assigned_to)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     // Seed default categories if they do not exist
     const [existingCategories] = await connection.query('SELECT COUNT(*) as count FROM raw_material_categories');
     if (existingCategories[0].count === 0) {

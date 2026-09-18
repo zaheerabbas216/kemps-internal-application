@@ -27,6 +27,13 @@ const navGroups = [
     icon: '☀️'
   },
   {
+    type: 'button',
+    name: 'IMP Work',
+    path: '/imp-work',
+    icon: '🚨',
+    highlight: 'red-box'
+  },
+  {
     type: 'section',
     title: 'Sales'
   },
@@ -104,6 +111,18 @@ const navGroups = [
     name: 'Raw Material Ledger',
     path: '/raw-material-ledger',
     icon: '🪨'
+  },
+  {
+    type: 'button',
+    name: 'Weight Measurement',
+    path: '/weight-measurement',
+    icon: '⚖️'
+  },
+  {
+    type: 'button',
+    name: 'Tools Inventory',
+    path: '/tools-inventory',
+    icon: '🔧'
   },
   {
     type: 'section',
@@ -218,6 +237,30 @@ const SidebarItem = ({ item, onClickItem }) => {
   }
 
   if (item.type === 'button') {
+    if (item.highlight === 'red-box') {
+      return (
+        <NavLink
+          to={item.path}
+          onClick={onClickItem}
+          className={({ isActive }) =>
+            `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[14px] font-bold transition-all duration-200 border-2 my-1 shadow-sm ${
+              isActive
+                ? 'bg-red-600 text-white border-red-600 shadow-md shadow-red-500/25 ring-2 ring-red-300'
+                : 'bg-red-50 text-red-700 border-red-500 hover:bg-red-100 hover:border-red-600'
+            }`
+          }
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-lg w-6 flex items-center justify-center animate-pulse">{item.icon}</span>
+            <span className="tracking-wide">{item.name}</span>
+          </div>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider bg-red-600 text-white shadow-xs">
+            URGENT
+          </span>
+        </NavLink>
+      );
+    }
+
     return (
       <NavLink
         to={item.path}

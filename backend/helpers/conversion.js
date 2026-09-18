@@ -38,10 +38,15 @@ export async function getConversionFactor(connection, rawMaterial) {
     }
   }
 
+  // 1. Prioritize Raw Material Master defined qty_in_pc_per_kg
+  if (rawMaterial.qty_in_pc_per_kg && parseFloat(rawMaterial.qty_in_pc_per_kg) > 0) {
+    return parseFloat(rawMaterial.qty_in_pc_per_kg);
+  }
+
   if (!secondUnit) return 1;
   if (mainUnit === secondUnit) return 1;
 
-  // 1. Try fetching from inventory_bill_items (for purchases)
+  // 2. Try fetching from inventory_bill_items (for purchases)
   const [invRows] = await db.query(
     `SELECT bi.total_quantity, bi.qty_in_pcs, bi.bags_box 
      FROM inventory_bill_items bi 

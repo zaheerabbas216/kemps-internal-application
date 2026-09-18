@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import SearchableSelect from '../components/SearchableSelect';
 
 const CreditBalance = () => {
   const navigate = useNavigate();
@@ -17,6 +18,7 @@ const CreditBalance = () => {
   // Table listings and filters
   const [bills, setBills] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -63,14 +65,25 @@ const CreditBalance = () => {
     { value: 'Wholesale Customer', label: 'Wholesale' }
   ];
 
-  // Fetch stats and table list on filter changes
+  // Fetch stats, customers, and table list on filter changes
   useEffect(() => {
     fetchStats();
+    fetchCustomers();
   }, []);
 
   useEffect(() => {
     fetchOutstandingBills();
   }, [page, search, startDate, endDate, company, customerType]);
+
+  const fetchCustomers = async () => {
+    try {
+      const res = await api.get('/customers');
+      const list = res.data?.customers || (Array.isArray(res.data) ? res.data : []);
+      setCustomers(list);
+    } catch (err) {
+      console.error('Failed to load customer list:', err);
+    }
+  };
 
   const fetchStats = async () => {
     try {
@@ -380,17 +393,41 @@ const CreditBalance = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Customer Search */}
+          {/* Customer Search Dropdown */}
           <div className="space-y-1.5">
-            <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">
-              Search Customers
-            </label>
-            <input 
-              type="text"
-              placeholder="Name, Phone, Invoice No..."
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-black text-slate-450 uppercase tracking-wider block">
+                Search Customer
+              </label>
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); setPage(1); }}
+                  className="text-[10px] font-bold text-rose-500 hover:text-rose-700 transition-colors"
+                >
+                  ✕ Clear
+                </button>
+              )}
+            </div>
+            <SearchableSelect
+              options={[
+                { value: '', label: '-- All Customers --' },
+                ...customers.map(c => ({
+                  value: c.name,
+                  label: `${c.name}${c.phone ? ` (${c.phone})` : ''}`,
+                  badge: c.customerType || undefined,
+                  rawName: c.name,
+                  phone: c.phone
+                }))
+              ]}
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-slate-50/20 text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+              onChange={(val) => {
+                setSearch(val || '');
+                setPage(1);
+              }}
+              placeholder="Select or search customer..."
+              searchPlaceholder="Type customer name or phone..."
+              className="w-full h-11"
             />
           </div>
 

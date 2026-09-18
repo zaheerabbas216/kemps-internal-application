@@ -32,7 +32,7 @@ router.get('/', authMiddleware, async (req, res) => {
     let queries = [];
     let queryParams = [];
 
-    // 1. PET Bottle Production Wastage (using difference_val as scrap/wastage)
+    // 1. PET Bottle Production Wastage (using difference_val or wastage as scrap/wastage)
     if (!source || source === 'ALL' || source === 'PET_BOTTLE') {
       queries.push(`
         SELECT 
@@ -46,7 +46,7 @@ router.get('/', authMiddleware, async (req, res) => {
           rm.category_id,
           rmc.name AS category_name,
           COALESCE(fp.name, rmf.sub_product_name, 'PET Bottle') AS target_product_name,
-          CAST(pbb.difference_val AS DECIMAL(12, 2)) AS wastage_qty,
+          CAST(CASE WHEN pbb.wastage > 0 THEN pbb.wastage ELSE pbb.difference_val END AS DECIMAL(12, 2)) AS wastage_qty,
           'PCS' AS wastage_unit,
           COALESCE(pbb.notes, '') AS remarks,
           'Admin' AS created_by,
@@ -56,7 +56,7 @@ router.get('/', authMiddleware, async (req, res) => {
         JOIN raw_material_categories rmc ON rm.category_id = rmc.id
         LEFT JOIN finished_products fp ON pbb.finished_product_id = fp.id
         LEFT JOIN raw_materials rmf ON pbb.finished_product_id = rmf.id
-        WHERE pbb.difference_val > 0
+        WHERE (pbb.wastage > 0 OR pbb.difference_val > 0)
       `);
     }
 
@@ -76,7 +76,7 @@ router.get('/', authMiddleware, async (req, res) => {
           fp.name AS target_product_name,
           CAST(pmu.wastage AS DECIMAL(12, 2)) AS wastage_qty,
           rm.unit AS wastage_unit,
-          COALESCE(pb.notes, '') AS remarks,
+          CONCAT('Batch No: ', COALESCE(pb.batch_no, '')) AS remarks,
           'Admin' AS created_by,
           pb.created_at AS created_at
         FROM production_material_usages pmu

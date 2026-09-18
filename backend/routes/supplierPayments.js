@@ -29,6 +29,75 @@ async function generateId(prefix, table, idColumn) {
   return `${prefix}-${yyyy}-${String(seq).padStart(5, '0')}`;
 }
 
+// Helper to initialize table and reconcile any desynced statuses or missing ledger entries
+const reconcileSupplierPayments = async () => {
+  try {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+
+      // 1. Auto-settle any bills where remaining balance <= 0
+      await connection.query(`
+        UPDATE inventory_bills b
+        LEFT JOIN (
+          SELECT bill_id, SUM(amount) AS total_paid 
+          FROM supplier_payments 
+          WHERE payment_status = 'Approved'
+          GROUP BY bill_id
+        ) p_sum ON b.id = p_sum.bill_id
+        SET b.status = 'SETTLED'
+        WHERE b.status = 'PENDING' 
+          AND (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0)) <= 0.009
+      `);
+
+      // 2. Re-open any settled bills that have remaining balance > 0
+      await connection.query(`
+        UPDATE inventory_bills b
+        LEFT JOIN (
+          SELECT bill_id, SUM(amount) AS total_paid 
+          FROM supplier_payments 
+          WHERE payment_status = 'Approved'
+          GROUP BY bill_id
+        ) p_sum ON b.id = p_sum.bill_id
+        SET b.status = 'PENDING'
+        WHERE b.status = 'SETTLED' 
+          AND (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0)) > 0.009
+      `);
+
+      // 3. Find any approved payments not recorded in supplier_ledger
+      const [missingPays] = await connection.query(`
+        SELECT sp.id, sp.bill_id, DATE_FORMAT(sp.payment_date, '%Y-%m-%d') AS payment_date, sp.amount, sp.payment_mode, sp.notes, b.supplier_id
+        FROM supplier_payments sp
+        JOIN inventory_bills b ON sp.bill_id = b.id
+        LEFT JOIN supplier_ledger sl ON (sl.reference_no = sp.id AND sl.entry_type = 'PAYMENT')
+        WHERE sp.payment_status = 'Approved' AND sl.id IS NULL
+      `);
+
+      for (const p of missingPays) {
+        await addSupplierLedgerEntry(connection, {
+          date: p.payment_date,
+          supplierId: p.supplier_id,
+          entryType: 'PAYMENT',
+          referenceNo: p.id,
+          particular: `Payment Made (${p.payment_mode}) for Bill ${p.bill_id}${p.notes ? ' - ' + p.notes : ''}`,
+          debit: parseFloat(p.amount),
+          credit: 0.00
+        });
+      }
+
+      await connection.commit();
+    } catch (err) {
+      await connection.rollback();
+      console.error('Error during supplier payment reconciliation:', err);
+    } finally {
+      connection.release();
+    }
+  } catch (err) {
+    console.error('Supplier payments init error:', err);
+  }
+};
+reconcileSupplierPayments();
+
 // GET /api/supplier-payments/bills - Get credit bills with aggregates
 router.get('/bills', async (req, res) => {
   try {
@@ -72,7 +141,7 @@ router.get('/bills', async (req, res) => {
         b.remarks,
         b.description,
         COALESCE(p_sum.total_paid, 0) AS total_paid,
-        (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0)) AS balance_due,
+        GREATEST(0, (b.grand_total - b.advance_paid - b.credit_note - COALESCE(p_sum.total_paid, 0))) AS balance_due,
         (SELECT COUNT(*) FROM supplier_payments sp WHERE sp.bill_id = b.id AND sp.payment_status = 'Pending Approval') > 0 AS has_pending_payment
       FROM inventory_bills b
       JOIN company_details c ON b.supplier_id = c.id
@@ -96,12 +165,13 @@ router.get('/bills', async (req, res) => {
     let totalBalance = 0;
 
     bills.forEach(b => {
-      if (b.status === 'PENDING') {
+      const bal = parseFloat(b.balance_due) || 0;
+      if (b.status === 'PENDING' && bal > 0.009) {
         pendingCount++;
         totalCredit += parseFloat(b.grand_total) || 0;
         totalAdvance += parseFloat(b.advance_paid) || 0;
         totalPaid += parseFloat(b.total_paid) || 0;
-        totalBalance += parseFloat(b.balance_due) || 0;
+        totalBalance += bal;
       }
     });
 
@@ -140,7 +210,7 @@ router.post('/manual-bill', async (req, res) => {
 
     const billId = await generateId('BILL-M', 'inventory_bills', 'id');
     const balance = parseFloat(grandTotal) - parseFloat(advancePaid) - parseFloat(creditNote);
-    const status = balance <= 0 ? 'SETTLED' : 'PENDING';
+    const status = balance <= 0.009 ? 'SETTLED' : 'PENDING';
 
     await connection.query(
       `INSERT INTO inventory_bills 
@@ -225,13 +295,13 @@ router.put('/bill/:id', async (req, res) => {
 
     // 1. Fetch current payments
     const [payRows] = await connection.query(
-      `SELECT COALESCE(SUM(amount), 0) AS paid FROM supplier_payments WHERE bill_id = ?`,
+      `SELECT COALESCE(SUM(amount), 0) AS paid FROM supplier_payments WHERE bill_id = ? AND payment_status = 'Approved'`,
       [id]
     );
     const totalPaid = parseFloat(payRows[0].paid) || 0;
 
     const balance = parseFloat(grandTotal) - parseFloat(advancePaid) - parseFloat(creditNote) - totalPaid;
-    const status = balance <= 0 ? 'SETTLED' : 'PENDING';
+    const status = balance <= 0.009 ? 'SETTLED' : 'PENDING';
 
     // 2. Update bill details
     await connection.query(
@@ -249,7 +319,7 @@ router.put('/bill/:id', async (req, res) => {
       ]
     );
 
-    // Supplier Ledger Hook: Clear old entries and re-insert updated ones
+    // Supplier Ledger Hook: Clear old entries for this bill and re-insert updated ones
     await deleteSupplierLedgerEntriesForReference(connection, id);
     
     const [billRows] = await connection.query(
@@ -321,6 +391,13 @@ router.put('/bill/:id/cancel', async (req, res) => {
     // Supplier Ledger Hook: delete ledger entries on cancel
     await deleteSupplierLedgerEntriesForReference(connection, id);
 
+    // Clean up any child payments made for this bill
+    const [pRows] = await connection.query(`SELECT id FROM supplier_payments WHERE bill_id = ?`, [id]);
+    for (const p of pRows) {
+      await deleteSupplierLedgerEntriesForReference(connection, p.id);
+    }
+    await connection.query(`UPDATE supplier_payments SET payment_status = 'Rejected' WHERE bill_id = ?`, [id]);
+
     await connection.commit();
     res.json({ ok: true, message: 'Bill cancelled successfully.' });
   } catch (error) {
@@ -374,7 +451,7 @@ router.post('/pay', async (req, res) => {
 
     const remainingBalance = parseFloat(bill.grand_total) - parseFloat(bill.advance_paid) - parseFloat(bill.credit_note) - totalPaid;
 
-    if (parseFloat(amount) > remainingBalance) {
+    if (parseFloat(amount) > remainingBalance + 0.01) {
       throw new Error(`Payment amount (₹${amount}) exceeds the remaining balance due (₹${remainingBalance.toFixed(2)}).`);
     }
 
@@ -388,6 +465,27 @@ router.post('/pay', async (req, res) => {
        VALUES (?, ?, ?, ?, ?, ?, 'Approved', 0.00, ?, 0.00, NULL, NOW())`,
       [payId, billId, paymentDate, parseFloat(amount), paymentMode, notes || '', parseFloat(amount)]
     );
+
+    // 5. Update bill status (SETTLED if balance cleared, otherwise PENDING)
+    const newTotalPaid = totalPaid + parseFloat(amount);
+    const newRemainingBalance = parseFloat(bill.grand_total) - parseFloat(bill.advance_paid) - parseFloat(bill.credit_note) - newTotalPaid;
+    const newStatus = newRemainingBalance <= 0.009 ? 'SETTLED' : 'PENDING';
+
+    await connection.query(
+      `UPDATE inventory_bills SET status = ? WHERE id = ?`,
+      [newStatus, billId]
+    );
+
+    // 6. Supplier Ledger Hook: Record PAYMENT debit in supplier_ledger
+    await addSupplierLedgerEntry(connection, {
+      date: paymentDate,
+      supplierId: bill.supplier_id,
+      entryType: 'PAYMENT',
+      referenceNo: payId,
+      particular: `Payment Made (${paymentMode}) for Bill ${billId}${notes ? ' - ' + notes : ''}`,
+      debit: parseFloat(amount),
+      credit: 0.00
+    });
 
     await connection.commit();
 

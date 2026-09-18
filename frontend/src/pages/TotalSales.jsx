@@ -515,7 +515,7 @@ const TotalSales = () => {
 
       {/* ── KPI CARDS ──────────────────────────────────────────────────────────── */}
       {loadingKpi ? <Spinner /> : kpi && (
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3 md:gap-4">
           <KpiCard
             icon="💰"
             label="Total Sales"
@@ -555,6 +555,14 @@ const TotalSales = () => {
             sub="Inventory & Supplier paid"
             color="#d97706"
             bg="bg-amber-50/80"
+          />
+          <KpiCard
+            icon="🏦"
+            label="Bank Deposit"
+            value={formatINR(kpi.totalBankDeposits || 0)}
+            sub="Total deposited"
+            color="#0284c7"
+            bg="bg-sky-50"
           />
           <KpiCard
             icon="📈"
