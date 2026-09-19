@@ -8,8 +8,11 @@ export function getApiBaseUrl() {
     return import.meta.env.VITE_API_BASE_URL;
   }
 
-  if (window.location.hostname === 'kmps-fed-fullstack-application.bitwizard.online') {
-    return cloudflareApiBaseUrl;
+  if (typeof window !== 'undefined') {
+    if (window.location.hostname === 'kmps-fed-fullstack-application.bitwizard.online') {
+      return cloudflareApiBaseUrl;
+    }
+    return '/api';
   }
 
   return localApiBaseUrl;

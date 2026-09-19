@@ -61,8 +61,10 @@ export function SSEProvider({ children }) {
       eventSourceRef.current.close();
     }
 
-    // Determine SSE URL using base API URL
-    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
+    let apiBase = getApiBaseUrl().replace(/\/+$/, '');
+    if (apiBase.startsWith('/')) {
+      apiBase = `${window.location.origin}${apiBase}`;
+    }
     const sseUrl = `${apiBase}/sse/events?token=${encodeURIComponent(token)}`;
 
     try {
