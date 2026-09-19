@@ -112,6 +112,44 @@ Object.entries(MODULE_PARENT_MAP).forEach(([child, parent]) => {
 });
 
 // ─────────────────────────────────────────────
+// Route module order for dynamic redirect
+// ─────────────────────────────────────────────
+export const ROUTE_MODULE_MAP = [
+  { path: '/dashboard', module: 'dashboard' },
+  { path: '/stock-dashboard', module: 'stock-dashboard' },
+  { path: '/production-dashboard', module: 'production-dashboard' },
+  { path: '/sunday-dashboard', module: 'sunday-dashboard' },
+  { path: '/billing', module: 'billing' },
+  { path: '/orders', module: 'orders' },
+  { path: '/loading', module: 'loading' },
+  { path: '/sunday-loading', module: 'sunday-loading' },
+  { path: '/can-supply', module: 'can-supply' },
+  { path: '/inventory', module: 'inventory' },
+  { path: '/production-form', module: 'production' },
+  { path: '/timer', module: 'timer' },
+  { path: '/pet-bottle', module: 'pet-bottle' },
+  { path: '/stock-correction', module: 'stock-correction' },
+  { path: '/customer', module: 'customer' },
+  { path: '/expense', module: 'expense' },
+  { path: '/accounts-ledger', module: 'accounts-ledger' },
+  { path: '/cash-ledger', module: 'cash-ledger' },
+  { path: '/raw-material-ledger', module: 'raw-material-ledger' },
+  { path: '/goods-ledger', module: 'goods-ledger' },
+  { path: '/distribution-order', module: 'distribution-order' },
+  { path: '/can-deposit', module: 'can-deposit' },
+  { path: '/maintenance-form', module: 'maintenance-form' },
+  { path: '/maintenance-master', module: 'maintenance-master' },
+  { path: '/bank-deposit', module: 'bank-deposit' },
+  { path: '/company-details', module: 'company-details' },
+  { path: '/supplier-payments', module: 'supplier-payments' },
+  { path: '/supplier-ledger', module: 'supplier-ledger' },
+  { path: '/product-master', module: 'product-master' },
+  { path: '/sales-return', module: 'sales-return' },
+  { path: '/payment-approval', module: 'payment-approval' },
+  { path: '/total-sales', module: 'total-sales' },
+];
+
+// ─────────────────────────────────────────────
 // Context
 // ─────────────────────────────────────────────
 const AuthContext = createContext(null);
@@ -155,6 +193,20 @@ export function AuthProvider({ children }) {
   const canUpdate = useCallback((module) => checkPerm(module, 'update'), [checkPerm]);
   const canDelete = useCallback((module) => checkPerm(module, 'delete'), [checkPerm]);
 
+  const getFirstPermittedPath = useCallback((customPerms = null, customIsSuperAdmin = null) => {
+    const isSuper = customIsSuperAdmin !== null ? customIsSuperAdmin : authState.isSuperAdmin;
+    if (isSuper) return '/dashboard';
+    const perms = customPerms || authState.permissions || {};
+    for (const item of ROUTE_MODULE_MAP) {
+      if (perms[item.module]?.read) return item.path;
+      const parent = MODULE_PARENT_MAP[item.module];
+      if (parent && perms[parent]?.read) return item.path;
+      const children = PARENT_CHILDREN_MAP[item.module];
+      if (children && children.some(c => perms[c]?.read)) return item.path;
+    }
+    return '/change-password';
+  }, [authState.isSuperAdmin, authState.permissions]);
+
   const value = {
     user:        authState.user,
     isSuperAdmin: authState.isSuperAdmin,
@@ -165,6 +217,7 @@ export function AuthProvider({ children }) {
     canCreate,
     canUpdate,
     canDelete,
+    getFirstPermittedPath,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

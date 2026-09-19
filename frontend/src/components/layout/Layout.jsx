@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isSuperAdmin, logout } = useAuth();
+  const { user, isSuperAdmin, logout, getFirstPermittedPath } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('kemps_sidebar_collapsed') === 'true';
@@ -166,7 +166,7 @@ const Layout = () => {
               ☰
             </button>
             <div 
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(getFirstPermittedPath())}
               className="text-sm sm:text-base font-extrabold text-[#0f172a] tracking-tight leading-none italic cursor-pointer flex items-center gap-1.5"
             >
               <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary rounded-lg flex items-center justify-center text-white font-black text-xs sm:text-sm italic shadow-md shadow-primary/30">

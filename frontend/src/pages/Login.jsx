@@ -5,7 +5,7 @@ import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, getFirstPermittedPath } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,7 +34,11 @@ const Login = () => {
           { ...response.data.user, token: response.data.token },
           response.data.permissions || {}
         );
-        navigate('/dashboard');
+        const redirectPath = getFirstPermittedPath(
+          response.data.permissions || {},
+          !!response.data.user?.isSuperAdmin
+        );
+        navigate(redirectPath);
       } else {
         setError(response.data.error || 'Invalid username or password.');
       }

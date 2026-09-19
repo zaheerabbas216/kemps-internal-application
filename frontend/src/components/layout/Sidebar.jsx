@@ -261,7 +261,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
 // ─────────────────────────────────────────────
 const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
-  const { user, isSuperAdmin, canRead } = useAuth();
+  const { user, isSuperAdmin, canRead, getFirstPermittedPath } = useAuth();
 
   const fullName    = user.name || user.username || 'User';
   const roleName    = isSuperAdmin ? 'Superadmin' : (user.role_name || 'User');
@@ -281,10 +281,6 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     if (item.adminOnly) return isSuperAdmin;
 
     if (item.type === 'button') {
-      // Dashboards always visible
-      if (['dashboard', 'stock-dashboard', 'production-dashboard', 'sunday-dashboard'].includes(item.module)) {
-        return true;
-      }
       return isSuperAdmin || canRead(item.module);
     }
 
@@ -303,24 +299,34 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     return true;
   });
 
-  // Build final list with groups having filtered children
-  const visibleNav = filteredNavGroups.map(item => {
-    if (item.type === 'group') {
-      return {
-        ...item,
-        items: item.items.filter(sub =>
-          sub.module === null || isSuperAdmin || canRead(sub.module)
-        ),
-      };
-    }
-    return item;
-  });
+  // Build final list with groups having filtered children and omit empty sections
+  const visibleNav = filteredNavGroups
+    .map(item => {
+      if (item.type === 'group') {
+        return {
+          ...item,
+          items: item.items.filter(sub =>
+            sub.module === null || isSuperAdmin || canRead(sub.module)
+          ),
+        };
+      }
+      return item;
+    })
+    .filter((item, index, arr) => {
+      if (item.type === 'section') {
+        const nextItem = arr[index + 1];
+        if (!nextItem || nextItem.type === 'section') {
+          return false;
+        }
+      }
+      return true;
+    });
 
   return (
     <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-full flex flex-col shrink-0 overflow-visible transition-all duration-300 ease-in-out relative z-30`}>
       <div className={`shrink-0 h-20 flex items-center border-b border-slate-100/60 relative ${isCollapsed ? 'justify-center px-2' : 'px-6 justify-between'}`}>
         <div
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate(getFirstPermittedPath())}
           className="flex items-center gap-3 cursor-pointer overflow-hidden"
         >
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic shrink-0">

@@ -70,15 +70,16 @@ const ProtectedRoute = () => {
 // ─────────────────────────────────────────────
 const LoginRoute = () => {
   const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
-  return isLoggedIn ? <Navigate to="/dashboard" replace /> : <Login />;
+  const { getFirstPermittedPath } = useAuth();
+  return isLoggedIn ? <Navigate to={getFirstPermittedPath()} replace /> : <Login />;
 };
 
 // ─────────────────────────────────────────────
 // Route guard: superadmin only
 // ─────────────────────────────────────────────
 const AdminRoute = () => {
-  const { isSuperAdmin } = useAuth();
-  return isSuperAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
+  const { isSuperAdmin, getFirstPermittedPath } = useAuth();
+  return isSuperAdmin ? <Outlet /> : <Navigate to={getFirstPermittedPath()} replace />;
 };
 
 // ─────────────────────────────────────────────
@@ -86,13 +87,21 @@ const AdminRoute = () => {
 // Props: module (string), children
 // ─────────────────────────────────────────────
 const PermissionRoute = ({ module, children }) => {
-  const { isSuperAdmin, canRead } = useAuth();
+  const { isSuperAdmin, canRead, getFirstPermittedPath } = useAuth();
   const location = useLocation();
 
   if (isSuperAdmin || canRead(module)) {
     return children;
   }
-  return <Navigate to="/dashboard" replace state={{ from: location, denied: true }} />;
+  return <Navigate to={getFirstPermittedPath()} replace state={{ from: location, denied: true }} />;
+};
+
+// ─────────────────────────────────────────────
+// Route guard: root redirect to first permitted route
+// ─────────────────────────────────────────────
+const HomeRedirect = () => {
+  const { getFirstPermittedPath } = useAuth();
+  return <Navigate to={getFirstPermittedPath()} replace />;
 };
 
 function App() {
@@ -110,13 +119,13 @@ function App() {
           {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<HomeRedirect />} />
 
-              {/* Dashboards — always accessible to all logged-in users */}
-              <Route path="/dashboard"            element={<Dashboard />} />
-              <Route path="/stock-dashboard"      element={<StockDashboard />} />
-              <Route path="/production-dashboard" element={<ProductionDashboard />} />
-              <Route path="/sunday-dashboard"     element={<SundayDashboard />} />
+              {/* Dashboards — permission gated */}
+              <Route path="/dashboard"            element={<PermissionRoute module="dashboard"><Dashboard /></PermissionRoute>} />
+              <Route path="/stock-dashboard"      element={<PermissionRoute module="stock-dashboard"><StockDashboard /></PermissionRoute>} />
+              <Route path="/production-dashboard" element={<PermissionRoute module="production-dashboard"><ProductionDashboard /></PermissionRoute>} />
+              <Route path="/sunday-dashboard"     element={<PermissionRoute module="sunday-dashboard"><SundayDashboard /></PermissionRoute>} />
 
               {/* Change password — all logged-in users */}
               <Route path="/change-password" element={<ChangePassword />} />
