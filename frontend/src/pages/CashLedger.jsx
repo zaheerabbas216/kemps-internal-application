@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 // ── colour maps ────────────────────────────────────────────────────────────
 const MODULE_BADGE = {
@@ -44,8 +45,9 @@ const todayIST = () => {
 
 // ── component ──────────────────────────────────────────────────────────────
 const CashLedger = () => {
+  const { isSuperAdmin } = useAuth();
   const today = todayIST();
-  const isAdmin = (localStorage.getItem('kemps_username') || '').toLowerCase() === 'admin';
+  const isAdmin = isSuperAdmin;
 
   // Active view tab: 'ledger' | 'history'
   const [activeTab, setActiveTab] = useState('ledger');

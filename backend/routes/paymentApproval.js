@@ -319,7 +319,7 @@ router.put('/:approvalId/approve', async (req, res) => {
       await connection.query(
         `UPDATE customer_bills 
          SET payment_status = 'Approved', 
-             approved_amount = approved_amount + pending_amount,
+             approved_amount = pending_amount,
              due_amount = GREATEST(0, grand_total - amount_paid), 
              pending_amount = 0.00,
              last_status_update = NOW()

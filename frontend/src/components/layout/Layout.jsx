@@ -6,6 +6,7 @@ import { useSSEStatus } from '../../hooks/useSSE';
 import { usePushNotification } from '../../hooks/usePushNotification';
 
 const Layout = () => {
+  const showInsecurePushBanner = false;
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isSuperAdmin, logout, getFirstPermittedPath } = useAuth();
@@ -162,7 +163,7 @@ const Layout = () => {
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#f8fbff]">
         {/* Push Notification Permission Prompt Banner */}
         {/* Case 1: Secure context required (plain HTTP LAN) */}
-        {pushHttpsRequired && (
+        {showInsecurePushBanner && pushHttpsRequired && (
           <div className="bg-gradient-to-r from-amber-900 via-amber-800 to-amber-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm border-b border-amber-500/40 z-30 shrink-0 shadow-md">
             <div className="flex items-center gap-2">
               <span className="text-base shrink-0">🔒</span>

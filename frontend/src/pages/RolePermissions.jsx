@@ -45,10 +45,6 @@ const MODULE_GROUPS = [
       { key: 'sales-return-new',          label: '  ↳ New Return Tab',               actions: ['read', 'create'] },
       { key: 'sales-return-history',      label: '  ↳ Return History Tab',           actions: ['read'] },
       { key: 'sales-return-reports',      label: '  ↳ Return Reports Tab',           actions: ['read'] },
-      { key: 'payment-approval',          label: 'Payment Approval (All)',            actions: ['read', 'update', 'delete'] },
-      { key: 'payment-approval-tab',      label: '  ↳ Approvals Tab',                actions: ['read', 'update', 'delete'] },
-      { key: 'payment-approval-cash',     label: '  ↳ Cash Ledger Tab',              actions: ['read'] },
-      { key: 'payment-approval-summary',  label: '  ↳ Daily Summary Tab',            actions: ['read'] },
     ],
   },
   {

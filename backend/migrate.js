@@ -1117,6 +1117,50 @@ export async function runMigration(shouldExit = false) {
       console.log('customer_bills holding/reversal columns added and initialized.');
     }
 
+    // Billing settlement and payment approval are separate state machines.
+    // Only rebuild the enum when an existing database is missing a required
+    // value; avoiding unconditional ALTERs prevents a table lock on startup.
+    const requiredBillStatuses = [
+      'Unpaid', 'Partial', 'Partially Paid', 'Paid',
+      'Pending Approval', 'Approved', 'Rejected'
+    ];
+    const [billStatusColumns] = await connection.query(
+      `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_bills'
+         AND COLUMN_NAME = 'payment_status'`,
+      [dbName]
+    );
+    const billStatusType = String(billStatusColumns[0]?.COLUMN_TYPE || '');
+    const billStatusNeedsUpdate = requiredBillStatuses.some(
+      status => !billStatusType.includes(`'${status}'`)
+    );
+
+    if (billStatusNeedsUpdate) {
+      await connection.query(`
+        ALTER TABLE customer_bills
+        MODIFY COLUMN payment_status VARCHAR(30) NOT NULL DEFAULT 'Unpaid'
+      `);
+      await connection.query(`
+        UPDATE customer_bills
+        SET payment_status = CASE
+          WHEN COALESCE(due_amount, 0) <= 0 THEN 'Paid'
+          WHEN COALESCE(amount_paid, 0) > 0 THEN 'Partial'
+          ELSE 'Unpaid'
+        END
+        WHERE payment_status NOT IN
+          ('Unpaid', 'Partial', 'Partially Paid', 'Paid', 'Pending Approval', 'Approved', 'Rejected')
+           OR payment_status IS NULL
+           OR payment_status = ''
+      `);
+      await connection.query(`
+        ALTER TABLE customer_bills
+        MODIFY COLUMN payment_status ENUM(
+          'Unpaid', 'Partial', 'Partially Paid', 'Paid',
+          'Pending Approval', 'Approved', 'Rejected'
+        ) NOT NULL DEFAULT 'Unpaid'
+      `);
+    }
+
     const [custPayCols] = await connection.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'customer_payments' AND COLUMN_NAME = 'payment_status'`,

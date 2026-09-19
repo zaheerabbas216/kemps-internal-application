@@ -99,25 +99,6 @@ const initTable = async () => {
         SET cp.customer_id = cb.customer_id
         WHERE cp.customer_id IS NULL
       `);
-      // Safe historical reconciliation: ensure customer_bills.cash_paid only contains initial counter cash
-      await pool.query(`
-        UPDATE customer_bills cb
-        JOIN (
-          SELECT bill_id,
-                 SUM(COALESCE(cash_paid, 0)) AS sub_cash,
-                 SUM(COALESCE(upi_paid, 0)) AS sub_upi,
-                 SUM(COALESCE(bank_paid, 0)) AS sub_bank
-          FROM customer_payments
-          WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
-          GROUP BY bill_id
-        ) sub ON cb.id = sub.bill_id
-        SET cb.cash_paid = GREATEST(0, cb.cash_paid - sub.sub_cash),
-            cb.upi_paid = GREATEST(0, cb.upi_paid - sub.sub_upi),
-            cb.bank_paid = GREATEST(0, cb.bank_paid - sub.sub_bank)
-        WHERE (cb.cash_paid >= sub.sub_cash AND sub.sub_cash > 0)
-           OR (cb.upi_paid >= sub.sub_upi AND sub.sub_upi > 0)
-           OR (cb.bank_paid >= sub.sub_bank AND sub.sub_bank > 0)
-      `);
     } catch (e) { /* ignore */ }
   } catch (err) {
     console.error('Failed to init cash ledger tables:', err);
@@ -159,7 +140,6 @@ export const computeDailyLedger = async (targetDate) => {
        GROUP BY bill_id
      ) sub ON cb.id = sub.bill_id
      WHERE cb.billing_date = ?
-       AND cb.payment_status = 'Approved'
        AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`,
     [targetDate]
   );
@@ -226,7 +206,6 @@ export const computeDailyLedger = async (targetDate) => {
        GROUP BY bill_id
      ) sub ON cb.id = sub.bill_id
      WHERE cb.billing_date = ?
-       AND cb.payment_status = 'Approved'
        AND (
          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
@@ -502,7 +481,7 @@ router.post('/cash-submitted', async (req, res) => {
   try {
     const { ledgerDate, cashSubmitted } = req.body;
     const loggedInUser = (req.admin?.username || req.body.submittedBy || 'admin').trim();
-    const isAdminUser = loggedInUser.toLowerCase() === 'admin';
+    const isAdminUser = req.admin?.isSuperAdmin === true;
 
     if (!ledgerDate) {
       return res.status(400).json({ ok: false, error: 'Ledger Date is required.' });
@@ -554,8 +533,8 @@ router.post('/cash-submitted', async (req, res) => {
 router.put('/cash-submitted/:id/approve', async (req, res) => {
   try {
     const loggedInUser = (req.admin?.username || req.body.approvedBy || '').trim();
-    if (loggedInUser.toLowerCase() !== 'admin') {
-      return res.status(403).json({ ok: false, error: 'Access denied. Only Admin can approve cash deposits.' });
+    if (req.admin?.isSuperAdmin !== true) {
+      return res.status(403).json({ ok: false, error: 'Access denied. Only Superadmin can approve cash deposits.' });
     }
 
     const { id } = req.params;
@@ -580,7 +559,7 @@ router.put('/cash-submitted/:id/approve', async (req, res) => {
 
     await pool.query(
       `UPDATE cash_submitted_records SET status = 'Approved', submitted_by = ? WHERE id = ?`,
-      ['admin', id]
+      [loggedInUser, id]
     );
 
     res.json({ ok: true, message: 'Cash deposit approved successfully!' });
@@ -594,9 +573,8 @@ router.put('/cash-submitted/:id/approve', async (req, res) => {
 // Delete an individual cash submitted entry (Admin action ONLY)
 router.delete('/cash-submitted/:id', async (req, res) => {
   try {
-    const loggedInUser = (req.admin?.username || '').trim();
-    if (loggedInUser.toLowerCase() !== 'admin') {
-      return res.status(403).json({ ok: false, error: 'Access denied. Only Admin can delete cash submission entries.' });
+    if (req.admin?.isSuperAdmin !== true) {
+      return res.status(403).json({ ok: false, error: 'Access denied. Only Superadmin can delete cash submission entries.' });
     }
 
     const { id } = req.params;
@@ -985,10 +963,7 @@ router.get('/', async (req, res) => {
     // ── Total Credit Adjusted across all bills in date range ──
     let totalCreditAdjusted = 0;
     {
-      let w = [
-        "cb.payment_status = 'Approved'",
-        `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`
-      ];
+      let w = [`cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`];
       let p = [];
       if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
       if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
@@ -1023,7 +998,6 @@ router.get('/', async (req, res) => {
     const billingRows = [];
     if (type !== 'out') {
       let w = [
-        "cb.payment_status = 'Approved'",
         `(GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR

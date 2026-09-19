@@ -25,7 +25,6 @@ const navGroups = [
       { name: 'Order Details',              path: '/order-details',    module: 'order-details' },
       { name: 'Total Sales',                path: '/total-sales',      module: 'total-sales' },
       { name: 'Sales Return / Credit Note', path: '/sales-return',     module: 'sales-return' },
-      { name: 'Payment Approval',           path: '/payment-approval', module: 'payment-approval' },
     ]
   },
 

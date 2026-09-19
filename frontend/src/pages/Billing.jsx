@@ -113,8 +113,8 @@ const Billing = () => {
     return `${dd}/${mm}/${yyyy}`;
   };
 
-  const cellPaddingClass = density === 'compact' ? 'py-1.5 px-3 text-[11px]' : density === 'relaxed' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
-  const headerPaddingClass = density === 'compact' ? 'py-2 px-3 text-[9px]' : density === 'relaxed' ? 'py-4.5 px-6 text-xs' : 'py-4 px-5 text-[10px]';
+  const cellPaddingClass = density === 'compact' ? 'py-1.5 px-3 text-[11px]' : density === 'high' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
+  const headerPaddingClass = density === 'compact' ? 'py-2 px-3 text-[9px]' : density === 'high' ? 'py-4.5 px-6 text-xs' : 'py-4 px-5 text-[10px]';
 
   return (
     <div className="space-y-6 animate-fade-in w-full pb-12">

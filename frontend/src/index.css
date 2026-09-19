@@ -356,3 +356,25 @@ body:has(.modal.modal-open) {
 body:has(.can-supply-page .modal.modal-open) {
   overflow: auto !important;
 }
+/* Shared table-density fallback. Some legacy pages render the common density
+   selector without wiring its state into every table cell. These selectors
+   make Compact/Medium/High reliable application-wide. */
+html[data-table-density='compact'] table th,
+html[data-table-density='compact'] table td {
+  padding-top: 0.5rem !important;
+  padding-bottom: 0.5rem !important;
+  font-size: 0.75rem !important;
+}
+
+html[data-table-density='medium'] table th,
+html[data-table-density='medium'] table td {
+  padding-top: 0.875rem !important;
+  padding-bottom: 0.875rem !important;
+}
+
+html[data-table-density='relaxed'] table th,
+html[data-table-density='relaxed'] table td {
+  padding-top: 1.25rem !important;
+  padding-bottom: 1.25rem !important;
+  font-size: 0.875rem !important;
+}

@@ -533,13 +533,11 @@ router.post('/', async (req, res) => {
     if (finalBankPaid > 0) payModes.push('Bank');
     const combinedMode = payModes.join(' + ') || finalPaymentMode;
 
-    const payAmount = finalCashPaid + finalUpiPaid + finalBankPaid;
     let paymentStatus = 'Unpaid';
-    if (payAmount > 0 || finalDueAmount <= 0) {
-      // Amounts collected at the billing counter are already received and
-      // enter the cash ledger immediately. Later credit collections use the
-      // separate Pending Approval workflow in creditBalance.js.
-      paymentStatus = 'Approved';
+    if (finalDueAmount <= 0) {
+      paymentStatus = 'Paid';
+    } else if (finalAmountPaid > 0) {
+      paymentStatus = 'Partial';
     }
 
     // Calculate COGS and Profit first by checking costing sheets
@@ -585,13 +583,13 @@ router.post('/', async (req, res) => {
     const basicRevenue = billGrandTotal - totalTaxAmount;
     const billProfit = basicRevenue - totalCogs;
 
-    // 3. Insert Invoice Header with counter collections already approved.
+    // 3. Insert Invoice Header directly with paid/partial settlement status.
     await connection.query(
       `INSERT INTO customer_bills 
        (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
         grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
         payment_status, pending_amount, approved_amount, rejected_amount, approval_id, cogs, profit, remarks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, ?, ?, ?, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 0.00, NULL, ?, ?, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -610,9 +608,7 @@ router.post('/', async (req, res) => {
         finalUpiPaid,
         finalBankPaid,
         paymentStatus,
-        0.00,
         finalAmountPaid,
-        null,
         totalCogs,
         billProfit,
         String(remarks || '').trim()
@@ -663,9 +659,9 @@ router.post('/', async (req, res) => {
       credit: 0.00
     });
 
-    // Billing-counter collections are immediately reflected in the customer
-    // ledger. Collections received later use the approval workflow.
-    if (payAmount > 0) {
+    // Customer Ledger Hook: immediate payment for the physical amount received.
+    const actualNewPayment = finalAmountPaid - (parseFloat(appliedCredit) || 0.00);
+    if (actualNewPayment > 0) {
       await addLedgerEntry(connection, {
         date: billingDate,
         customerId,
@@ -673,7 +669,7 @@ router.post('/', async (req, res) => {
         referenceNo: billId,
         particular: `Payment received for Invoice ${billId} (${combinedMode})`,
         debit: 0.00,
-        credit: payAmount
+        credit: actualNewPayment
       });
     }
 

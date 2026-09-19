@@ -93,10 +93,6 @@ export const MODULE_PARENT_MAP = {
   'sales-return-new': 'sales-return',
   'sales-return-history': 'sales-return',
   'sales-return-reports': 'sales-return',
-  'payment-approval-tab': 'payment-approval',
-  'payment-approval-cash': 'payment-approval',
-  'payment-approval-summary': 'payment-approval',
-
   // Production
   'inventory-history': 'inventory',
   'pet-bottle-history': 'pet-bottle',
@@ -167,7 +163,6 @@ export const ROUTE_MODULE_MAP = [
   { path: '/supplier-ledger', module: 'supplier-ledger' },
   { path: '/product-master', module: 'product-master' },
   { path: '/sales-return', module: 'sales-return' },
-  { path: '/payment-approval', module: 'payment-approval' },
   { path: '/total-sales', module: 'total-sales' },
 ];
 

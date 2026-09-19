@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 /**
  * Helper utility to return tailwind padding & typography classes based on density selection
@@ -53,6 +53,19 @@ const TablePagination = ({
   // Map density value to select option ('high' -> 'relaxed' for backwards compatibility)
   const currentDensity = density === 'high' ? 'relaxed' : (density || 'medium');
 
+  // Keep a shared fallback for older tables that expose this control but do not
+  // yet bind density classes to every <th>/<td>. Page-specific classes still
+  // work, while this guarantees that the selected mode has a visible effect.
+  useEffect(() => {
+    document.documentElement.dataset.tableDensity = currentDensity;
+  }, [currentDensity]);
+
+  const changeDensity = (value) => {
+    const normalized = value === 'relaxed' ? 'high' : value;
+    document.documentElement.dataset.tableDensity = value;
+    handleDensityChange?.(normalized);
+  };
+
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 bg-slate-50/80 border-t border-slate-200/70 text-xs font-semibold text-slate-600 rounded-b-2xl">
       
@@ -85,7 +98,7 @@ const TablePagination = ({
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">View Mode:</span>
             <select
               value={currentDensity}
-              onChange={(e) => handleDensityChange(e.target.value)}
+              onChange={(e) => changeDensity(e.target.value)}
               className="h-8 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer shadow-sm"
             >
               <option value="compact">Compact</option>

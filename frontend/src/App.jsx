@@ -60,7 +60,6 @@ const ImpWork = lazy(() => import('./pages/ImpWork'));
 const RolePermissions = lazy(() => import('./pages/RolePermissions'));
 const ChangePassword = lazy(() => import('./pages/ChangePassword'));
 const AccessDenied = lazy(() => import('./pages/AccessDenied'));
-const PaymentApproval = lazy(() => import('./pages/PaymentApproval'));
 
 // ─────────────────────────────────────────────
 // Route guard: must be logged in
@@ -182,7 +181,6 @@ function App() {
               <Route path="/timer"              element={<PermissionRoute module="timer"><Timer /></PermissionRoute>} />
               <Route path="/timer-history"      element={<PermissionRoute module="timer"><TimerHistory /></PermissionRoute>} />
               <Route path="/total-sales"        element={<PermissionRoute module="total-sales"><TotalSales /></PermissionRoute>} />
-              <Route path="/payment-approval"   element={<PermissionRoute module="payment-approval"><PaymentApproval /></PermissionRoute>} />
               <Route path="/sunday-loading"         element={<PermissionRoute module="sunday-loading"><SundayLoading /></PermissionRoute>} />
               <Route path="/sunday-loading-history" element={<PermissionRoute module="sunday-loading-history"><SundayLoadingHistory /></PermissionRoute>} />
               <Route path="/wastage"            element={<PermissionRoute module="wastage"><Wastage /></PermissionRoute>} />

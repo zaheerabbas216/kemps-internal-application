@@ -8,7 +8,9 @@
     "dev": "nodemon server.js",
     "start": "node server.js",
     "migrate": "node migrate.js",
-    "db:repair": "node repairDB.js"
+    "db:repair": "node repairDB.js",
+    "reconcile:cash-ledger": "node scripts/reconcileCashLedger.js",
+    "reconcile:cash-ledger:apply": "node scripts/reconcileCashLedger.js --apply --yes"
   },
   "keywords": [],
   "author": "",

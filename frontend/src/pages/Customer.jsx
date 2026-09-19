@@ -197,7 +197,7 @@ const Customer = () => {
   const currentItems = filteredCustomers.slice(indexOfFirstItem, indexOfLastItem);
 
   // Density padding helper
-  const cellPadding = density === 'compact' ? 'py-2 px-3 text-[11px]' : density === 'relaxed' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
+  const cellPadding = density === 'compact' ? 'py-2 px-3 text-[11px]' : density === 'high' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
 
   return (
     <div className="space-y-6 animate-fade-in w-full pb-12">
