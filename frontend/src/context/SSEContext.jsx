@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
+import { getApiBaseUrl } from '../api/axios';
 
 const SSEContext = createContext(null);
 
@@ -60,8 +61,9 @@ export function SSEProvider({ children }) {
       eventSourceRef.current.close();
     }
 
-    // Determine SSE URL (supports dev proxy and relative paths)
-    const sseUrl = `/api/sse/events?token=${encodeURIComponent(token)}`;
+    // Determine SSE URL using base API URL
+    const apiBase = getApiBaseUrl().replace(/\/+$/, '');
+    const sseUrl = `${apiBase}/sse/events?token=${encodeURIComponent(token)}`;
 
     try {
       setStatus('RECONNECTING');

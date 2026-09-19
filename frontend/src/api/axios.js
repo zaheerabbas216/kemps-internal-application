@@ -3,7 +3,7 @@ import axios from 'axios';
 const cloudflareApiBaseUrl = 'https://kmps-bkend-fullstack-application.bitwizard.online/api';
 const localApiBaseUrl = 'http://localhost:8000/api';
 
-function getApiBaseUrl() {
+export function getApiBaseUrl() {
   if (import.meta.env.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
