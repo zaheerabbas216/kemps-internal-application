@@ -159,6 +159,7 @@ export const computeDailyLedger = async (targetDate) => {
        GROUP BY bill_id
      ) sub ON cb.id = sub.bill_id
      WHERE cb.billing_date = ?
+       AND cb.payment_status = 'Approved'
        AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`,
     [targetDate]
   );
@@ -225,6 +226,7 @@ export const computeDailyLedger = async (targetDate) => {
        GROUP BY bill_id
      ) sub ON cb.id = sub.bill_id
      WHERE cb.billing_date = ?
+       AND cb.payment_status = 'Approved'
        AND (
          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
@@ -983,7 +985,10 @@ router.get('/', async (req, res) => {
     // ── Total Credit Adjusted across all bills in date range ──
     let totalCreditAdjusted = 0;
     {
-      let w = [`cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`];
+      let w = [
+        "cb.payment_status = 'Approved'",
+        `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`
+      ];
       let p = [];
       if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
       if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
@@ -1018,6 +1023,7 @@ router.get('/', async (req, res) => {
     const billingRows = [];
     if (type !== 'out') {
       let w = [
+        "cb.payment_status = 'Approved'",
         `(GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR

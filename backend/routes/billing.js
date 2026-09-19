@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
@@ -536,10 +537,37 @@ router.post('/', async (req, res) => {
 
     const payAmount = finalCashPaid + finalUpiPaid + finalBankPaid;
     let paymentStatus = 'Unpaid';
-    if (finalDueAmount <= 0) {
-      paymentStatus = 'Paid';
-    } else if (finalAmountPaid > 0) {
-      paymentStatus = 'Partial';
+    let pendingAmount = 0.00;
+    let approvalId = null;
+
+    if (payAmount > 0) {
+      paymentStatus = 'Pending Approval';
+      pendingAmount = payAmount;
+      approvalId = await createPaymentApprovalEntry({
+        transactionId: billId,
+        sourceModule: 'Billing',
+        transactionType: 'Cash In',
+        referenceNo: billId,
+        partyName: `[${customerId}] ${cleanName}`,
+        description: `Invoice ${billId} — [${customerId}] ${cleanName} (${customerType})`,
+        paymentMethod: combinedMode,
+        cashAmount: finalCashPaid,
+        upiAmount: finalUpiPaid,
+        bankAmount: finalBankPaid,
+        creditAmount: appliedCredit,
+        amount: payAmount,
+        transactionDate: billingDate,
+        enteredBy: enteredByName,
+        remarks: String(remarks || '').trim()
+      }, connection);
+
+      if (!approvalId) {
+        throw new Error('Failed to create payment approval request.');
+      }
+    } else if (finalDueAmount <= 0) {
+      // A bill settled entirely through existing customer credit requires no
+      // physical payment approval.
+      paymentStatus = 'Approved';
     }
 
     // Calculate COGS and Profit first by checking costing sheets
@@ -585,13 +613,13 @@ router.post('/', async (req, res) => {
     const basicRevenue = billGrandTotal - totalTaxAmount;
     const billProfit = basicRevenue - totalCogs;
 
-    // 3. Insert Invoice Header directly with approved status & amounts
+    // 3. Insert the invoice with any physical collection held for approval.
     await connection.query(
       `INSERT INTO customer_bills 
        (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
         grand_total, payment_mode, amount_paid, due_amount, cash_paid, upi_paid, bank_paid, 
         payment_status, pending_amount, approved_amount, rejected_amount, approval_id, cogs, profit, remarks, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, 0.00, NULL, ?, ?, ?, NOW())`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0.00, ?, ?, ?, ?, NOW())`,
       [
         billId,
         billingDate,
@@ -610,7 +638,9 @@ router.post('/', async (req, res) => {
         finalUpiPaid,
         finalBankPaid,
         paymentStatus,
-        finalAmountPaid,
+        pendingAmount,
+        appliedCredit,
+        approvalId,
         totalCogs,
         billProfit,
         String(remarks || '').trim()
@@ -661,19 +691,8 @@ router.post('/', async (req, res) => {
       credit: 0.00
     });
 
-    // Customer Ledger Hook: Immediate PAYMENT credit for amount paid (excluding any applied credit balance)
-    const actualNewPayment = finalAmountPaid - (parseFloat(appliedCredit) || 0.00);
-    if (actualNewPayment > 0) {
-      await addLedgerEntry(connection, {
-        date: billingDate,
-        customerId: customerId,
-        entryType: 'PAYMENT',
-        referenceNo: billId,
-        particular: `Payment received for Invoice ${billId} (${combinedMode})`,
-        debit: 0.00,
-        credit: actualNewPayment
-      });
-    }
+    // Physical payment is added to the customer ledger by paymentApproval.js
+    // only after the approval request succeeds.
 
     // No extra ledger entry is needed for applied credit balance since the debit invoice and pre-existing credit entries already offset each other.
 
