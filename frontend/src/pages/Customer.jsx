@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Customer = () => {
+  const { canCreate, canUpdate, canDelete } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -206,12 +208,14 @@ const Customer = () => {
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">CUSTOMER REGISTRY</h1>
           <p className="text-slate-500 text-sm font-medium mt-1">Manage all your client information in one place.</p>
         </div>
-        <button 
-          onClick={() => handleOpenForm()}
-          className="btn-premium btn-primary-premium h-12"
-        >
-          <span className="text-xl">+</span> Register New Customer
-        </button>
+        {canCreate('customer') && (
+          <button 
+            onClick={() => handleOpenForm()}
+            className="btn-premium btn-primary-premium h-12"
+          >
+            <span className="text-xl">+</span> Register New Customer
+          </button>
+        )}
       </div>
 
       {/* SEARCH AND TABLE CONTAINER */}
@@ -291,18 +295,22 @@ const Customer = () => {
                     <td className={`${getDensityClass(density)} text-slate-400`}>{c.gst || '—'}</td>
                     <td className={`${getDensityClass(density)}`}>
                       <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={() => handleOpenForm(c)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => confirmDelete(c)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
+                        {canUpdate('customer') && (
+                          <button 
+                            onClick={() => handleOpenForm(c)}
+                            className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {canDelete('customer') && (
+                          <button 
+                            onClick={() => confirmDelete(c)}
+                            className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

@@ -4,9 +4,19 @@ import TablePagination, { getDensityClass } from '../components/common/TablePagi
 import SearchInput from '../components/common/SearchInput';
 import SearchableSelect from '../components/SearchableSelect';
 
+import { useAuth } from '../context/AuthContext';
+
 const SupplierLedger = () => {
+  const { canRead } = useAuth();
+  const canReadLedgerTab = canRead('supplier-ledger-tab');
+  const canReadAnalyticsTab = canRead('supplier-ledger-analytics');
+
   // Navigation & Tabs
-  const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' | 'analytics'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadLedgerTab) return 'ledger';
+    if (canReadAnalyticsTab) return 'analytics';
+    return 'ledger';
+  });
 
   // Pagination states
   const [page, setPage] = useState(1);
@@ -417,26 +427,30 @@ const SupplierLedger = () => {
 
           {/* DUAL VIEW TAB SELECTORS (NO PRINT) */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit border border-slate-200/40 no-print">
-            <button
-              onClick={() => setActiveTab('ledger')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'ledger' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📒</span> TRANSACTION JOURNAL
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'analytics' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📊</span> PERFORMANCE ANALYTICS
-            </button>
+            {canReadLedgerTab && (
+              <button
+                onClick={() => setActiveTab('ledger')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'ledger' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📒</span> TRANSACTION JOURNAL
+              </button>
+            )}
+            {canReadAnalyticsTab && (
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'analytics' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📊</span> PERFORMANCE ANALYTICS
+              </button>
+            )}
           </div>
 
           {/* TAB CONTENT 1: LEDGER TABLE */}

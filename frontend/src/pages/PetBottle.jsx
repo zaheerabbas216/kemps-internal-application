@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const PetBottle = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [batches, setBatches] = useState([]);
@@ -295,12 +297,14 @@ const PetBottle = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Log preform usage and bottle production dashboard</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={handleOpenForm}
-            className="btn-premium btn-primary-premium h-12"
-          >
-            <span className="text-xl">+</span> Add Production
-          </button>
+          {canCreate('pet-bottle') && (
+            <button 
+              onClick={handleOpenForm}
+              className="btn-premium btn-primary-premium h-12"
+            >
+              <span className="text-xl">+</span> Add Production
+            </button>
+          )}
           <button 
             onClick={() => navigate('/pet-bottle-history')}
             className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -441,18 +445,22 @@ const PetBottle = () => {
                     <td className="py-4 px-6 text-[13px] text-slate-500">{b.wastage || '—'}</td>
                     <td className="py-4 px-6">
                       <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => handleOpenForm(b)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => confirmDelete(b.id)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
+                        {canUpdate('pet-bottle') && (
+                          <button
+                            onClick={() => handleOpenForm(b)}
+                            className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {canDelete('pet-bottle') && (
+                          <button
+                            onClick={() => confirmDelete(b.id)}
+                            className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

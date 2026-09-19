@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -27,11 +29,12 @@ const Login = () => {
       });
 
       if (response.data.ok) {
-        localStorage.setItem('kemps_logged_in', 'true');
-        localStorage.setItem('kemps_username', response.data.user.username);
-        localStorage.setItem('kemps_name', response.data.user.name || response.data.user.username);
-        localStorage.setItem('kemps_auth_token', response.data.token);
-        navigate('/customer');
+        // Store auth state via context (handles all localStorage keys)
+        login(
+          { ...response.data.user, token: response.data.token },
+          response.data.permissions || {}
+        );
+        navigate('/dashboard');
       } else {
         setError(response.data.error || 'Invalid username or password.');
       }

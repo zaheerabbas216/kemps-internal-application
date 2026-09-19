@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const CompanyDetails = () => {
+  const { canCreate, canUpdate, canDelete } = useAuth();
   const [companies, setCompanies] = useState([]);
   const [totalCompanies, setTotalCompanies] = useState(0);
   const [loading, setLoading] = useState(true);

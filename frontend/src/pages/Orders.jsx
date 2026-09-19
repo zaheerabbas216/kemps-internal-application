@@ -4,11 +4,23 @@ import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
+import { useAuth } from '../context/AuthContext';
 
 const Orders = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+  
+  const canReadUpcoming = canRead('orders-upcoming');
+  const canReadNew = canRead('orders-new') || canCreate('orders') || canUpdate('orders');
+  const canReadHistory = canRead('orders-history');
+
   // Tabs: 'upcoming' | 'new-order' | 'history'
-  const [activeTab, setActiveTab] = useState('upcoming');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadUpcoming) return 'upcoming';
+    if (canReadNew) return 'new-order';
+    if (canReadHistory) return 'history';
+    return 'upcoming';
+  });
   // History Sub-tabs: 'supplied' | 'cancelled' | 'all'
   const [historyTab, setHistoryTab] = useState('all');
 
@@ -560,30 +572,36 @@ const Orders = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Book advanced customer orders and track delivery schedules</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40 shrink-0">
-          <button
-            onClick={() => { setActiveTab('upcoming'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'upcoming' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 Upcoming Orders
-          </button>
-          <button
-            onClick={() => setActiveTab('new-order')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'new-order' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {isEditing ? '✏️ Edit Order' : '🛍️ New Order'}
-          </button>
-          <button
-            onClick={() => { setActiveTab('history'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ⏳ History
-          </button>
+          {canReadUpcoming && (
+            <button
+              onClick={() => { setActiveTab('upcoming'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'upcoming' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 Upcoming Orders
+            </button>
+          )}
+          {canReadNew && (
+            <button
+              onClick={() => setActiveTab('new-order')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'new-order' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {isEditing ? '✏️ Edit Order' : '🛍️ New Order'}
+            </button>
+          )}
+          {canReadHistory && (
+            <button
+              onClick={() => { setActiveTab('history'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ⏳ History
+            </button>
+          )}
         </div>
       </div>
 
@@ -1577,24 +1595,30 @@ const Orders = () => {
                 <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
                   {orderDetail.order.status === 'PENDING' && (
                     <>
-                      <button 
-                        onClick={handleTriggerEdit}
-                        className="px-4 py-2 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl shadow-sm transition-all"
-                      >
-                        ✏️ Edit Order
-                      </button>
-                      <button 
-                        onClick={handleTriggerCancelModal}
-                        className="px-4 py-2 bg-rose-50 border border-rose-150 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl shadow-sm transition-all"
-                      >
-                        ❌ Cancel Order
-                      </button>
-                      <button 
-                        onClick={handleMarkAsSupplied}
-                        className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow transition-all duration-200"
-                      >
-                        ✅ Mark as Supplied
-                      </button>
+                      {canUpdate('orders') && (
+                        <button 
+                          onClick={handleTriggerEdit}
+                          className="px-4 py-2 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl shadow-sm transition-all"
+                        >
+                          ✏️ Edit Order
+                        </button>
+                      )}
+                      {(canDelete('orders') || canUpdate('orders')) && (
+                        <button 
+                          onClick={handleTriggerCancelModal}
+                          className="px-4 py-2 bg-rose-50 border border-rose-150 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl shadow-sm transition-all"
+                        >
+                          ❌ Cancel Order
+                        </button>
+                      )}
+                      {canUpdate('orders') && (
+                        <button 
+                          onClick={handleMarkAsSupplied}
+                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow transition-all duration-200"
+                        >
+                          ✅ Mark as Supplied
+                        </button>
+                      )}
                       <button 
                         onClick={handleGenerateLoading}
                         className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"

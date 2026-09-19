@@ -19,25 +19,53 @@ async function initDB() {
     // Automatically check and repair any corrupted InnoDB tables / orphan tablespaces
     await repairCorruptedTables(connection, 'kemps_inventory');
 
-    console.log('Creating admins table...');
+    console.log('Creating roles table...');
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS admins (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        name VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      CREATE TABLE IF NOT EXISTS roles (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        name        VARCHAR(100) UNIQUE NOT NULL,
+        description TEXT,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // Seed default admin if none exists
+    console.log('Creating role_permissions table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        role_id    INT          NOT NULL,
+        module     VARCHAR(100) NOT NULL,
+        can_read   TINYINT(1)   NOT NULL DEFAULT 0,
+        can_create TINYINT(1)   NOT NULL DEFAULT 0,
+        can_update TINYINT(1)   NOT NULL DEFAULT 0,
+        can_delete TINYINT(1)   NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_role_module (role_id, module),
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating admins table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        username   VARCHAR(50)  UNIQUE NOT NULL,
+        password   VARCHAR(255) NOT NULL,
+        name       VARCHAR(100),
+        role_id    INT          NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Seed default admin if none exists (role_id = NULL → superadmin)
     const [existingAdmins] = await connection.query('SELECT COUNT(*) as count FROM admins');
     if (existingAdmins[0].count === 0) {
-      console.log('Seeding default admin...');
+      console.log('Seeding default admin (superadmin, role_id = NULL)...');
       const hashedPassword = await bcrypt.hash('username', 10);
       await connection.query(
-        'INSERT INTO admins (username, password, name) VALUES (?, ?, ?)',
+        'INSERT INTO admins (username, password, name, role_id) VALUES (?, ?, ?, NULL)',
         ['admin', hashedPassword, 'Zaheer Abbas']
       );
     }

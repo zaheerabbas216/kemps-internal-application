@@ -2,10 +2,20 @@ import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const AccountsLedger = () => {
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadLedgerTab = canRead('accounts-ledger-tab');
+  const canReadAnalyticsTab = canRead('accounts-ledger-analytics');
+
   // Navigation & Tabs
-  const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' | 'analytics'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadLedgerTab) return 'ledger';
+    if (canReadAnalyticsTab) return 'analytics';
+    return 'ledger';
+  });
 
   // Dropdown options
   const [customers, setCustomers] = useState([]);
@@ -1182,26 +1192,30 @@ const AccountsLedger = () => {
 
           {/* DUAL VIEW TAB SELECTORS (NO PRINT) */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit border border-slate-200/40 no-print">
-            <button
-              onClick={() => setActiveTab('ledger')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'ledger' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📒</span> TRANSACTION JOURNAL
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'analytics' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📊</span> PERFORMANCE ANALYTICS
-            </button>
+            {canReadLedgerTab && (
+              <button
+                onClick={() => setActiveTab('ledger')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'ledger' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📒</span> TRANSACTION JOURNAL
+              </button>
+            )}
+            {canReadAnalyticsTab && (
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'analytics' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📊</span> PERFORMANCE ANALYTICS
+              </button>
+            )}
           </div>
 
           {/* TAB CONTENT 1: LEDGER TABLE */}
@@ -1299,9 +1313,11 @@ const AccountsLedger = () => {
                             <td className={`${cellPadding} text-slate-500 font-medium`}>{t.createdBy || '—'}</td>
                             <td className={`${cellPadding} text-slate-450 italic text-[11px] truncate max-w-[120px]`} title={t.remarks}>{t.remarks || '—'}</td>
                             <td className={`${cellPadding} text-center`}>
-                              <button type="button" onClick={() => handleEditTransaction(t)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-primary hover:bg-blue-100 border border-blue-100 text-[10px] font-black uppercase tracking-wide transition-colors" title="Edit journal entry">
-                                Edit
-                              </button>
+                              {canUpdate('accounts-ledger') && (
+                                <button type="button" onClick={() => handleEditTransaction(t)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-primary hover:bg-blue-100 border border-blue-100 text-[10px] font-black uppercase tracking-wide transition-colors" title="Edit journal entry">
+                                  Edit
+                                </button>
+                              )}
                             </td>
                           </tr>
                         ))}

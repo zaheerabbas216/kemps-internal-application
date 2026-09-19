@@ -4,9 +4,11 @@ import api from '../api/axios';
 import TaxInvoiceModal from '../components/billing/TaxInvoiceModal';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Billing = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [bills, setBills] = useState([]);
@@ -124,12 +126,14 @@ const Billing = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Manage customer invoices and live transaction receipts</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate('/billing-form')}
-            className="btn-premium btn-primary-premium h-12"
-          >
-            <span className="text-xl">+</span> Billing
-          </button>
+          {canCreate('billing') && (
+            <button 
+              onClick={() => navigate('/billing-form')}
+              className="btn-premium btn-primary-premium text-xs px-4 h-12"
+            >
+              <span className="text-xl">+</span> Billing
+            </button>
+          )}
           <button 
             onClick={() => navigate('/billing-history')}
             className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -275,20 +279,24 @@ const Billing = () => {
                       >
                         👁 View
                       </button>
-                      <button 
-                        onClick={() => navigate('/billing-form', { state: { editBillId: b.id } })}
-                        className="px-2 py-1 rounded bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-bold transition-all text-xs"
-                        title="Edit Invoice"
-                      >
-                        ✎ Edit
-                      </button>
-                      <button 
-                        onClick={() => confirmDelete(b.id)}
-                        className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all text-xs"
-                        title="Delete Invoice"
-                      >
-                        ✕ Delete
-                      </button>
+                      {canUpdate('billing') && (
+                        <button 
+                          onClick={() => navigate('/billing-form', { state: { editBillId: b.id } })}
+                          className="px-2 py-1 rounded bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-bold transition-all text-xs"
+                          title="Edit Invoice"
+                        >
+                          ✎ Edit
+                        </button>
+                      )}
+                      {canDelete('billing') && (
+                        <button 
+                          onClick={() => confirmDelete(b.id)}
+                          className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all text-xs"
+                          title="Delete Invoice"
+                        >
+                          ✕ Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

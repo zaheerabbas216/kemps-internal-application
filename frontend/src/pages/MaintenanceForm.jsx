@@ -2,9 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const MaintenanceForm = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [records, setRecords] = useState([]);

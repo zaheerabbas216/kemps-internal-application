@@ -1,6 +1,7 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom';
 import Layout from './components/layout/Layout';
+import { useAuth } from './context/AuthContext';
 
 // Lazy load pages for code-splitting and performance
 const Customer = lazy(() => import('./pages/Customer'));
@@ -52,23 +53,46 @@ const Timer = lazy(() => import('./pages/Timer'));
 const TimerHistory = lazy(() => import('./pages/TimerHistory'));
 const SundayLoading = lazy(() => import('./pages/SundayLoading'));
 const SundayLoadingHistory = lazy(() => import('./pages/SundayLoadingHistory'));
+const RolePermissions = lazy(() => import('./pages/RolePermissions'));
+const ChangePassword = lazy(() => import('./pages/ChangePassword'));
+const PaymentApproval = lazy(() => import('./pages/PaymentApproval'));
 
-// Route guard for authenticated pages
+// ─────────────────────────────────────────────
+// Route guard: must be logged in
+// ─────────────────────────────────────────────
 const ProtectedRoute = () => {
   const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
   return isLoggedIn ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
-// Route guard to prevent logged-in users from seeing the Login page again
+// ─────────────────────────────────────────────
+// Route guard: redirect logged-in users away from login page
+// ─────────────────────────────────────────────
 const LoginRoute = () => {
   const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
   return isLoggedIn ? <Navigate to="/dashboard" replace /> : <Login />;
 };
 
-// Route guard for admin-only pages
+// ─────────────────────────────────────────────
+// Route guard: superadmin only
+// ─────────────────────────────────────────────
 const AdminRoute = () => {
-  const isAdmin = localStorage.getItem('kemps_username')?.toLowerCase() === 'admin';
-  return isAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
+  const { isSuperAdmin } = useAuth();
+  return isSuperAdmin ? <Outlet /> : <Navigate to="/dashboard" replace />;
+};
+
+// ─────────────────────────────────────────────
+// Route guard: permission-based (canRead check)
+// Props: module (string), children
+// ─────────────────────────────────────────────
+const PermissionRoute = ({ module, children }) => {
+  const { isSuperAdmin, canRead } = useAuth();
+  const location = useLocation();
+
+  if (isSuperAdmin || canRead(module)) {
+    return children;
+  }
+  return <Navigate to="/dashboard" replace state={{ from: location, denied: true }} />;
 };
 
 function App() {
@@ -83,63 +107,73 @@ function App() {
           {/* Public / Auth routes */}
           <Route path="/login" element={<LoginRoute />} />
 
-          {/* Protected Dashboard routes */}
+          {/* Protected routes */}
           <Route element={<ProtectedRoute />}>
             <Route element={<Layout />}>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/customer" element={<Customer />} />
-              <Route path="/company-details" element={<CompanyDetails />} />
-              <Route path="/product-master" element={<ProductMaster />} />
-              <Route path="/expense" element={<Expense />} />
-              <Route path="/expense-history" element={<ExpenseHistory />} />
-              <Route path="/inventory" element={<Inventory />} />
-              <Route path="/inventory-history" element={<InventoryHistory />} />
-              <Route path="/stock-correction" element={<StockCorrection />} />
-              <Route path="/stock-correction-history" element={<StockCorrectionHistory />} />
-              <Route path="/supplier-payments" element={<SupplierPayments />} />
-              <Route path="/pet-bottle" element={<PetBottle />} />
-              <Route path="/pet-bottle-history" element={<PetBottleHistory />} />
-              <Route path="/production-form" element={<Production />} />
-              <Route path="/production-history" element={<ProductionHistory />} />
-              <Route path="/billing" element={<Billing />} />
-              <Route path="/billing-form" element={<BillingForm />} />
-              <Route path="/billing-history" element={<BillingHistory />} />
-              <Route path="/credit-balance" element={<CreditBalance />} />
-              <Route path="/credit-history" element={<CreditHistory />} />
-              <Route path="/accounts-ledger" element={<AccountsLedger />} />
-              <Route path="/supplier-ledger" element={<SupplierLedger />} />
-              <Route path="/cash-ledger" element={<CashLedger />} />
-              <Route path="/loading" element={<Loading />} />
-              <Route path="/sales-return" element={<SalesReturn />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/order-details" element={<OrderDetails />} />
-              <Route path="/distribution-order" element={<DistributionOrder />} />
-              <Route path="/do-order-view" element={<DistributionOrder />} />
-              <Route path="/raw-material-ledger" element={<RawMaterialLedger />} />
-              <Route path="/raw-material-history" element={<RawMaterialHistory />} />
-              <Route path="/goods-ledger" element={<GoodsLedger />} />
-              <Route path="/goods-history" element={<GoodsHistory />} />
-              <Route path="/can-supply" element={<CanSupply />} />
-              <Route path="/can-deposit" element={<CanDepositLedger />} />
-              <Route path="/bank-deposit" element={<BankDeposit />} />
-              <Route path="/bank-deposit-history" element={<BankDepositHistory />} />
-              <Route path="/maintenance-form" element={<MaintenanceForm />} />
-              <Route path="/maintenance-history" element={<MaintenanceHistory />} />
-              <Route path="/maintenance-master" element={<MaintenanceMaster />} />
-              <Route path="/timer" element={<Timer />} />
-              <Route path="/timer-history" element={<TimerHistory />} />
-              <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/stock-dashboard" element={<StockDashboard />} />
-              <Route path="/production-dashboard" element={<ProductionDashboard />} />
-              <Route path="/sunday-dashboard" element={<SundayDashboard />} />
-              <Route path="/sunday-loading" element={<SundayLoading />} />
-              <Route path="/sunday-loading-history" element={<SundayLoadingHistory />} />
-              <Route path="/total-sales" element={<TotalSales />} />
 
-              {/* Admin only routes */}
+              {/* Dashboards — always accessible to all logged-in users */}
+              <Route path="/dashboard"            element={<Dashboard />} />
+              <Route path="/stock-dashboard"      element={<StockDashboard />} />
+              <Route path="/production-dashboard" element={<ProductionDashboard />} />
+              <Route path="/sunday-dashboard"     element={<SundayDashboard />} />
+
+              {/* Change password — all logged-in users */}
+              <Route path="/change-password" element={<ChangePassword />} />
+
+              {/* Permission-gated routes */}
+              <Route path="/customer"           element={<PermissionRoute module="customer"><Customer /></PermissionRoute>} />
+              <Route path="/company-details"    element={<PermissionRoute module="company-details"><CompanyDetails /></PermissionRoute>} />
+              <Route path="/product-master"     element={<PermissionRoute module="product-master"><ProductMaster /></PermissionRoute>} />
+              <Route path="/expense"            element={<PermissionRoute module="expense"><Expense /></PermissionRoute>} />
+              <Route path="/expense-history"    element={<PermissionRoute module="expense"><ExpenseHistory /></PermissionRoute>} />
+              <Route path="/inventory"          element={<PermissionRoute module="inventory"><Inventory /></PermissionRoute>} />
+              <Route path="/inventory-history"  element={<PermissionRoute module="inventory"><InventoryHistory /></PermissionRoute>} />
+              <Route path="/stock-correction"         element={<PermissionRoute module="stock-correction"><StockCorrection /></PermissionRoute>} />
+              <Route path="/stock-correction-history" element={<PermissionRoute module="stock-correction"><StockCorrectionHistory /></PermissionRoute>} />
+              <Route path="/supplier-payments"  element={<PermissionRoute module="supplier-payments"><SupplierPayments /></PermissionRoute>} />
+              <Route path="/pet-bottle"         element={<PermissionRoute module="pet-bottle"><PetBottle /></PermissionRoute>} />
+              <Route path="/pet-bottle-history" element={<PermissionRoute module="pet-bottle"><PetBottleHistory /></PermissionRoute>} />
+              <Route path="/production-form"    element={<PermissionRoute module="production"><Production /></PermissionRoute>} />
+              <Route path="/production-history" element={<PermissionRoute module="production"><ProductionHistory /></PermissionRoute>} />
+              <Route path="/billing"            element={<PermissionRoute module="billing"><Billing /></PermissionRoute>} />
+              <Route path="/billing-form"       element={<PermissionRoute module="billing"><BillingForm /></PermissionRoute>} />
+              <Route path="/billing-history"    element={<PermissionRoute module="billing"><BillingHistory /></PermissionRoute>} />
+              <Route path="/credit-balance"     element={<PermissionRoute module="credit-balance"><CreditBalance /></PermissionRoute>} />
+              <Route path="/credit-history"     element={<PermissionRoute module="credit-balance"><CreditHistory /></PermissionRoute>} />
+              <Route path="/accounts-ledger"    element={<PermissionRoute module="accounts-ledger"><AccountsLedger /></PermissionRoute>} />
+              <Route path="/supplier-ledger"    element={<PermissionRoute module="supplier-ledger"><SupplierLedger /></PermissionRoute>} />
+              <Route path="/cash-ledger"        element={<PermissionRoute module="cash-ledger"><CashLedger /></PermissionRoute>} />
+              <Route path="/loading"            element={<PermissionRoute module="loading"><Loading /></PermissionRoute>} />
+              <Route path="/sales-return"       element={<PermissionRoute module="sales-return"><SalesReturn /></PermissionRoute>} />
+              <Route path="/orders"             element={<PermissionRoute module="orders"><Orders /></PermissionRoute>} />
+              <Route path="/order-details"      element={<PermissionRoute module="order-details"><OrderDetails /></PermissionRoute>} />
+              <Route path="/distribution-order" element={<PermissionRoute module="distribution-order"><DistributionOrder /></PermissionRoute>} />
+              <Route path="/do-order-view"      element={<PermissionRoute module="distribution-order"><DistributionOrder /></PermissionRoute>} />
+              <Route path="/raw-material-ledger"  element={<PermissionRoute module="raw-material-ledger"><RawMaterialLedger /></PermissionRoute>} />
+              <Route path="/raw-material-history" element={<PermissionRoute module="raw-material-ledger"><RawMaterialHistory /></PermissionRoute>} />
+              <Route path="/goods-ledger"       element={<PermissionRoute module="goods-ledger"><GoodsLedger /></PermissionRoute>} />
+              <Route path="/goods-history"      element={<PermissionRoute module="goods-history"><GoodsHistory /></PermissionRoute>} />
+              <Route path="/can-supply"         element={<PermissionRoute module="can-supply"><CanSupply /></PermissionRoute>} />
+              <Route path="/can-deposit"        element={<PermissionRoute module="can-deposit"><CanDepositLedger /></PermissionRoute>} />
+              <Route path="/bank-deposit"         element={<PermissionRoute module="bank-deposit"><BankDeposit /></PermissionRoute>} />
+              <Route path="/bank-deposit-history" element={<PermissionRoute module="bank-deposit"><BankDepositHistory /></PermissionRoute>} />
+              <Route path="/maintenance-form"    element={<PermissionRoute module="maintenance-form"><MaintenanceForm /></PermissionRoute>} />
+              <Route path="/maintenance-history" element={<PermissionRoute module="maintenance-history"><MaintenanceHistory /></PermissionRoute>} />
+              <Route path="/maintenance-master"  element={<PermissionRoute module="maintenance-master"><MaintenanceMaster /></PermissionRoute>} />
+              <Route path="/timer"              element={<PermissionRoute module="timer"><Timer /></PermissionRoute>} />
+              <Route path="/timer-history"      element={<PermissionRoute module="timer"><TimerHistory /></PermissionRoute>} />
+              <Route path="/total-sales"        element={<PermissionRoute module="total-sales"><TotalSales /></PermissionRoute>} />
+              <Route path="/payment-approval"   element={<PermissionRoute module="payment-approval"><PaymentApproval /></PermissionRoute>} />
+              <Route path="/sunday-loading"         element={<PermissionRoute module="sunday-loading"><SundayLoading /></PermissionRoute>} />
+              <Route path="/sunday-loading-history" element={<PermissionRoute module="sunday-loading-history"><SundayLoadingHistory /></PermissionRoute>} />
+
+              {/* Admin Console — superadmin only */}
               <Route element={<AdminRoute />}>
                 <Route path="/user-authentication" element={<UserAuthentication />} />
+                <Route path="/admin/roles"         element={<RolePermissions />} />
               </Route>
+
               <Route path="*" element={<div className="p-8">Page under construction...</div>} />
             </Route>
           </Route>

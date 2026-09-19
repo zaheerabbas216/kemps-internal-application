@@ -1,212 +1,115 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
 
+// ─────────────────────────────────────────────
+// Full nav definition with module keys for RBAC
+// ─────────────────────────────────────────────
 const navGroups = [
+  { type: 'button', name: 'Dashboard',           path: '/dashboard',            icon: '⊞',  module: 'dashboard' },
+  { type: 'button', name: 'Stock Dashboard',     path: '/stock-dashboard',      icon: '📦', module: 'stock-dashboard' },
+  { type: 'button', name: 'Production Dashboard',path: '/production-dashboard', icon: '🏭', module: 'production-dashboard' },
+  { type: 'button', name: 'Sunday Dashboard',    path: '/sunday-dashboard',     icon: '☀️', module: 'sunday-dashboard' },
+
+  { type: 'section', title: 'Sales' },
+  { type: 'button', name: 'Customer Data',    path: '/customer',        icon: '👤', module: 'customer' },
+  { type: 'button', name: 'Accounts Ledger', path: '/accounts-ledger', icon: '📒', module: 'accounts-ledger' },
+  { type: 'button', name: 'Cash Ledger',     path: '/cash-ledger',     icon: '💰', module: 'cash-ledger' },
   {
-    type: 'button',
-    name: 'Dashboard',
-    path: '/dashboard',
-    icon: '⊞'
-  },
-  {
-    type: 'button',
-    name: 'Stock Dashboard',
-    path: '/stock-dashboard',
-    icon: '📦'
-  },
-  {
-    type: 'button',
-    name: 'Production Dashboard',
-    path: '/production-dashboard',
-    icon: '🏭'
-  },
-  {
-    type: 'button',
-    name: 'Sunday Dashboard',
-    path: '/sunday-dashboard',
-    icon: '☀️'
-  },
-  {
-    type: 'section',
-    title: 'Sales'
-  },
-  {
-    type: 'button',
-    name: 'Customer Data',
-    path: '/customer',
-    icon: '👤'
-  },
-  {
-    type: 'button',
-    name: 'Accounts Ledger',
-    path: '/accounts-ledger',
-    icon: '📒'
-  },
-  {
-    type: 'button',
-    name: 'Cash Ledger',
-    path: '/cash-ledger',
-    icon: '💰'
-  },
-  {
-    type: 'group',
-    title: 'Sales',
-    id: 'grpSales',
-    icon: '🧾',
+    type: 'group', title: 'Sales', id: 'grpSales', icon: '🧾',
     items: [
-      { name: 'Billing', path: '/billing' },
-      { name: 'Credit Balance', path: '/credit-balance' },
-      { name: 'Order Management', path: '/orders' },
-      { name: 'Order Details', path: '/order-details' },
-      { name: 'Total Sales', path: '/total-sales' },
-      { name: 'Sales Return / Credit Note', path: '/sales-return' },
+      { name: 'Billing',                    path: '/billing',        module: 'billing' },
+      { name: 'Credit Balance',             path: '/credit-balance', module: 'credit-balance' },
+      { name: 'Order Management',           path: '/orders',         module: 'orders' },
+      { name: 'Order Details',              path: '/order-details',  module: 'order-details' },
+      { name: 'Total Sales',                path: '/total-sales',    module: 'total-sales' },
+      { name: 'Sales Return / Credit Note', path: '/sales-return',   module: 'sales-return' },
+      { name: 'Payment Approval',           path: '/payment-approval', module: 'payment-approval' },
+    ]
+  },
+
+  { type: 'section', title: 'Production' },
+  {
+    type: 'group', title: 'Inventory Stock', id: 'grpStock', icon: '📦',
+    items: [
+      { name: 'Inventory',        path: '/inventory',        module: 'inventory' },
+      { name: 'Pet Bottle',       path: '/pet-bottle',       module: 'pet-bottle' },
+      { name: 'Stock Correction', path: '/stock-correction', module: 'stock-correction' },
     ]
   },
   {
-    type: 'section',
-    title: 'Production'
-  },
-  {
-    type: 'group',
-    title: 'Inventory Stock',
-    id: 'grpStock',
-    icon: '📦',
+    type: 'group', title: 'Production', id: 'grpProd', icon: '🏭',
     items: [
-      { name: 'Inventory', path: '/inventory' },
-      { name: 'Pet Bottle', path: '/pet-bottle' },
-      { name: 'Stock Correction', path: '/stock-correction' }
+      { name: 'Production Form', path: '/production-form', module: 'production' },
+      { name: 'Goods Ledger',    path: '/goods-ledger',    module: 'goods-ledger' },
+      { name: 'Goods History',   path: '/goods-history',   module: 'goods-history' },
     ]
   },
   {
-    type: 'group',
-    title: 'Production',
-    id: 'grpProd',
-    icon: '🏭',
+    type: 'group', title: 'Machine Timer', id: 'grpTimer', icon: '⏱️',
     items: [
-      { name: 'Production Form', path: '/production-form' },
-      { name: 'Goods Ledger', path: '/goods-ledger' },
-      { name: 'Goods History', path: '/goods-history' },
+      { name: 'Timer Dashboard', path: '/timer',         module: 'timer' },
+      { name: 'Timer History',   path: '/timer-history', module: 'timer' },
+    ]
+  },
+  { type: 'button', name: 'Raw Material Ledger', path: '/raw-material-ledger', icon: '🪨', module: 'raw-material-ledger' },
+
+  { type: 'section', title: 'Orders' },
+  { type: 'button', name: 'Order Details', path: '/order-details', icon: '📋', module: 'order-details' },
+  {
+    type: 'group', title: 'Distribution', id: 'grpDO', icon: '🚚',
+    items: [
+      { name: 'Distribution Order', path: '/distribution-order', module: 'distribution-order' },
+    ]
+  },
+
+  { type: 'section', title: 'Warehouse' },
+  {
+    type: 'group', title: 'Loading', id: 'grpWH', icon: '🏪',
+    items: [
+      { name: 'Loading',                  path: '/loading',                  module: 'loading' },
+      { name: 'Sunday Loading',           path: '/sunday-loading',           module: 'sunday-loading' },
+      { name: 'Sunday Loading History',   path: '/sunday-loading-history',   module: 'sunday-loading-history' },
     ]
   },
   {
-    type: 'group',
-    title: 'Machine Timer',
-    id: 'grpTimer',
-    icon: '⏱️',
+    type: 'group', title: 'Can Supply', id: 'grpCan', icon: '🥤',
     items: [
-      { name: 'Timer Dashboard', path: '/timer' },
-      { name: 'Timer History', path: '/timer-history' },
+      { name: 'Can Supply',  path: '/can-supply',  module: 'can-supply' },
+      { name: 'Can Deposit', path: '/can-deposit', module: 'can-deposit' },
     ]
   },
+
+  { type: 'section', title: 'Office' },
   {
-    type: 'button',
-    name: 'Raw Material Ledger',
-    path: '/raw-material-ledger',
-    icon: '🪨'
-  },
-  {
-    type: 'section',
-    title: 'Orders'
-  },
-  {
-    type: 'button',
-    name: 'Order Details',
-    path: '/order-details',
-    icon: '📋'
-  },
-  {
-    type: 'group',
-    title: 'Distribution',
-    id: 'grpDO',
-    icon: '🚚',
+    type: 'group', title: 'Office Work', id: 'grpOff', icon: '🗂️',
     items: [
-      { name: 'Distribution Order', path: '/distribution-order' },
+      { name: 'Maintenance Form',    path: '/maintenance-form',    module: 'maintenance-form' },
+      { name: 'Maintenance Master',  path: '/maintenance-master',  module: 'maintenance-master' },
+      { name: 'Maintenance History', path: '/maintenance-history', module: 'maintenance-history' },
     ]
   },
+  { type: 'button', name: 'Expense',           path: '/expense',           icon: '💸', module: 'expense' },
+  { type: 'button', name: 'Bank Deposit',      path: '/bank-deposit',      icon: '🏦', module: 'bank-deposit' },
+  { type: 'button', name: 'Company Details',   path: '/company-details',   icon: '🏢', module: 'company-details' },
+  { type: 'button', name: 'Supplier Payments', path: '/supplier-payments', icon: '💳', module: 'supplier-payments' },
+  { type: 'button', name: 'Supplier Ledger',   path: '/supplier-ledger',   icon: '📓', module: 'supplier-ledger' },
+  { type: 'button', name: 'Product Master',    path: '/product-master',    icon: '📦', module: 'product-master' },
+
+  // Admin Console — filtered separately, shown only to superadmin
+  { type: 'section', title: 'Admin Console', adminOnly: true },
   {
-    type: 'section',
-    title: 'Warehouse'
-  },
-  {
-    type: 'group',
-    title: 'Loading',
-    id: 'grpWH',
-    icon: '🏪',
+    type: 'group', title: 'Admin Console', id: 'grpAdmin', icon: '⚙️', adminOnly: true,
     items: [
-      { name: 'Loading', path: '/loading' },
-      { name: 'Sunday Loading', path: '/sunday-loading' },
-      { name: 'Sunday Loading History', path: '/sunday-loading-history' },
+      { name: 'User Management',    path: '/user-authentication', module: null },
+      { name: 'Roles & Permissions', path: '/admin/roles',        module: null },
     ]
   },
-  {
-    type: 'group',
-    title: 'Can Supply',
-    id: 'grpCan',
-    icon: '🥤',
-    items: [
-      { name: 'Can Supply', path: '/can-supply' },
-      { name: 'Can Deposit', path: '/can-deposit' },
-    ]
-  },
-  {
-    type: 'section',
-    title: 'Office'
-  },
-  {
-    type: 'group',
-    title: 'Office Work',
-    id: 'grpOff',
-    icon: '🗂️',
-    items: [
-      { name: 'Maintenance Form', path: '/maintenance-form' },
-      { name: 'Maintenance Master', path: '/maintenance-master' },
-      { name: 'Maintenance History', path: '/maintenance-history' },
-    ]
-  },
-  {
-    type: 'button',
-    name: 'User Authentication',
-    path: '/user-authentication',
-    icon: '🔑'
-  },
-  {
-    type: 'button',
-    name: 'Expense',
-    path: '/expense',
-    icon: '💸'
-  },
-  {
-    type: 'button',
-    name: 'Bank Deposit',
-    path: '/bank-deposit',
-    icon: '🏦'
-  },
-  {
-    type: 'button',
-    name: 'Company Details',
-    path: '/company-details',
-    icon: '🏢'
-  },
-  {
-    type: 'button',
-    name: 'Supplier Payments',
-    path: '/supplier-payments',
-    icon: '💳'
-  },
-  {
-    type: 'button',
-    name: 'Supplier Ledger',
-    path: '/supplier-ledger',
-    icon: '📓'
-  },
-  {
-    type: 'button',
-    name: 'Product Master',
-    path: '/product-master',
-    icon: '📦'
-  }
 ];
 
+// ─────────────────────────────────────────────
+// SidebarItem component
+// ─────────────────────────────────────────────
 const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
   const location = useLocation();
 
@@ -257,7 +160,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
 
     if (isCollapsed) {
       return (
-        <div 
+        <div
           className="relative group/flyout"
           onMouseEnter={handleMouseEnter}
           onMouseLeave={() => setIsHovered(false)}
@@ -280,7 +183,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
           </button>
 
           {(isHovered || isOpen) && (
-            <div 
+            <div
               style={{ top: `${Math.max(10, Math.min(window.innerHeight - 300, flyoutTop))}px` }}
               className="fixed left-[84px] z-[9999] bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
             >
@@ -313,7 +216,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
         </div>
       );
     }
-    
+
     return (
       <div className="space-y-1">
         <button
@@ -353,12 +256,15 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
   return null;
 };
 
+// ─────────────────────────────────────────────
+// Sidebar component
+// ─────────────────────────────────────────────
 const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
+  const { user, isSuperAdmin, canRead } = useAuth();
 
-  const currentLoggedUser = localStorage.getItem('kemps_username') || '';
-  const isAdmin = currentLoggedUser.toLowerCase() === 'admin';
-  const fullName = localStorage.getItem('kemps_name') || (currentLoggedUser ? currentLoggedUser.charAt(0).toUpperCase() + currentLoggedUser.slice(1) : 'User');
+  const fullName    = user.name || user.username || 'User';
+  const roleName    = isSuperAdmin ? 'Superadmin' : (user.role_name || 'User');
   const userInitials = fullName
     .split(' ')
     .map(word => word.charAt(0))
@@ -366,34 +272,55 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     .toUpperCase()
     .slice(0, 2) || 'US';
 
-  const handleLogout = () => {
-    localStorage.removeItem('kemps_logged_in');
-    localStorage.removeItem('kemps_username');
-    localStorage.removeItem('kemps_name');
-    localStorage.removeItem('kemps_auth_token');
-    navigate('/login');
-  };
-
   const handleItemClick = () => {
-    if (onClose) {
-      onClose();
-    }
+    if (onClose) onClose();
   };
 
+  // ── Filter navGroups based on permissions ──
   const filteredNavGroups = navGroups.filter(item => {
+    if (item.adminOnly) return isSuperAdmin;
+
     if (item.type === 'button') {
-      if (item.path === '/user-authentication') {
-        return isAdmin;
+      // Dashboards always visible
+      if (['dashboard', 'stock-dashboard', 'production-dashboard', 'sunday-dashboard'].includes(item.module)) {
+        return true;
       }
+      return isSuperAdmin || canRead(item.module);
     }
+
+    if (item.type === 'group') {
+      // Keep group if at least one child is accessible
+      const visibleChildren = item.items.filter(sub =>
+        sub.module === null || isSuperAdmin || canRead(sub.module)
+      );
+      return visibleChildren.length > 0;
+    }
+
+    if (item.type === 'section') {
+      return true; // sections are cleaned up below
+    }
+
     return true;
+  });
+
+  // Build final list with groups having filtered children
+  const visibleNav = filteredNavGroups.map(item => {
+    if (item.type === 'group') {
+      return {
+        ...item,
+        items: item.items.filter(sub =>
+          sub.module === null || isSuperAdmin || canRead(sub.module)
+        ),
+      };
+    }
+    return item;
   });
 
   return (
     <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-full flex flex-col shrink-0 overflow-visible transition-all duration-300 ease-in-out relative z-30`}>
       <div className={`shrink-0 h-20 flex items-center border-b border-slate-100/60 relative ${isCollapsed ? 'justify-center px-2' : 'px-6 justify-between'}`}>
-        <div 
-          onClick={() => navigate('/dashboard')} 
+        <div
+          onClick={() => navigate('/dashboard')}
           className="flex items-center gap-3 cursor-pointer overflow-hidden"
         >
           <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic shrink-0">
@@ -410,7 +337,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         </div>
 
         {/* Toggle Icon */}
-        <button 
+        <button
           onClick={onToggleCollapse}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
           className="hidden cursor-e-resize lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-white border border-slate-200/90 text-slate-500 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md items-center justify-center transition-all duration-200 active:scale-90 z-40 shadow-sm"
@@ -422,7 +349,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         </button>
 
         {/* Mobile Close Button */}
-        <button 
+        <button
           onClick={onClose}
           className="lg:hidden w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto cursor-pointer"
         >
@@ -431,45 +358,29 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
       </div>
 
       <nav className={`flex-1 overflow-y-auto pb-12 space-y-1 scrollbar-hide ${isCollapsed ? 'px-2' : 'px-4'}`}>
-        {filteredNavGroups.map((item, idx) => (
+        {visibleNav.map((item, idx) => (
           <SidebarItem key={idx} item={item} onClickItem={handleItemClick} isCollapsed={isCollapsed} />
         ))}
       </nav>
-      
+
       <div className={`border-t border-slate-100 shrink-0 ${isCollapsed ? 'p-3' : 'p-6'}`}>
         {isCollapsed ? (
           <div className="flex flex-col items-center gap-3">
             <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0" title={fullName}>
               {userInitials}
             </div>
-            <button 
-              onClick={handleLogout}
-              title="Log Out"
-              className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-500 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0"
-            >
-              ➔
-            </button>
           </div>
         ) : (
-          <div className="bg-slate-50/80 p-4 rounded-2xl flex items-center justify-between border border-slate-100">
+          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
             <div className="flex items-center gap-3 overflow-hidden">
               <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
                 {userInitials}
               </div>
-              <div className="overflow-hidden">
+              <div className="overflow-hidden flex-1">
                 <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
-                <p className="text-[10px] text-slate-500 font-medium">
-                  {isAdmin ? 'Administrator' : 'Operator'}
-                </p>
+                <p className="text-[10px] text-slate-500 font-medium truncate">{roleName}</p>
               </div>
             </div>
-            <button 
-              onClick={handleLogout}
-              title="Log Out"
-              className="w-8 h-8 rounded-xl bg-white border border-slate-200 text-slate-450 hover:text-red-500 hover:bg-red-50 hover:border-red-100 transition-all duration-200 flex items-center justify-center text-sm shadow-sm active:scale-95 shrink-0 ml-1"
-            >
-              ➔
-            </button>
           </div>
         )}
       </div>

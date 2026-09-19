@@ -14,11 +14,20 @@ const authMiddleware = (req, res, next) => {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Attach decoded user metadata to the request object
+    // decoded: { adminId, username, role_id, isSuperAdmin }
     req.admin = decoded;
     next();
   } catch (error) {
     res.status(401).json({ ok: false, error: 'Invalid or expired authentication token.' });
   }
+};
+
+// Middleware that only allows superadmin users (role_id = null)
+export const requireSuperAdmin = (req, res, next) => {
+  if (!req.admin || !req.admin.isSuperAdmin) {
+    return res.status(403).json({ ok: false, error: 'Access denied. Superadmin privileges required.' });
+  }
+  next();
 };
 
 export default authMiddleware;

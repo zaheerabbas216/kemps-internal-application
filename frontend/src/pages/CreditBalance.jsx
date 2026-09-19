@@ -3,9 +3,11 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const CreditBalance = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate } = useAuth();
 
   // Statistics
   const [stats, setStats] = useState({
@@ -604,13 +606,15 @@ const CreditBalance = () => {
                               <span>⏳</span> Pending Verify
                             </button>
                           ) : (
-                            <button 
-                              onClick={() => handleOpenPay(b)}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
-                              title="Collect Outstanding Payment"
-                            >
-                              <span>💵</span> Receive Payment
-                            </button>
+                            (canCreate('credit-balance') || canUpdate('credit-balance')) && (
+                              <button 
+                                onClick={() => handleOpenPay(b)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
+                                title="Collect Outstanding Payment"
+                              >
+                                <span>💵</span> Receive Payment
+                              </button>
+                            )
                           )}
                           <button 
                             onClick={() => handleOpenTimeline(b)}

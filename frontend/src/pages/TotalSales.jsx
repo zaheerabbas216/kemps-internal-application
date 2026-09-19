@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -235,6 +236,16 @@ function printTable(title, html) {
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────────
 
 const TotalSales = () => {
+  const { canRead } = useAuth();
+  
+  const canReadOverview = canRead('total-sales-overview');
+  const canReadMonthly = canRead('total-sales-monthly');
+  const canReadProducts = canRead('total-sales-products');
+  const canReadCustomers = canRead('total-sales-customers');
+  const canReadCollection = canRead('total-sales-collection');
+  const canReadCompanies = canRead('total-sales-companies');
+  const canReadTop = canRead('total-sales-top');
+
   const today = getISTDateStr();
   const firstDay = getFirstDayOfMonth();
 
@@ -243,7 +254,16 @@ const TotalSales = () => {
   const [endDate, setEndDate]       = useState(today);
   const [company, setCompany]       = useState('All');
   const [companies, setCompanies]   = useState([]);
-  const [activeTab, setActiveTab]   = useState('overview');
+  const [activeTab, setActiveTab]   = useState(() => {
+    if (canReadOverview) return 'overview';
+    if (canReadMonthly) return 'monthly';
+    if (canReadProducts) return 'products';
+    if (canReadCustomers) return 'customers';
+    if (canReadCollection) return 'collection';
+    if (canReadCompanies) return 'companies';
+    if (canReadTop) return 'top';
+    return 'overview';
+  });
   const [year, setYear]             = useState(new Date().getFullYear());
 
   // ── Data states ────────────────────────────────────────────────────────────────
@@ -610,13 +630,13 @@ const TotalSales = () => {
         {/* Tab bar */}
         <div className="px-4 pt-4 border-b border-slate-100">
           <div className="flex gap-1 flex-wrap pb-3 overflow-x-auto">
-            <TabBtn active={activeTab==='overview'}   onClick={() => setActiveTab('overview')}   icon="📈">Overview</TabBtn>
-            <TabBtn active={activeTab==='monthly'}    onClick={() => setActiveTab('monthly')}    icon="📅">Monthly Trend</TabBtn>
-            <TabBtn active={activeTab==='products'}   onClick={() => setActiveTab('products')}   icon="🏷️">Product-wise</TabBtn>
-            <TabBtn active={activeTab==='customers'}  onClick={() => setActiveTab('customers')}  icon="👤">Customer-wise</TabBtn>
-            <TabBtn active={activeTab==='collection'} onClick={() => setActiveTab('collection')} icon="💳">Collection</TabBtn>
-            <TabBtn active={activeTab==='companies'}  onClick={() => setActiveTab('companies')}  icon="🏢">Company-wise</TabBtn>
-            <TabBtn active={activeTab==='top'}        onClick={() => setActiveTab('top')}        icon="🏆">Top Customers</TabBtn>
+            {canReadOverview && <TabBtn active={activeTab==='overview'}   onClick={() => setActiveTab('overview')}   icon="📈">Overview</TabBtn>}
+            {canReadMonthly && <TabBtn active={activeTab==='monthly'}    onClick={() => setActiveTab('monthly')}    icon="📅">Monthly Trend</TabBtn>}
+            {canReadProducts && <TabBtn active={activeTab==='products'}   onClick={() => setActiveTab('products')}   icon="🏷️">Product-wise</TabBtn>}
+            {canReadCustomers && <TabBtn active={activeTab==='customers'}  onClick={() => setActiveTab('customers')}  icon="👤">Customer-wise</TabBtn>}
+            {canReadCollection && <TabBtn active={activeTab==='collection'} onClick={() => setActiveTab('collection')} icon="💳">Collection</TabBtn>}
+            {canReadCompanies && <TabBtn active={activeTab==='companies'}  onClick={() => setActiveTab('companies')}  icon="🏢">Company-wise</TabBtn>}
+            {canReadTop && <TabBtn active={activeTab==='top'}        onClick={() => setActiveTab('top')}        icon="🏆">Top Customers</TabBtn>}
           </div>
         </div>
 

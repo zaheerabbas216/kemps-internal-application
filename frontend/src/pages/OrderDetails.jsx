@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const formatCurrency = (val) => {
   const num = parseFloat(val) || 0;

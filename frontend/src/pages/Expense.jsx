@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Expense = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
   
   // Data states
   const [expenses, setExpenses] = useState([]);

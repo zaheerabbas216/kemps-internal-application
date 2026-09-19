@@ -1,18 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
+import { useAuth } from '../../context/AuthContext';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isSuperAdmin, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('kemps_sidebar_collapsed') === 'true';
   });
+  const [avatarOpen, setAvatarOpen] = useState(false);
+  const avatarRef = useRef(null);
+
+  const fullName = user.name || user.username || 'User';
+  const roleName = isSuperAdmin ? 'Superadmin' : (user.role_name || 'User');
+  const userInitials = fullName
+    .split(' ')
+    .map(w => w.charAt(0))
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'US';
 
   useEffect(() => {
     localStorage.setItem('kemps_sidebar_collapsed', isCollapsed);
   }, [isCollapsed]);
+
+  // Close avatar dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (avatarRef.current && !avatarRef.current.contains(e.target)) {
+        setAvatarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   // Dynamic page title based on path
   const getPageTitle = () => {
@@ -163,7 +192,7 @@ const Layout = () => {
             )}
           </div>
 
-          {/* Desktop Right Info */}
+          {/* Desktop Right — Avatar Dropdown */}
           <div className="hidden md:flex items-center gap-4">
             {isCleanHeader ? (
               <div className="text-[13px] font-semibold text-slate-400">
@@ -175,7 +204,7 @@ const Layout = () => {
                   <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
                   <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Server Online</span>
                 </div>
-                <button 
+                <button
                   onClick={() => window.location.reload()}
                   className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-10 min-h-0"
                 >
@@ -183,16 +212,54 @@ const Layout = () => {
                 </button>
               </>
             )}
+
+            {/* Avatar dropdown */}
+            <div className="relative" ref={avatarRef}>
+              <button
+                onClick={() => setAvatarOpen(v => !v)}
+                className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition-all duration-200 active:scale-95"
+              >
+                <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs">
+                  {userInitials}
+                </div>
+                <div className="text-left hidden lg:block">
+                  <p className="text-xs font-bold text-slate-700 leading-none">{fullName}</p>
+                  <p className="text-[10px] text-slate-400 font-medium mt-0.5">{roleName}</p>
+                </div>
+                <span className={`text-slate-400 text-[10px] transition-transform duration-200 ${avatarOpen ? 'rotate-180' : ''}`}>▼</span>
+              </button>
+
+              {avatarOpen && (
+                <div className="absolute right-0 top-[calc(100%+8px)] w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 animate-fade-in">
+                  <div className="px-3 py-2.5 border-b border-slate-100 mb-1">
+                    <p className="text-xs font-bold text-slate-800">{fullName}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">{roleName}</p>
+                  </div>
+                  <button
+                    onClick={() => { setAvatarOpen(false); navigate('/change-password'); }}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <span>🔑</span> Change Password
+                  </button>
+                  <button
+                    onClick={() => { setAvatarOpen(false); handleLogout(); }}
+                    className="w-full text-left px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2"
+                  >
+                    <span>➔</span> Log Out
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Mobile Right Icons */}
+          {/* Mobile Right — Avatar */}
           <div className="flex items-center gap-2 lg:hidden">
             <div
-              onClick={() => navigate('/company-details')}
+              onClick={() => navigate('/change-password')}
               className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs cursor-pointer hover:bg-primary/20 transition-all active:scale-95"
-              title="Profile Settings"
+              title="Change Password"
             >
-              ZA
+              {userInitials}
             </div>
           </div>
 

@@ -2,13 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const SupplierPayments = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadPending = canRead('supplier-payments-pending');
+  const canReadHistory = canRead('supplier-payments-history');
 
   // Navigation and Filter States
   const [selectedBilledTo, setSelectedBilledTo] = useState('ALL'); // 'ALL', 'KEMPANNAVAR INDUSTRIES', 'KEMPS PET INDUSTRIES'
-  const [activeTab, setActiveTab] = useState('pending'); // 'pending', 'history'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadPending) return 'pending';
+    if (canReadHistory) return 'history';
+    return 'pending';
+  });
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('PENDING'); // 'ALL', 'PENDING', 'SETTLED', 'CANCELLED'
@@ -468,26 +477,30 @@ const SupplierPayments = () => {
 
       {/* VIEW TABS */}
       <div className="flex gap-6 border-b border-slate-200">
-        <button
-          onClick={() => { setActiveTab('pending'); handleCloseManualForm(); }}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'pending'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          ⏳ Pending Bills
-        </button>
-        <button
-          onClick={() => { setActiveTab('history'); handleCloseManualForm(); }}
-          className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
-            activeTab === 'history'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-400 hover:text-slate-600'
-          }`}
-        >
-          📋 Payment History
-        </button>
+        {canReadPending && (
+          <button
+            onClick={() => { setActiveTab('pending'); handleCloseManualForm(); }}
+            className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+              activeTab === 'pending'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            ⏳ Pending Bills
+          </button>
+        )}
+        {canReadHistory && (
+          <button
+            onClick={() => { setActiveTab('history'); handleCloseManualForm(); }}
+            className={`pb-4 text-sm font-bold flex items-center gap-2 border-b-2 transition-all ${
+              activeTab === 'history'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-400 hover:text-slate-600'
+            }`}
+          >
+            📋 Payment History
+          </button>
+        )}
       </div>
 
       {/* SUMMARY BANNER */}

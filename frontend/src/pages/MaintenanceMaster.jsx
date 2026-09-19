@@ -3,10 +3,28 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const MaintenanceMaster = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('particulars'); // 'particulars' or 'sub-products'
+  const { canRead, canCreate, canUpdate, canDelete } = useAuth();
+
+  const canReadParticulars = canRead('maintenance-particulars');
+  const canReadSubProducts = canRead('maintenance-sub-products');
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadParticulars) return 'particulars';
+    if (canReadSubProducts) return 'sub-products';
+    return 'particulars';
+  });
+
+  useEffect(() => {
+    if (activeTab === 'particulars' && !canReadParticulars && canReadSubProducts) {
+      setActiveTab('sub-products');
+    } else if (activeTab === 'sub-products' && !canReadSubProducts && canReadParticulars) {
+      setActiveTab('particulars');
+    }
+  }, [canReadParticulars, canReadSubProducts, activeTab]);
 
   // ==========================================
   // PARTICULARS STATE
@@ -356,30 +374,34 @@ const MaintenanceMaster = () => {
 
       {/* TABS SELECTOR */}
       <div className="flex border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('particulars')}
-          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'particulars'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span>📁</span> Maintenance Particulars ({totalParticularsCount})
-        </button>
-        <button
-          onClick={() => setActiveTab('sub-products')}
-          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'sub-products'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span>🔩</span> Sub Products ({totalSubProductsCount})
-        </button>
+        {canReadParticulars && (
+          <button
+            onClick={() => setActiveTab('particulars')}
+            className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'particulars'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>📁</span> Maintenance Particulars ({totalParticularsCount})
+          </button>
+        )}
+        {canReadSubProducts && (
+          <button
+            onClick={() => setActiveTab('sub-products')}
+            className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'sub-products'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>🔩</span> Sub Products ({totalSubProductsCount})
+          </button>
+        )}
       </div>
 
       {/* TAB 1: PARTICULARS */}
-      {activeTab === 'particulars' && (
+      {activeTab === 'particulars' && canReadParticulars && (
         <div className="card-premium space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <div className="w-full sm:w-80">

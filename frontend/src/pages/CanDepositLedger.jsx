@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const CanDepositLedger = () => {
+  const { canCreate, canUpdate, canDelete } = useAuth();
   // User context
   const currentUser = localStorage.getItem('kemps_username') || 'admin';
   const isAdmin = currentUser === 'admin';

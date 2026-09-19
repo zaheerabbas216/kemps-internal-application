@@ -3,11 +3,27 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const CanSupply = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+  
+  const canReadBalances = canRead('can-supply-balances');
+  const canReadWorkspace = canRead('can-supply-workspace');
+  const canReadBilling = canRead('can-supply-billing');
+  const canReadPayments = canRead('can-supply-payments');
+  const canReadReports = canRead('can-supply-reports');
+
   // Tabs: 'active-balances' | 'workspace' | 'billing-workspace' | 'outstanding-payments' | 'reports'
-  const [activeTab, setActiveTab] = useState('active-balances');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadBalances) return 'active-balances';
+    if (canReadWorkspace) return 'workspace';
+    if (canReadBilling) return 'billing-workspace';
+    if (canReadPayments) return 'outstanding-payments';
+    if (canReadReports) return 'reports';
+    return 'active-balances';
+  });
 
   // Master / State variables
   const [activeBalances, setActiveBalances] = useState([]);
@@ -1454,37 +1470,42 @@ const CanSupply = () => {
         <div className="flex flex-wrap items-center gap-3 self-end md:self-center">
           {/* Tab Selection */}
           <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40">
-            <button
-              type="button"
-              onClick={() => setActiveTab('active-balances')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'active-balances'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              📋 Balances
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('workspace')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'workspace'
-                ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100'
-                : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50'
-                }`}
-            >
-              🚚 Workspace
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab('reports')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'reports'
-                ? 'bg-white text-slate-800 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-                }`}
-            >
-              📈 Reports
-            </button>
+            {canReadBalances && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('active-balances')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'active-balances'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                📋 Balances
+              </button>
+            )}
+            {canReadWorkspace && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('workspace')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'workspace'
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-100'
+                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50/50'
+                  }`}
+              >
+                🚚 Workspace
+              </button>
+            )}
+            {canReadReports && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('reports')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-black tracking-wider transition-all uppercase ${activeTab === 'reports'
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
+              >
+                📈 Reports
+              </button>
+            )}
           </div>
         </div>
       </div>

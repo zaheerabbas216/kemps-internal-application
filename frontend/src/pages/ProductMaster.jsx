@@ -3,10 +3,20 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const ProductMaster = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('finished-products'); // 'finished-products' or 'raw-materials'
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+  
+  const canReadFinished = canRead('product-master-finished');
+  const canReadRaw = canRead('product-master-raw');
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadFinished) return 'finished-products';
+    if (canReadRaw) return 'raw-materials';
+    return 'finished-products';
+  });
 
   // ==========================================
   // RAW MATERIALS STATE
@@ -610,32 +620,36 @@ const ProductMaster = () => {
 
       {/* TABS SELECTOR */}
       <div className="flex border-b border-slate-200/80">
-        <button
-          onClick={() => setActiveTab('finished-products')}
-          className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
-            activeTab === 'finished-products' 
-              ? 'text-primary' 
-              : 'text-slate-400 hover:text-slate-650'
-          }`}
-        >
-          <span>🛒</span> Finished Products
-          {activeTab === 'finished-products' && (
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('raw-materials')}
-          className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
-            activeTab === 'raw-materials' 
-              ? 'text-primary' 
-              : 'text-slate-400 hover:text-slate-650'
-          }`}
-        >
-          <span>🪨</span> Raw Materials
-          {activeTab === 'raw-materials' && (
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
-          )}
-        </button>
+        {canReadFinished && (
+          <button
+            onClick={() => setActiveTab('finished-products')}
+            className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
+              activeTab === 'finished-products' 
+                ? 'text-primary' 
+                : 'text-slate-400 hover:text-slate-650'
+            }`}
+          >
+            <span>🛒</span> Finished Products
+            {activeTab === 'finished-products' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
+            )}
+          </button>
+        )}
+        {canReadRaw && (
+          <button
+            onClick={() => setActiveTab('raw-materials')}
+            className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
+              activeTab === 'raw-materials' 
+                ? 'text-primary' 
+                : 'text-slate-400 hover:text-slate-650'
+            }`}
+          >
+            <span>🪨</span> Raw Materials
+            {activeTab === 'raw-materials' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
+            )}
+          </button>
+        )}
       </div>
 
       {activeTab === 'finished-products' ? (

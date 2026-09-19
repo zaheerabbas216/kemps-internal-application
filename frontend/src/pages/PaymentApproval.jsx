@@ -1,6 +1,7 @@
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Helpers ────────────────────────────────
 const fmt = (n) =>
@@ -231,6 +232,12 @@ const TransactionCard = ({ entry, onApprove, onReject, onView }) => {
 
 // ─── Main Component ──────────────────────────
 const PaymentApproval = () => {
+  const { canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadApprovals = canRead('payment-approval-tab');
+  const canReadCashLedger = canRead('payment-approval-cash');
+  const canReadDailySummary = canRead('payment-approval-summary');
+
   // Summary
   const [summary, setSummary] = useState({
     totalPending: 0, pendingCashIn: 0, pendingCashOut: 0,
@@ -254,7 +261,12 @@ const PaymentApproval = () => {
   const [search, setSearch] = useState('');
 
   // Daily summary tab
-  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals' | 'cashLedger' | 'dailySummary'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadApprovals) return 'approvals';
+    if (canReadCashLedger) return 'cashLedger';
+    if (canReadDailySummary) return 'dailySummary';
+    return 'approvals';
+  });
   const [dailyDate, setDailyDate] = useState(istToday());
   const [dailySummary, setDailySummary] = useState(null);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -407,24 +419,30 @@ const PaymentApproval = () => {
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setActiveTab('approvals')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'approvals' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-          >
-            📋 Transactions
-          </button>
-          <button
-            onClick={() => setActiveTab('cashLedger')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'cashLedger' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-          >
-            📒 Cash Ledger
-          </button>
-          <button
-            onClick={() => setActiveTab('dailySummary')}
-            className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'dailySummary' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
-          >
-            📅 Daily Summary
-          </button>
+          {canReadApprovals && (
+            <button
+              onClick={() => setActiveTab('approvals')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'approvals' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              📋 Transactions
+            </button>
+          )}
+          {canReadCashLedger && (
+            <button
+              onClick={() => setActiveTab('cashLedger')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'cashLedger' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              📒 Cash Ledger
+            </button>
+          )}
+          {canReadDailySummary && (
+            <button
+              onClick={() => setActiveTab('dailySummary')}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all border ${activeTab === 'dailySummary' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
+            >
+              📅 Daily Summary
+            </button>
+          )}
         </div>
       </div>
 

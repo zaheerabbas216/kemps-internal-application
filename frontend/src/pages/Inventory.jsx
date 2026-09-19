@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Inventory = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [bills, setBills] = useState([]);
@@ -1208,12 +1210,14 @@ const Inventory = () => {
               <p className="text-slate-500 text-sm font-medium mt-1">Record raw material purchases and supplier bills.</p>
             </div>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={() => handleOpenForm()}
-                className="btn-premium btn-primary-premium h-12"
-              >
-                <span className="text-xl">+</span> Add Inventory Bill
-              </button>
+              {canCreate('inventory') && (
+                <button 
+                  onClick={() => handleOpenForm()}
+                  className="btn-premium btn-primary-premium h-12"
+                >
+                  <span className="text-xl">+</span> Add Inventory Bill
+                </button>
+              )}
               <button 
                 onClick={() => navigate('/inventory-history')}
                 className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -1319,18 +1323,22 @@ const Inventory = () => {
                             >
                               View
                             </button>
-                            <button 
-                              onClick={() => handleOpenForm(bill)}
-                              className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                            >
-                              Edit
-                            </button>
-                            <button 
-                              onClick={() => confirmDelete(bill)}
-                              className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                            >
-                              Delete
-                            </button>
+                            {canUpdate('inventory') && (
+                              <button 
+                                onClick={() => handleOpenForm(bill)}
+                                className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDelete('inventory') && (
+                              <button 
+                                onClick={() => confirmDelete(bill)}
+                                className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                              >
+                                Delete
+                              </button>
+                            )}
                             <button 
                               onClick={async () => {
                                 try {

@@ -4,6 +4,7 @@ import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 
 const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, ledgerStocks = {} }) => {
@@ -179,6 +180,7 @@ const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, led
 
 const Production = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [batches, setBatches] = useState([]);
@@ -915,12 +917,14 @@ const Production = () => {
               <p className="text-slate-500 text-sm font-medium mt-1">Log final product outputs and automatically calculate material counts</p>
             </div>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={handleOpenAdd}
-                className="btn-premium btn-primary-premium h-12"
-              >
-                <span className="text-xl">+</span> Add Production
-              </button>
+              {canCreate('production') && (
+                <button 
+                  onClick={handleOpenAdd}
+                  className="btn-premium btn-primary-premium h-12"
+                >
+                  <span className="text-xl">+</span> Add Production
+                </button>
+              )}
               <button 
                 onClick={() => navigate('/production-history')}
                 className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -1030,18 +1034,22 @@ const Production = () => {
                             >
                               View
                             </button>
-                            <button
-                              onClick={() => handleOpenEdit(b)}
-                              className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => confirmDelete(b.id)}
-                              className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                            >
-                              Delete
-                            </button>
+                            {canUpdate('production') && (
+                              <button
+                                onClick={() => handleOpenEdit(b)}
+                                className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDelete('production') && (
+                              <button
+                                onClick={() => confirmDelete(b.id)}
+                                className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

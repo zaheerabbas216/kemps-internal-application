@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 // Currency formatting helper
 const formatINR = (val) =>
@@ -26,6 +27,7 @@ const getTodayIST = () => {
 
 const SundayLoading = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
   const today = getTodayIST();
 
   // Dropdown lists
@@ -668,23 +670,25 @@ const SundayLoading = () => {
             >
               Reset
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isOverpaid}
-              className="px-8 h-12 rounded-xl bg-primary hover:bg-primary-focus text-white text-xs font-black shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="loading loading-spinner loading-xs"></span>
-                  <span>Saving Record...</span>
-                </>
-              ) : (
-                <>
-                  <span>✓</span>
-                  <span>SUBMIT SUNDAY LOADING</span>
-                </>
-              )}
-            </button>
+            {canCreate('sunday-loading') && (
+              <button
+                type="submit"
+                disabled={isSubmitting || isOverpaid}
+                className="px-8 h-12 rounded-xl bg-primary hover:bg-primary-focus text-white text-xs font-black shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs"></span>
+                    <span>Saving Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>☀️</span>
+                    <span>Record Sunday Loading</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>

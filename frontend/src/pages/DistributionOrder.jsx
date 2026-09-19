@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const getTodayIST = () => {
   const now = new Date();
@@ -16,9 +17,19 @@ const getTodayIST = () => {
 
 const DistributionOrder = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadActive = canRead('distribution-order-active');
+  const canReadNew = canRead('distribution-order-new') || canCreate('distribution-order') || canUpdate('distribution-order');
+  const canReadHistory = canRead('distribution-order-history');
 
   // Active view tabs: 'active' | 'new' | 'history'
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadActive) return 'active';
+    if (canReadNew) return 'new';
+    if (canReadHistory) return 'history';
+    return 'active';
+  });
 
   // Master lists
   const [finishedProducts, setFinishedProducts] = useState([]);
@@ -515,30 +526,36 @@ const DistributionOrder = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Book and manage wholesale distributor shipments</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40 shrink-0">
-          <button
-            onClick={() => { setActiveTab('active'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'active' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 Active Orders
-          </button>
-          <button
-            onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {isEditing ? '✏️ Edit Order' : '🚚 New Order'}
-          </button>
-          <button
-            onClick={() => { setActiveTab('history'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ⏳ History
-          </button>
+          {canReadActive && (
+            <button
+              onClick={() => { setActiveTab('active'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'active' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 Active Orders
+            </button>
+          )}
+          {canReadNew && (
+            <button
+              onClick={() => setActiveTab('new')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {isEditing ? '✏️ Edit Order' : '🚚 New Order'}
+            </button>
+          )}
+          {canReadHistory && (
+            <button
+              onClick={() => { setActiveTab('history'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ⏳ History
+            </button>
+          )}
         </div>
       </div>
 

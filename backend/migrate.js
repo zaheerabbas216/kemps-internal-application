@@ -13,16 +13,58 @@ function quoteIdentifier(identifier) {
 async function ensureCoreTables(connection) {
   console.log('Creating core tables if not exists...');
 
+  // ── RBAC: Create roles & role_permissions before admins (FK dependency) ──
   await connection.query(`
-    CREATE TABLE IF NOT EXISTS admins (
-      id INT AUTO_INCREMENT PRIMARY KEY,
-      username VARCHAR(50) UNIQUE NOT NULL,
-      password VARCHAR(255) NOT NULL,
-      name VARCHAR(100),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    CREATE TABLE IF NOT EXISTS roles (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      name        VARCHAR(100) UNIQUE NOT NULL,
+      description TEXT,
+      created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      id         INT AUTO_INCREMENT PRIMARY KEY,
+      role_id    INT          NOT NULL,
+      module     VARCHAR(100) NOT NULL,
+      can_read   TINYINT(1)   NOT NULL DEFAULT 0,
+      can_create TINYINT(1)   NOT NULL DEFAULT 0,
+      can_update TINYINT(1)   NOT NULL DEFAULT 0,
+      can_delete TINYINT(1)   NOT NULL DEFAULT 0,
+      UNIQUE KEY uq_role_module (role_id, module),
+      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS admins (
+      id         INT AUTO_INCREMENT PRIMARY KEY,
+      username   VARCHAR(50)  UNIQUE NOT NULL,
+      password   VARCHAR(255) NOT NULL,
+      name       VARCHAR(100),
+      role_id    INT          NULL DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // ── Migration: add role_id to existing admins table if missing ──
+  try {
+    const [cols] = await connection.query(`SHOW COLUMNS FROM admins LIKE 'role_id'`);
+    if (cols.length === 0) {
+      await connection.query(`ALTER TABLE admins ADD COLUMN role_id INT NULL DEFAULT NULL`);
+      await connection.query(`
+        ALTER TABLE admins ADD CONSTRAINT fk_admin_role
+          FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
+      `);
+      console.log('Migration: added role_id column and FK to admins table.');
+    }
+  } catch (e) {
+    console.warn('Migration note (role_id):', e.message);
+  }
 
   await connection.query(`
     CREATE TABLE IF NOT EXISTS customers (

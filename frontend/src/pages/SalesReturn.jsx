@@ -2,10 +2,22 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const SalesReturn = () => {
+  const { canCreate, canUpdate, canRead } = useAuth();
+  
+  const canReadNew = canRead('sales-return-new') || canCreate('sales-return');
+  const canReadHistory = canRead('sales-return-history');
+  const canReadReports = canRead('sales-return-reports');
+
   // Tabs: 'new', 'history', 'reports'
-  const [activeTab, setActiveTab] = useState('new');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadNew) return 'new';
+    if (canReadHistory) return 'history';
+    if (canReadReports) return 'reports';
+    return 'new';
+  });
 
   // Customer & Invoice States
   const [customers, setCustomers] = useState([]);
@@ -500,30 +512,36 @@ const SalesReturn = () => {
 
         {/* WORKSPACE NAVIGATION TABS */}
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/40 w-fit">
-          <button
-            onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ↩ NEW RETURN
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 RETURN HISTORY
-          </button>
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'reports' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📊 REPORTS
-          </button>
+          {canReadNew && (
+            <button
+              onClick={() => setActiveTab('new')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ↩ NEW RETURN
+            </button>
+          )}
+          {canReadHistory && (
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 RETURN HISTORY
+            </button>
+          )}
+          {canReadReports && (
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'reports' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📊 REPORTS
+            </button>
+          )}
         </div>
       </div>
 

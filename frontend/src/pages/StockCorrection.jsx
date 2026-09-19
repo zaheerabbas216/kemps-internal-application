@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import { useAuth } from '../context/AuthContext';
 
 
 const StockCorrection = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate } = useAuth();
 
   // Selected date
   const getTodayISTStr = () => {
@@ -444,24 +446,26 @@ const StockCorrection = () => {
         )}
 
         {/* SAVE BUTTON */}
-        <button
-          type="submit"
-          disabled={saving || !selectedRmId}
-          className={`btn-premium w-full h-14 text-sm font-bold uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${
-            saving || !selectedRmId
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
-              : 'btn-primary-premium shadow-primary/25'
-          }`}
-        >
-          {saving ? (
-            <span className="loading loading-spinner text-white"></span>
-          ) : (
-            <>
-              <span>💾</span>
-              Save Stock Correction
-            </>
-          )}
-        </button>
+        {(canCreate('stock-correction') || canUpdate('stock-correction')) && (
+          <button
+            type="submit"
+            disabled={saving || !selectedRmId}
+            className={`btn-premium w-full h-14 text-sm font-bold uppercase tracking-wider transition-all duration-200 flex items-center justify-center gap-2 shadow-lg ${
+              saving || !selectedRmId
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
+                : 'btn-primary-premium shadow-primary/25'
+            }`}
+          >
+            {saving ? (
+              <span className="loading loading-spinner text-white"></span>
+            ) : (
+              <>
+                <span>💾</span>
+                Save Stock Correction
+              </>
+            )}
+          </button>
+        )}
       </form>
     </div>
   );

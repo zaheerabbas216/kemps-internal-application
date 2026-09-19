@@ -4,13 +4,22 @@ import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
 import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const Loading = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadActive = canRead('loading-active');
+  const canReadHistory = canRead('loading-history');
 
   // Active workspace tabs: 'new-loading' | 'active-profiles' | 'history'
-  const [activeTab, setActiveTab] = useState('active-profiles');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadActive) return 'active-profiles';
+    if (canReadHistory) return 'history';
+    return 'active-profiles';
+  });
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Master lists
@@ -884,17 +893,19 @@ const Loading = () => {
               <p className="text-slate-500 text-sm font-medium mt-1">Manage daily loading sheets and log trips for customers</p>
             </div>
             <div className="flex gap-2">
-              <button 
-                type="button"
-                onClick={() => {
-                  setFormError('');
-                  setFormSuccess('');
-                  setIsFormOpen(true);
-                }}
-                className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-1.5"
-              >
-                🚚 New Loading
-              </button>
+              {canCreate('loading') && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setFormError('');
+                    setFormSuccess('');
+                    setIsFormOpen(true);
+                  }}
+                  className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-1.5"
+                >
+                  🚚 New Loading
+                </button>
+              )}
             </div>
           </div>
 
@@ -905,28 +916,32 @@ const Loading = () => {
                 <span>📋</span> View Loading Sheets
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('active-profiles')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-                    activeTab === 'active-profiles'
-                      ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  ⚡ Active Today ({activeProfiles.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('history')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-                    activeTab === 'history'
-                      ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  ⏳ Completed / History
-                </button>
+                {canReadActive && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('active-profiles')}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                      activeTab === 'active-profiles'
+                        ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    ⚡ Active Today ({activeProfiles.length})
+                  </button>
+                )}
+                {canReadHistory && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                      activeTab === 'history'
+                        ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    ⏳ Completed / History
+                  </button>
+                )}
               </div>
             </div>
           </div>
