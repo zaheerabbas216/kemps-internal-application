@@ -347,6 +347,12 @@ router.put('/tasks/:id', async (req, res) => {
 
     const [updatedRows] = await pool.query('SELECT * FROM imp_work_tasks WHERE id = ?', [id]);
 
+    // Notify every connected client after the update has been committed.
+    broadcastEvent('IMP_WORK_UPDATED', {
+      action: 'updated',
+      task: updatedRows[0]
+    });
+
     res.json({
       ok: true,
       message: 'Task updated successfully',
@@ -418,6 +424,11 @@ router.patch('/tasks/:id/status', async (req, res) => {
       [id]
     );
 
+    broadcastEvent('IMP_WORK_UPDATED', {
+      action: 'status_updated',
+      task: updatedRows[0]
+    });
+
     res.json({
       ok: true,
       message: `Task marked as ${targetStatus}`,
@@ -433,11 +444,20 @@ router.patch('/tasks/:id/status', async (req, res) => {
 router.delete('/tasks/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    const [existing] = await pool.query(
+      'SELECT id, title, status FROM imp_work_tasks WHERE id = ?',
+      [id]
+    );
     const [result] = await pool.query('DELETE FROM imp_work_tasks WHERE id = ?', [id]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ ok: false, error: 'Task not found' });
     }
+
+    broadcastEvent('IMP_WORK_UPDATED', {
+      action: 'deleted',
+      task: existing[0] || { id }
+    });
 
     res.json({ ok: true, message: 'Task deleted successfully' });
   } catch (error) {
