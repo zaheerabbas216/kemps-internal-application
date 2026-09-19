@@ -172,12 +172,15 @@ export function AuthProvider({ children }) {
     localStorage.setItem(KEYS.isSuperAdmin, String(!!userData.isSuperAdmin));
     localStorage.setItem(KEYS.permissions,  JSON.stringify(permissions || {}));
     setAuthState(readAuth());
+    window.dispatchEvent(new Event('kemps_auth_change'));
   }, []);
 
   // Called on logout
   const logout = useCallback(() => {
     Object.values(KEYS).forEach(k => localStorage.removeItem(k));
     setAuthState(readAuth());
+    window.dispatchEvent(new Event('kemps_auth_change'));
+    window.location.href = '/login';
   }, []);
 
   // ── Permission helpers ──
@@ -198,6 +201,8 @@ export function AuthProvider({ children }) {
   const canDelete = useCallback((module) => checkPerm(module, 'delete'), [checkPerm]);
 
   const getFirstPermittedPath = useCallback((customPerms = null, customIsSuperAdmin = null) => {
+    const isLoggedIn = localStorage.getItem(KEYS.loggedIn) === 'true';
+    if (!isLoggedIn) return '/login';
     const isSuper = customIsSuperAdmin !== null ? customIsSuperAdmin : authState.isSuperAdmin;
     if (isSuper) return '/dashboard';
     const perms = customPerms || authState.permissions || {};

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
+import SearchInput from '../components/common/SearchInput';
 
 const ToolsInventory = () => {
   // Active Tab: 'STOCK_IN', 'STOCK_OUT', 'LEDGER', 'HISTORY'
@@ -1639,23 +1640,13 @@ const ToolsInventory = () => {
                 </select>
               </div>
 
-              <div className="w-full sm:w-64 relative">
-                <input
-                  type="text"
+              <div className="w-full sm:w-64">
+                <SearchInput
                   value={ledgerSearch}
                   onChange={(e) => setLedgerSearch(e.target.value)}
                   placeholder="Type to search part, machine..."
-                  className="w-full h-10 pl-8 pr-8 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs outline-none focus:border-primary font-medium"
+                  size="sm"
                 />
-                <span className="absolute left-2.5 top-3 text-xs text-slate-400">🔍</span>
-                {ledgerSearch && (
-                  <button
-                    onClick={() => setLedgerSearch('')}
-                    className="absolute right-2.5 top-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                )}
               </div>
             </div>
           </div>
@@ -1891,12 +1882,12 @@ const ToolsInventory = () => {
 
               {/* Search & Export */}
               <div className="flex items-center gap-2.5">
-                <input
-                  type="text"
+                <SearchInput
                   value={historySearch}
                   onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); }}
                   placeholder="Search spare part, machine, company, bill..."
-                  className="h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 text-xs outline-none focus:border-primary w-64 font-medium"
+                  className="w-64"
+                  size="sm"
                 />
                 <button
                   onClick={handleExportCSV}

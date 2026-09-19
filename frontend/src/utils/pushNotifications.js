@@ -1,0 +1,104 @@
+/**
+ * Convert VAPID Public Key from Base64 string to Uint8Array required by pushManager.subscribe
+ */
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding)
+    .replace(/-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Check browser support and current permission status
+ */
+export async function getPushNotificationStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    return { supported: false, permission: 'unsupported', subscribed: false };
+  }
+
+  const permission = Notification.permission;
+  let subscribed = false;
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const existingSub = await registration.pushManager.getSubscription();
+    subscribed = !!existingSub;
+  } catch (err) {
+    console.warn('Error checking push subscription:', err);
+  }
+
+  return { supported: true, permission, subscribed };
+}
+
+/**
+ * Register Service Worker, prompt for permission, fetch VAPID key, and subscribe device
+ */
+export async function subscribeUserToPush(apiClient, username) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push notifications are not supported by this browser.');
+  }
+
+  // 1. Request browser notification permission
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    throw new Error('Notification permission was denied.');
+  }
+
+  // 2. Ensure Service Worker is registered & ready
+  const registration = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+
+  // 3. Get VAPID public key from backend
+  const res = await apiClient.get('/notifications/vapid-public-key');
+  if (!res.data || !res.data.ok || !res.data.publicKey) {
+    throw new Error('Failed to retrieve VAPID public key from server.');
+  }
+
+  const convertedVapidKey = urlBase64ToUint8Array(res.data.publicKey);
+
+  // 4. Subscribe with PushManager
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: convertedVapidKey
+    });
+  }
+
+  // 5. Send subscription JSON payload to backend DB
+  const subJson = subscription.toJSON();
+  await apiClient.post('/notifications/subscribe', {
+    subscription: subJson,
+    username: username || 'User'
+  });
+
+  return subscription;
+}
+
+/**
+ * Unsubscribe user device from push notifications
+ */
+export async function unsubscribeUserFromPush(apiClient) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  const registration = await navigator.serviceWorker.ready;
+  const subscription = await registration.pushManager.getSubscription();
+
+  if (subscription) {
+    const endpoint = subscription.endpoint;
+    await subscription.unsubscribe();
+    try {
+      await apiClient.post('/notifications/unsubscribe', { endpoint });
+    } catch (err) {
+      console.warn('Failed to unregister endpoint from server:', err);
+    }
+  }
+}

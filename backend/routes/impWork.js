@@ -1,5 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { sendPushNotificationToAll } from '../utils/pushService.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -272,10 +274,23 @@ router.post('/tasks', async (req, res) => {
       [id]
     );
 
+    const newTask = createdRows[0];
+
+    // Broadcast Web Push notification to all subscribers (online & offline)
+    sendPushNotificationToAll({
+      title: `📌 New IMP Work: ${newTask.title}`,
+      body: `Assigned to: ${newTask.assigned_to} | Priority: ${newTask.priority} | By: ${newTask.assigned_by}`,
+      url: '/imp-work',
+      tag: `imp-work-${newTask.id}`
+    }).catch((pushErr) => console.error('[PushNotify] Error broadcasting push:', pushErr));
+
+    // Broadcast SSE event for real-time live UI updates
+    broadcastEvent('IMP_WORK_UPDATED', { action: 'created', task: newTask });
+
     res.status(201).json({
       ok: true,
       message: 'Task created successfully',
-      task: createdRows[0]
+      task: newTask
     });
   } catch (error) {
     console.error('Error creating imp work task:', error);

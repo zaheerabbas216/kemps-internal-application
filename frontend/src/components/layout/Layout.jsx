@@ -2,13 +2,16 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
-import { useSSEContext } from '../../context/SSEContext';
+import { useSSEStatus } from '../../hooks/useSSE';
+import { usePushNotification } from '../../hooks/usePushNotification';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isSuperAdmin, logout, getFirstPermittedPath } = useAuth();
-  const { status: sseStatus } = useSSEContext();
+  const { status: sseStatus, reconnect: reconnectSSE } = useSSEStatus();
+  // Manage browser push notifications
+  const { supported: pushSupported, permission: pushPermission, subscribed: pushSubscribed, subscribe: subscribePush } = usePushNotification({ autoPrompt: true });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('kemps_sidebar_collapsed') === 'true';
@@ -42,7 +45,6 @@ const Layout = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
   };
 
   // Dynamic page title based on path
@@ -158,6 +160,24 @@ const Layout = () => {
 
       {/* Main Panel */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#f8fbff]">
+        {/* Push Notification Permission Prompt Banner */}
+        {pushSupported && pushPermission === 'default' && !pushSubscribed && (
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm border-b border-indigo-500/30 z-30 shrink-0 shadow-md">
+            <div className="flex items-center gap-2.5">
+              <span className="text-base animate-bounce">🔔</span>
+              <span className="font-semibold text-slate-100">
+                Enable Push Notifications for real-time IMP Work task alerts even when your browser is closed.
+              </span>
+            </div>
+            <button
+              onClick={() => subscribePush().catch(() => {})}
+              className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-extrabold px-3 py-1.5 rounded-xl text-xs transition-all shadow-sm shrink-0"
+            >
+              Enable Notifications
+            </button>
+          </div>
+        )}
+
         <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-3 sm:px-6 md:px-10 shrink-0 z-20 flex-nowrap">
           {/* Mobile Hamburg & Logo */}
           <div className="flex items-center gap-2 sm:gap-3 lg:hidden shrink-0">
@@ -202,7 +222,11 @@ const Layout = () => {
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-1.5 sm:gap-3 bg-slate-50 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-100">
+                <div 
+                  onClick={reconnectSSE}
+                  title="Click to check or reconnect live server connection"
+                  className="flex items-center gap-1.5 sm:gap-3 bg-slate-50 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-100 cursor-pointer hover:bg-slate-100/70 transition-all"
+                >
                   <span className={`w-2 h-2 rounded-full shrink-0 ${
                     sseStatus === 'CONNECTED' 
                       ? 'bg-emerald-500 animate-pulse' 

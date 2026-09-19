@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 import { useAuth } from '../context/AuthContext';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -960,12 +961,12 @@ const TotalSales = () => {
               // Customer list
               <>
                 <div className="flex items-center gap-3">
-                  <input
-                    type="text"
+                  <SearchInput
                     placeholder="Search customer name or phone..."
                     value={custSearch}
                     onChange={e => { setCustSearch(e.target.value); setCustPage(1); }}
-                    className="flex-1 h-10 px-4 rounded-xl border border-slate-200 bg-white text-sm text-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all"
+                    className="flex-1"
+                    size="sm"
                   />
                   <button
                     onClick={() => {

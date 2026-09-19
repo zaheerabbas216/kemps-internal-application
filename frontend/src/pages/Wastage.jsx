@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import SearchInput from '../components/common/SearchInput';
 
 const Wastage = () => {
   const navigate = useNavigate();
@@ -599,29 +600,16 @@ const Wastage = () => {
           </div>
 
           {/* Search Box */}
-          <div className="md:col-span-5 relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-            <input
-              type="text"
-              placeholder="Search reference #, raw material, finished product, remarks..."
+          <div className="md:col-span-5">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setPage(1);
               }}
-              className="w-full h-10 pl-9 pr-8 rounded-xl border border-slate-200 bg-white text-slate-800 text-xs font-medium outline-none focus:border-primary shadow-xs"
+              placeholder="Search reference #, raw material, finished product, remarks..."
+              size="sm"
             />
-            {searchQuery && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setPage(1);
-                }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs"
-              >
-                ✕
-              </button>
-            )}
           </div>
         </div>
 

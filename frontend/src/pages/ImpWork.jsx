@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
+import { usePushNotification } from '../hooks/usePushNotification';
+import { useSSERefetch } from '../hooks/useSSE';
+import SearchInput from '../components/common/SearchInput';
 
 const CATEGORIES = [
   'General',
@@ -59,6 +62,27 @@ const ImpWork = () => {
 
   // Form State
   const loggedInUser = localStorage.getItem('kemps_name') || localStorage.getItem('kemps_username') || 'Admin';
+
+  // Consume Custom Hooks
+  const { supported: pushSupported, subscribed: pushSubscribed, loading: pushLoading, togglePush } = usePushNotification({ autoPrompt: true });
+
+  // Auto-refetch tasks & stats live whenever an IMP_WORK_UPDATED SSE event occurs across the system
+  useSSERefetch('IMP_WORK_UPDATED', () => {
+    fetchData();
+  });
+
+  const handleTogglePush = async () => {
+    try {
+      const isSubscribedNow = await togglePush();
+      if (isSubscribedNow) {
+        showNotification('Push notifications activated! You will receive alerts even when offline. 🔔');
+      } else {
+        showNotification('Push notifications disabled for this device');
+      }
+    } catch (err) {
+      showNotification(err.message || 'Failed to update push notifications', false);
+    }
+  };
 
   const [formData, setFormData] = useState({
     title: '',
@@ -386,6 +410,21 @@ const ImpWork = () => {
 
           <div className="flex items-center gap-3 shrink-0">
             <button
+              onClick={handleTogglePush}
+              disabled={pushLoading || !pushSupported}
+              className={`px-4 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 border backdrop-blur-md ${
+                pushSubscribed
+                  ? 'bg-emerald-500/25 text-emerald-100 border-emerald-400/40 hover:bg-emerald-500/35 shadow-lg shadow-emerald-900/20'
+                  : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
+              }`}
+              title={pushSubscribed ? 'Push Notifications Active (Click to disable)' : 'Enable Push Notifications'}
+            >
+              <span className="text-base">{pushSubscribed ? '🔔' : '🔕'}</span>
+              <span className="hidden sm:inline">
+                {pushLoading ? 'Updating...' : pushSubscribed ? 'Push Active' : 'Enable Push'}
+              </span>
+            </button>
+            <button
               onClick={fetchData}
               disabled={loading}
               className="px-4 py-3 bg-white/15 hover:bg-white/25 active:scale-95 text-white rounded-2xl font-bold text-sm transition-all flex items-center gap-2 border border-white/20 backdrop-blur-md"
@@ -545,14 +584,12 @@ const ImpWork = () => {
       <div className="bg-white p-4 md:p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
           {/* Search Box */}
-          <div className="md:col-span-4 relative">
-            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-            <input
-              type="text"
+          <div className="md:col-span-4">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search by Title, Assignee, Notes, ID..."
-              className="input-premium pl-10 text-sm"
+              size="md"
             />
           </div>
 

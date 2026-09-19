@@ -21,6 +21,9 @@ export function addClient(req, res) {
   // Add to active clients set
   clients.add(res);
 
+  // Write initial comment line to force proxies (Nginx/Cloudflare) to open stream instantly
+  res.write(':ping\n\n');
+
   // Send initial connected event
   const initData = JSON.stringify({ message: 'Connected to real-time events', timestamp: new Date().toISOString() });
   res.write(`event: CONNECTED\ndata: ${initData}\n\n`);
@@ -60,7 +63,7 @@ export function getClientCount() {
   return clients.size;
 }
 
-// Keep-alive heartbeat every 25 seconds
+// Keep-alive heartbeat every 15 seconds
 setInterval(() => {
   for (const client of clients) {
     try {
@@ -69,4 +72,4 @@ setInterval(() => {
       clients.delete(client);
     }
   }
-}, 25000);
+}, 15000);

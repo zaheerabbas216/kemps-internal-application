@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import api from '../api/axios';
+import SearchInput from '../components/common/SearchInput';
 
 const WeightMeasurement = () => {
   // Filters & Pagination state
@@ -777,26 +778,16 @@ const WeightMeasurement = () => {
 
           {/* Search Bar */}
           <div className="flex items-center gap-3 flex-1 max-w-md">
-            <div className="relative w-full">
-              <span className="absolute left-3.5 top-3 text-slate-400 text-sm">🔍</span>
-              <input
-                type="text"
+            <div className="w-full">
+              <SearchInput
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
                 placeholder="Search product, reading, ID..."
-                className="w-full h-11 pl-9 pr-4 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none font-medium"
+                size="md"
               />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                >
-                  ✕
-                </button>
-              )}
             </div>
           </div>
         </div>

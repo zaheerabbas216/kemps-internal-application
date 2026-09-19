@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { getApiBaseUrl } from '../api/axios';
 
 const SSEContext = createContext(null);
 
@@ -8,7 +7,13 @@ export function SSEProvider({ children }) {
   const [lastEvent, setLastEvent] = useState(null);
   const eventSourceRef = useRef(null);
   const listenersRef = useRef(new Map()); // Map<eventType, Set<callback>>
-  const reconnectTimeoutRef = useRef(null);
+  const statusRef = useRef('OFFLINE'); // mirror of status for use inside closures
+
+  // Keep statusRef in sync
+  const updateStatus = useCallback((s) => {
+    statusRef.current = s;
+    setStatus(s);
+  }, []);
 
   // Subscribe helper
   const subscribe = useCallback((eventType, callback) => {
@@ -43,81 +48,63 @@ export function SSEProvider({ children }) {
     }
   }, []);
 
-  // Connect to SSE Endpoint
-  const connect = useCallback(() => {
+  // Internal: create and attach a fresh EventSource
+  const openConnection = useCallback(() => {
     const token = localStorage.getItem('kemps_auth_token');
     const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
 
     if (!isLoggedIn || !token) {
-      setStatus('OFFLINE');
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
+      updateStatus('OFFLINE');
       return;
     }
 
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
+    // If already open, just confirm the status and do nothing
+    if (eventSourceRef.current && eventSourceRef.current.readyState === 1 /* OPEN */) {
+      updateStatus('CONNECTED');
+      return;
     }
 
-    let apiBase = getApiBaseUrl().replace(/\/+$/, '');
-    if (apiBase.startsWith('/')) {
-      apiBase = `${window.location.origin}${apiBase}`;
+    // Close any stale connection
+    if (eventSourceRef.current) {
+      try { eventSourceRef.current.close(); } catch {}
+      eventSourceRef.current = null;
     }
-    const sseUrl = `${apiBase}/sse/events?token=${encodeURIComponent(token)}`;
+
+    const sseUrl = `/api/sse/events?token=${encodeURIComponent(token)}`;
 
     try {
-      setStatus('RECONNECTING');
+      updateStatus('RECONNECTING');
       const es = new EventSource(sseUrl);
       eventSourceRef.current = es;
 
-      es.onopen = () => {
-        setStatus('CONNECTED');
+      const markConnected = () => {
+        if (statusRef.current !== 'CONNECTED') updateStatus('CONNECTED');
       };
 
-      // Built-in SSE message handler
-      es.onmessage = (e) => {
-        setStatus('CONNECTED');
-      };
+      es.onopen = markConnected;
 
-      // Custom event listener for CONNECTED event
+      // CONNECTED handshake event from backend
       es.addEventListener('CONNECTED', (e) => {
-        setStatus('CONNECTED');
-        try {
-          const data = JSON.parse(e.data);
-          dispatchSSEEvent('CONNECTED', data);
-        } catch {}
+        markConnected();
+        try { dispatchSSEEvent('CONNECTED', JSON.parse(e.data)); } catch {}
       });
 
-      // Wildcard listener dispatching custom events
+      // All known application events
       const knownEvents = [
-        'INVENTORY_UPDATED',
-        'STOCK_CORRECTED',
-        'PET_BOTTLE_UPDATED',
-        'PRODUCTION_ADDED',
-        'TIMER_STATUS_CHANGED',
-        'ORDER_CREATED',
-        'ORDER_STATUS_UPDATED',
-        'DISTRIBUTION_ORDER_UPDATED',
-        'LOADING_SESSION_UPDATED',
-        'SUNDAY_LOADING_UPDATED',
-        'BILL_GENERATED',
-        'PAYMENT_APPROVAL_REQUESTED',
-        'PAYMENT_APPROVED',
-        'SALES_RETURN_CREATED',
-        'CAN_SUPPLY_LOGGED',
-        'CAN_DEPOSIT_UPDATED',
-        'MAINTENANCE_LOGGED',
-        'MAINTENANCE_MASTER_UPDATED'
+        'INVENTORY_UPDATED', 'STOCK_CORRECTED', 'PET_BOTTLE_UPDATED',
+        'PRODUCTION_ADDED', 'TIMER_STATUS_CHANGED', 'ORDER_CREATED',
+        'ORDER_STATUS_UPDATED', 'DISTRIBUTION_ORDER_UPDATED',
+        'LOADING_SESSION_UPDATED', 'SUNDAY_LOADING_UPDATED', 'BILL_GENERATED',
+        'PAYMENT_APPROVAL_REQUESTED', 'PAYMENT_APPROVED', 'SALES_RETURN_CREATED',
+        'CAN_SUPPLY_LOGGED', 'CAN_DEPOSIT_UPDATED', 'MAINTENANCE_LOGGED',
+        'MAINTENANCE_MASTER_UPDATED', 'IMP_WORK_UPDATED'
       ];
 
       knownEvents.forEach(eventType => {
         es.addEventListener(eventType, (e) => {
-          setStatus('CONNECTED');
+          markConnected();
           try {
-            const data = JSON.parse(e.data);
-            dispatchSSEEvent(eventType, data);
+            dispatchSSEEvent(eventType, JSON.parse(e.data));
           } catch (err) {
             console.error(`Failed to parse SSE payload for ${eventType}:`, err);
           }
@@ -125,41 +112,65 @@ export function SSEProvider({ children }) {
       });
 
       es.onerror = () => {
-        setStatus('RECONNECTING');
-        es.close();
-        eventSourceRef.current = null;
-
-        // Auto reconnect after 4 seconds if user is still logged in
-        if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-        reconnectTimeoutRef.current = setTimeout(() => {
-          connect();
-        }, 4000);
+        if (es.readyState === 1 /* OPEN */) {
+          markConnected();
+        } else if (es.readyState === 2 /* CLOSED */) {
+          updateStatus('RECONNECTING');
+          // Browser will auto-reconnect EventSource; we just reflect the state
+        }
       };
     } catch (err) {
-      console.error('Failed to establish EventSource connection:', err);
-      setStatus('OFFLINE');
+      console.error('Failed to establish SSE connection:', err);
+      updateStatus('OFFLINE');
     }
-  }, [dispatchSSEEvent]);
+  }, [dispatchSSEEvent, updateStatus]);
 
-  // Connect on mount & token changes
+  // Exposed reconnect for manual trigger (e.g. from the header button)
+  const reconnect = useCallback(() => {
+    // Force close existing to allow a fresh open
+    if (eventSourceRef.current) {
+      try { eventSourceRef.current.close(); } catch {}
+      eventSourceRef.current = null;
+    }
+    openConnection();
+  }, [openConnection]);
+
+  // Mount once — open connection and listen to auth/network events
   useEffect(() => {
-    connect();
+    openConnection();
 
-    // Listen for storage changes (e.g. login/logout)
-    const handleStorage = () => connect();
-    window.addEventListener('storage', handleStorage);
-
-    return () => {
-      window.removeEventListener('storage', handleStorage);
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
+    const handleAuthChange = () => {
+      // On login: reconnect. On logout: close.
+      const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
+      if (!isLoggedIn) {
+        if (eventSourceRef.current) {
+          try { eventSourceRef.current.close(); } catch {}
+          eventSourceRef.current = null;
+        }
+        updateStatus('OFFLINE');
+      } else {
+        reconnect();
       }
     };
-  }, [connect]);
+
+    const handleOnline = () => openConnection();
+
+    window.addEventListener('kemps_auth_change', handleAuthChange);
+    window.addEventListener('online', handleOnline);
+
+    return () => {
+      window.removeEventListener('kemps_auth_change', handleAuthChange);
+      window.removeEventListener('online', handleOnline);
+      if (eventSourceRef.current) {
+        try { eventSourceRef.current.close(); } catch {}
+        eventSourceRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally empty — run only on mount/unmount
 
   return (
-    <SSEContext.Provider value={{ status, isConnected: status === 'CONNECTED', subscribe, lastEvent, reconnect: connect }}>
+    <SSEContext.Provider value={{ status, isConnected: status === 'CONNECTED', subscribe, lastEvent, reconnect }}>
       {children}
     </SSEContext.Provider>
   );
@@ -184,12 +195,11 @@ export function useSSE(eventType, callback) {
   useEffect(() => {
     if (!eventType) return;
     const handler = (data) => {
-      if (savedCallback.current) {
-        savedCallback.current(data);
-      }
+      if (savedCallback.current) savedCallback.current(data);
     };
     return subscribe(eventType, handler);
   }, [eventType, subscribe]);
 }
 
+export { useSSEContext as useSSEContextRef };
 export default SSEContext;

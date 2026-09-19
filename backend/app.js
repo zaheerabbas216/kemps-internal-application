@@ -37,6 +37,7 @@ import wastageRoutes from './routes/wastage.js';
 import weightMeasurementRoutes from './routes/weightMeasurement.js';
 import toolsInventoryRoutes from './routes/toolsInventory.js';
 import impWorkRoutes from './routes/impWork.js';
+import notificationRoutes from './routes/notifications.js';
 import sseRoutes from './routes/sse.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -83,11 +84,18 @@ app.use(cors({
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Rate limiter for authentication login endpoint
+// Rate limiter for authentication login endpoint — only limits FAILED attempts per username & IP
 const loginRateLimiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10), // default 15 mins
-  max: parseInt(process.env.RATE_LIMIT_MAX || '5', 10), // default 5 attempts
-  message: { ok: false, error: 'Too many login attempts. Please try again later.' },
+  max: parseInt(process.env.RATE_LIMIT_MAX || '15', 10), // default 15 failed attempts threshold
+  skipSuccessfulRequests: true, // Successful logins do NOT count towards rate limit
+  keyGenerator: (req) => {
+    const username = (req.body?.username || '').trim().toLowerCase();
+    // Scope rate limiting by IP + username so different accounts are tracked independently
+    const clientIp = req.ip || req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'ip';
+    return username ? `${clientIp}_${username}` : clientIp;
+  },
+  message: { ok: false, error: 'Too many failed login attempts for this account. Please try again in a few minutes.' },
   standardHeaders: true,
   legacyHeaders: false
 });
@@ -129,6 +137,7 @@ app.use('/api/wastage', authMiddleware, wastageRoutes);
 app.use('/api/weight-measurement', authMiddleware, weightMeasurementRoutes);
 app.use('/api/tools-inventory', authMiddleware, toolsInventoryRoutes);
 app.use('/api/imp-work', authMiddleware, impWorkRoutes);
+app.use('/api/notifications', authMiddleware, notificationRoutes);
 app.use('/api/sse', sseRoutes);
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {
