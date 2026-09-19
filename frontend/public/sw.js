@@ -1,4 +1,4 @@
-const CACHE_NAME = "kemps-erp-v1";
+const CACHE_NAME = "kemps-erp-v2";
 const ASSETS_TO_CACHE = [
   "/",
   "/index.html",

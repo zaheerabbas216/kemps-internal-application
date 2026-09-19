@@ -59,6 +59,7 @@ const ToolsInventory = lazy(() => import('./pages/ToolsInventory'));
 const ImpWork = lazy(() => import('./pages/ImpWork'));
 const RolePermissions = lazy(() => import('./pages/RolePermissions'));
 const ChangePassword = lazy(() => import('./pages/ChangePassword'));
+const AccessDenied = lazy(() => import('./pages/AccessDenied'));
 const PaymentApproval = lazy(() => import('./pages/PaymentApproval'));
 
 // ─────────────────────────────────────────────
@@ -136,6 +137,7 @@ function App() {
 
               {/* Change password — all logged-in users */}
               <Route path="/change-password" element={<ChangePassword />} />
+              <Route path="/access-denied" element={<AccessDenied />} />
 
               {/* Permission-gated routes */}
               <Route path="/customer"           element={<PermissionRoute module="customer"><Customer /></PermissionRoute>} />

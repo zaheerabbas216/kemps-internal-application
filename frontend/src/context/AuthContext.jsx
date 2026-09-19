@@ -18,7 +18,25 @@ const KEYS = {
 // Helpers to read from localStorage
 // ─────────────────────────────────────────────
 function readAuth() {
-  const isSuperAdmin = localStorage.getItem(KEYS.isSuperAdmin) === 'true';
+  // The signed token is the authoritative source for super-admin status. This
+  // also repairs browsers that retained an old/incorrect localStorage flag.
+  let tokenClaims = {};
+  try {
+    const token = localStorage.getItem(KEYS.token);
+    if (token) {
+      const payload = token.split('.')[1];
+      const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+      tokenClaims = JSON.parse(atob(padded));
+    }
+  } catch {
+    tokenClaims = {};
+  }
+  const storedSuperAdmin = localStorage.getItem(KEYS.isSuperAdmin) === 'true';
+  const isSuperAdmin = typeof tokenClaims.isSuperAdmin === 'boolean'
+    ? tokenClaims.isSuperAdmin
+    : storedSuperAdmin;
+  localStorage.setItem(KEYS.isSuperAdmin, String(isSuperAdmin));
   let permissions = {};
   try {
     permissions = JSON.parse(localStorage.getItem(KEYS.permissions) || '{}');
@@ -213,7 +231,7 @@ export function AuthProvider({ children }) {
       const children = PARENT_CHILDREN_MAP[item.module];
       if (children && children.some(c => perms[c]?.read)) return item.path;
     }
-    return '/change-password';
+    return '/access-denied';
   }, [authState.isSuperAdmin, authState.permissions]);
 
   const value = {
