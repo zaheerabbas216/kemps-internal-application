@@ -156,28 +156,28 @@ const Layout = () => {
 
       {/* Main Panel */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#f8fbff]">
-        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-4 sm:px-6 md:px-10 shrink-0 z-20">
+        <header className="h-20 bg-white/80 backdrop-blur-md border-b border-slate-200/50 flex items-center justify-between px-3 sm:px-6 md:px-10 shrink-0 z-20 flex-nowrap">
           {/* Mobile Hamburg & Logo */}
-          <div className="flex items-center gap-3 lg:hidden">
+          <div className="flex items-center gap-2 sm:gap-3 lg:hidden shrink-0">
             <button 
               onClick={() => setIsSidebarOpen(true)}
-              className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-lg active:scale-95 transition-all"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-700 font-extrabold text-base sm:text-lg active:scale-95 transition-all"
             >
               ☰
             </button>
             <div 
               onClick={() => navigate('/dashboard')}
-              className="text-base font-extrabold text-[#0f172a] tracking-tight leading-none italic cursor-pointer flex items-center gap-1.5"
+              className="text-sm sm:text-base font-extrabold text-[#0f172a] tracking-tight leading-none italic cursor-pointer flex items-center gap-1.5"
             >
-              <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center text-white font-black text-sm italic shadow-md shadow-primary/30">
+              <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary rounded-lg flex items-center justify-center text-white font-black text-xs sm:text-sm italic shadow-md shadow-primary/30">
                 K
               </div>
-              <span>Kemp's<span className="text-primary">.</span></span>
+              <span className="hidden xs:inline">Kemp's<span className="text-primary">.</span></span>
             </div>
           </div>
 
           {/* Desktop Title */}
-          <div className="hidden lg:block">
+          <div className="hidden lg:block shrink-0">
             {isCleanHeader ? (
               <h2 className="text-[15px] font-bold text-[#0f172a] tracking-tight">{getPageTitle()}</h2>
             ) : (
@@ -193,16 +193,16 @@ const Layout = () => {
           </div>
 
           {/* Header Right — Server Status & Responsive Profile Dropdown */}
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {isCleanHeader ? (
               <div className="text-xs sm:text-[13px] font-semibold text-slate-400 hidden sm:block">
                 {getFormattedDate()}
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-100">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-600 uppercase tracking-wider">Server Online</span>
+                <div className="flex items-center gap-1.5 sm:gap-3 bg-slate-50 px-2 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-100">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse shrink-0"></span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-600 uppercase tracking-wider hidden sm:inline">Server Online</span>
                 </div>
                 <button
                   onClick={() => window.location.reload()}
@@ -217,10 +217,10 @@ const Layout = () => {
             <div className="relative" ref={avatarRef}>
               <button
                 onClick={() => setAvatarOpen(v => !v)}
-                className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 sm:px-3 sm:py-2 rounded-xl transition-all duration-200 active:scale-95"
+                className="flex items-center gap-1.5 sm:gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 sm:px-3 sm:py-2 rounded-xl transition-all duration-200 active:scale-95"
                 aria-label="User Profile Menu"
               >
-                <div className="w-8 h-8 sm:w-7 sm:h-7 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs shrink-0">
+                <div className="w-7 h-7 sm:w-7 sm:h-7 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs shrink-0">
                   {userInitials}
                 </div>
                 <div className="text-left hidden sm:block">
