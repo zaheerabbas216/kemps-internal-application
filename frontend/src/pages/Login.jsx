@@ -28,6 +28,7 @@ const Login = () => {
         password: password
       });
 
+      if (response.data.ok) {
         login(
           { ...response.data.user, token: response.data.token },
           response.data.permissions || {}

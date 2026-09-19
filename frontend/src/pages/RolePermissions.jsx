@@ -6,12 +6,13 @@ import api from '../api/axios';
 // ─────────────────────────────────────────────
 const MODULE_GROUPS = [
   {
-    section: 'Dashboards',
+    section: 'Dashboards & Tasks',
     modules: [
       { key: 'dashboard',            label: 'Dashboard',             actions: ['read'] },
       { key: 'stock-dashboard',      label: 'Stock Dashboard',        actions: ['read'] },
       { key: 'production-dashboard', label: 'Production Dashboard',   actions: ['read'] },
       { key: 'sunday-dashboard',     label: 'Sunday Dashboard',       actions: ['read'] },
+      { key: 'imp-work',             label: 'IMP Work (Urgent Tasks)',actions: ['read', 'create', 'update', 'delete'] },
     ],
   },
   {
@@ -59,6 +60,7 @@ const MODULE_GROUPS = [
       { key: 'pet-bottle-history',        label: '  ↳ Pet Bottle History Page',        actions: ['read'] },
       { key: 'stock-correction',          label: 'Stock Correction (All)',             actions: ['read', 'create', 'update', 'delete'] },
       { key: 'stock-correction-history',  label: '  ↳ Stock Correction History Page',  actions: ['read'] },
+      { key: 'wastage',                   label: 'Wastage Loss Tracker',               actions: ['read', 'create', 'update', 'delete'] },
       { key: 'production',                label: 'Production Form (All)',              actions: ['read', 'create', 'update', 'delete'] },
       { key: 'production-form',           label: '  ↳ Production Form Page',         actions: ['read', 'create'] },
       { key: 'production-history',        label: '  ↳ Production History Page',      actions: ['read'] },
@@ -100,6 +102,8 @@ const MODULE_GROUPS = [
   {
     section: 'Office',
     modules: [
+      { key: 'weight-measurement',     label: 'Weight Measurement',           actions: ['read', 'create', 'update', 'delete'] },
+      { key: 'tools-inventory',        label: 'Tools Inventory',              actions: ['read', 'create', 'update', 'delete'] },
       { key: 'maintenance',            label: 'Maintenance (All)',            actions: ['read', 'create', 'update', 'delete'] },
       { key: 'maintenance-form',       label: '  ↳ Maintenance Form Page',    actions: ['read', 'create', 'update', 'delete'] },
       { key: 'maintenance-history',    label: '  ↳ Maintenance History Page', actions: ['read'] },

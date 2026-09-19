@@ -606,7 +606,6 @@ const Orders = () => {
             </button>
           )}
         </div>
-        </div>
       </div>
 
       {/* METRICS WIDGETS */}
