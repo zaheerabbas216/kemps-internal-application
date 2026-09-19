@@ -1,7 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
-import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
@@ -527,8 +526,7 @@ router.post('/', async (req, res) => {
     // 2. Generate Bill ID
     const billId = await generateId('BILL', 'customer_bills', 'id', connection);
 
-    // Auto-create Payment Approval entry ONLY for cash/UPI/bank portions
-    const enteredByName = req.admin?.name || req.admin?.username || 'Admin';
+    // Resolve the physical payment modes collected at the billing counter.
     const payModes = [];
     if (finalCashPaid > 0) payModes.push('Cash');
     if (finalUpiPaid > 0) payModes.push('UPI');
@@ -537,36 +535,10 @@ router.post('/', async (req, res) => {
 
     const payAmount = finalCashPaid + finalUpiPaid + finalBankPaid;
     let paymentStatus = 'Unpaid';
-    let pendingAmount = 0.00;
-    let approvalId = null;
-
-    if (payAmount > 0) {
-      paymentStatus = 'Pending Approval';
-      pendingAmount = payAmount;
-      approvalId = await createPaymentApprovalEntry({
-        transactionId: billId,
-        sourceModule: 'Billing',
-        transactionType: 'Cash In',
-        referenceNo: billId,
-        partyName: `[${customerId}] ${cleanName}`,
-        description: `Invoice ${billId} — [${customerId}] ${cleanName} (${customerType})`,
-        paymentMethod: combinedMode,
-        cashAmount: finalCashPaid,
-        upiAmount: finalUpiPaid,
-        bankAmount: finalBankPaid,
-        creditAmount: appliedCredit,
-        amount: payAmount,
-        transactionDate: billingDate,
-        enteredBy: enteredByName,
-        remarks: String(remarks || '').trim()
-      }, connection);
-
-      if (!approvalId) {
-        throw new Error('Failed to create payment approval request.');
-      }
-    } else if (finalDueAmount <= 0) {
-      // A bill settled entirely through existing customer credit requires no
-      // physical payment approval.
+    if (payAmount > 0 || finalDueAmount <= 0) {
+      // Amounts collected at the billing counter are already received and
+      // enter the cash ledger immediately. Later credit collections use the
+      // separate Pending Approval workflow in creditBalance.js.
       paymentStatus = 'Approved';
     }
 
@@ -613,7 +585,7 @@ router.post('/', async (req, res) => {
     const basicRevenue = billGrandTotal - totalTaxAmount;
     const billProfit = basicRevenue - totalCogs;
 
-    // 3. Insert the invoice with any physical collection held for approval.
+    // 3. Insert Invoice Header with counter collections already approved.
     await connection.query(
       `INSERT INTO customer_bills 
        (id, billing_date, company, customer_type, customer_id, customer_name, customer_phone, customer_gstin, customer_address, 
@@ -638,9 +610,9 @@ router.post('/', async (req, res) => {
         finalUpiPaid,
         finalBankPaid,
         paymentStatus,
-        pendingAmount,
-        appliedCredit,
-        approvalId,
+        0.00,
+        finalAmountPaid,
+        null,
         totalCogs,
         billProfit,
         String(remarks || '').trim()
@@ -691,8 +663,19 @@ router.post('/', async (req, res) => {
       credit: 0.00
     });
 
-    // Physical payment is added to the customer ledger by paymentApproval.js
-    // only after the approval request succeeds.
+    // Billing-counter collections are immediately reflected in the customer
+    // ledger. Collections received later use the approval workflow.
+    if (payAmount > 0) {
+      await addLedgerEntry(connection, {
+        date: billingDate,
+        customerId,
+        entryType: 'PAYMENT',
+        referenceNo: billId,
+        particular: `Payment received for Invoice ${billId} (${combinedMode})`,
+        debit: 0.00,
+        credit: payAmount
+      });
+    }
 
     // No extra ledger entry is needed for applied credit balance since the debit invoice and pre-existing credit entries already offset each other.
 
