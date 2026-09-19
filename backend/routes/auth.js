@@ -40,7 +40,7 @@ router.post('/login', async (req, res) => {
     }
 
     const [rows] = await pool.query(
-      'SELECT id, username, password, name, role_id, permissions FROM admins WHERE username = ?',
+      'SELECT id, username, password, name, role_id FROM admins WHERE username = ?',
       [usernameTrimmed]
     );
 
