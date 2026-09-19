@@ -1,6 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
-import { addLedgerEntry } from '../helpers/ledgerHelper.js';
+import { createPaymentApprovalEntry } from '../helpers/paymentApprovalHelper.js';
 
 const router = express.Router();
 
@@ -433,67 +433,60 @@ router.post('/receive', async (req, res) => {
     // 2. Generate Payment ID
     const paymentId = await generateId('PAY', 'customer_payments', 'id', connection);
 
-    // 3. Update customer_bills header immediately
-    const newAmountPaid = parseFloat(bill.amount_paid || 0) + amt;
-    const newDueAmount = Math.max(0, currentDue - amt);
-    const newPaymentStatus = newDueAmount <= 0 ? 'Paid' : 'Partial';
+    // 3. Create the approval request. Bill totals and ledgers are updated only
+    // after this request is approved by the payment-approval workflow.
+    const enteredBy = req.admin?.name || req.admin?.username || 'Admin';
+    const approvalId = await createPaymentApprovalEntry({
+      transactionId: paymentId,
+      sourceModule: 'CreditBalance',
+      transactionType: 'Cash In',
+      referenceNo: billId,
+      partyName: bill.customer_name,
+      description: `Outstanding payment received for Invoice ${billId}`,
+      paymentMethod: resolvedPaymentMethod,
+      cashAmount: cashVal,
+      upiAmount: upiVal,
+      bankAmount: bankVal,
+      amount: amt,
+      transactionDate: paymentDate,
+      enteredBy,
+      remarks
+    }, connection);
 
-    await connection.query(
-      `UPDATE customer_bills 
-       SET amount_paid = ?, 
-           due_amount = ?, 
-           payment_status = ?,
-           approved_amount = approved_amount + ?
-       WHERE id = ?`,
-      [
-        newAmountPaid,
-        newDueAmount,
-        newPaymentStatus,
-        amt,
-        billId
-      ]
-    );
+    if (!approvalId) {
+      throw new Error('Failed to create payment approval request.');
+    }
 
-    // 4. Insert approved payment record into customer_payments
+    // 4. Hold the collection as pending. paymentApproval.js moves this amount
+    // to approved_amount and updates the bill/customer ledger after approval.
     await connection.query(
       `INSERT INTO customer_payments 
        (id, bill_id, payment_date, payment_method, amount_received, cash_paid, upi_paid, bank_paid, remarks, 
         payment_status, pending_amount, approved_amount, rejected_amount, approval_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Approved', 0.00, ?, 0.00, NULL, NOW())`,
+       VALUES (?, ?, ?, ?, 0.00, ?, ?, ?, ?, 'Pending Approval', ?, 0.00, 0.00, ?, NOW())`,
       [
         paymentId,
         billId,
         paymentDate,
         resolvedPaymentMethod,
-        amt,
         cashVal,
         upiVal,
         bankVal,
         remarks,
-        amt
+        amt,
+        approvalId
       ]
     );
-
-    // 5. Customer Ledger Hook: Direct PAYMENT credit
-    if (bill.customer_id) {
-      await addLedgerEntry(connection, {
-        date: paymentDate,
-        customerId: bill.customer_id,
-        entryType: 'PAYMENT',
-        referenceNo: paymentId,
-        particular: `Credit collection for Invoice ${billId} (${resolvedPaymentMethod})`,
-        debit: 0.00,
-        credit: amt
-      });
-    }
 
     await connection.commit();
 
     res.json({ 
       ok: true, 
       paymentId, 
-      newDue: newDueAmount,
-      message: 'Payment collection recorded and updated in ledger successfully.' 
+      approvalId,
+      status: 'Pending Approval',
+      newDue: currentDue,
+      message: 'Payment submitted for approval.'
     });
   } catch (error) {
     await connection.rollback();
