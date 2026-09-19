@@ -17,11 +17,31 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 /**
+ * Returns true if the current context is secure enough to use Push APIs.
+ * Web Push requires HTTPS or localhost — plain HTTP LAN IPs are rejected by browsers.
+ */
+export function isPushSecureContext() {
+  if (typeof window === 'undefined') return false;
+  // window.isSecureContext is the canonical check (covers HTTPS + localhost)
+  return window.isSecureContext === true;
+}
+
+/**
  * Check browser support and current permission status
  */
 export async function getPushNotificationStatus() {
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    return { supported: false, permission: 'unsupported', subscribed: false };
+  // Must be a secure context (HTTPS or localhost)
+  if (!isPushSecureContext()) {
+    return {
+      supported: false,
+      secureContextRequired: true,
+      permission: 'unavailable',
+      subscribed: false
+    };
+  }
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || typeof Notification === 'undefined') {
+    return { supported: false, secureContextRequired: false, permission: 'unsupported', subscribed: false };
   }
 
   const permission = Notification.permission;
@@ -35,18 +55,24 @@ export async function getPushNotificationStatus() {
     console.warn('Error checking push subscription:', err);
   }
 
-  return { supported: true, permission, subscribed };
+  return { supported: true, secureContextRequired: false, permission, subscribed };
 }
 
 /**
- * Register Service Worker, prompt for permission, fetch VAPID key, and subscribe device
+ * Register Service Worker, prompt for permission, fetch VAPID key, and subscribe device.
+ * Must be called from a user gesture (button click) for permission dialog to appear.
  */
 export async function subscribeUserToPush(apiClient, username) {
+  // Secure context guard
+  if (!isPushSecureContext()) {
+    throw new Error('HTTPS_REQUIRED');
+  }
+
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
     throw new Error('Push notifications are not supported by this browser.');
   }
 
-  // 1. Request browser notification permission
+  // 1. Request browser notification permission (requires user gesture)
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
     throw new Error('Notification permission was denied.');

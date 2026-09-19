@@ -3,19 +3,32 @@ import api from '../api/axios';
 import {
   getPushNotificationStatus,
   subscribeUserToPush,
-  unsubscribeUserFromPush
+  unsubscribeUserFromPush,
+  isPushSecureContext
 } from '../utils/pushNotifications';
 
 /**
  * Custom Hook for Web Push Notifications management
- * @param {Object} options - { autoPrompt: boolean } (default true: prompts permission on mount)
- * @returns {{ supported: boolean, permission: string, subscribed: boolean, loading: boolean, error: string, subscribe: Function, unsubscribe: Function, togglePush: Function }}
+ * @param {Object} options - { autoPrompt: boolean } (default true)
+ * @returns {{
+ *   supported: boolean,
+ *   secureContextRequired: boolean,
+ *   permission: string,
+ *   subscribed: boolean,
+ *   loading: boolean,
+ *   error: string,
+ *   subscribe: Function,
+ *   unsubscribe: Function,
+ *   togglePush: Function,
+ *   refreshStatus: Function
+ * }}
  */
 export function usePushNotification(options = {}) {
   const { autoPrompt = true } = options;
 
   const [pushState, setPushState] = useState({
-    supported: true,
+    supported: false,
+    secureContextRequired: !isPushSecureContext(),
     permission: typeof Notification !== 'undefined' ? Notification.permission : 'default',
     subscribed: false,
     loading: true,
@@ -25,15 +38,29 @@ export function usePushNotification(options = {}) {
   const username = localStorage.getItem('kemps_name') || localStorage.getItem('kemps_username') || 'User';
   const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
 
-  // Sync push status & auto-prompt on mount
+  // Sync push status on mount
   const syncPushStatus = useCallback(async () => {
     setPushState(prev => ({ ...prev, loading: true, error: '' }));
     try {
       const status = await getPushNotificationStatus();
 
+      // Not a secure context (plain HTTP on LAN) — degrade gracefully
+      if (status.secureContextRequired) {
+        setPushState({
+          supported: false,
+          secureContextRequired: true,
+          permission: 'unavailable',
+          subscribed: false,
+          loading: false,
+          error: ''
+        });
+        return;
+      }
+
       if (!status.supported) {
         setPushState({
           supported: false,
+          secureContextRequired: false,
           permission: 'unsupported',
           subscribed: false,
           loading: false,
@@ -45,14 +72,13 @@ export function usePushNotification(options = {}) {
       setPushState(prev => ({
         ...prev,
         supported: true,
+        secureContextRequired: false,
         permission: status.permission,
         subscribed: status.subscribed,
         loading: false
       }));
 
-      // Auto-subscribe silently only when permission is already granted (no user gesture needed)
-      // When permission is 'default', we must wait for an explicit user gesture (button click)
-      // to call Notification.requestPermission() — browsers block it otherwise
+      // Auto-subscribe silently only when already granted (no user gesture needed)
       if (isLoggedIn && autoPrompt && status.permission === 'granted' && !status.subscribed) {
         try {
           await subscribeUserToPush(api, username);
@@ -77,8 +103,16 @@ export function usePushNotification(options = {}) {
     syncPushStatus();
   }, [syncPushStatus]);
 
-  // Subscribe explicitly
+  // Subscribe explicitly — must be called from a user gesture
   const subscribe = async () => {
+    if (!isPushSecureContext()) {
+      setPushState(prev => ({
+        ...prev,
+        error: 'HTTPS_REQUIRED',
+        loading: false
+      }));
+      throw new Error('HTTPS_REQUIRED');
+    }
     setPushState(prev => ({ ...prev, loading: true, error: '' }));
     try {
       await subscribeUserToPush(api, username);
@@ -90,12 +124,12 @@ export function usePushNotification(options = {}) {
       }));
       return true;
     } catch (err) {
-      console.error('[usePushNotification] Subscribe failed:', err);
+      const isHttpsErr = err.message === 'HTTPS_REQUIRED';
       setPushState(prev => ({
         ...prev,
         loading: false,
-        permission: Notification.permission,
-        error: err.message || 'Failed to subscribe to push notifications.'
+        permission: typeof Notification !== 'undefined' ? Notification.permission : prev.permission,
+        error: isHttpsErr ? 'HTTPS_REQUIRED' : (err.message || 'Failed to subscribe to push notifications.')
       }));
       throw err;
     }
@@ -130,6 +164,7 @@ export function usePushNotification(options = {}) {
 
   return {
     supported: pushState.supported,
+    secureContextRequired: pushState.secureContextRequired,
     permission: pushState.permission,
     subscribed: pushState.subscribed,
     loading: pushState.loading,

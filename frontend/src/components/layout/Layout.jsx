@@ -11,7 +11,7 @@ const Layout = () => {
   const { user, isSuperAdmin, logout, getFirstPermittedPath } = useAuth();
   const { status: sseStatus, reconnect: reconnectSSE } = useSSEStatus();
   // Manage browser push notifications
-  const { supported: pushSupported, permission: pushPermission, subscribed: pushSubscribed, subscribe: subscribePush } = usePushNotification({ autoPrompt: true });
+  const { supported: pushSupported, secureContextRequired: pushHttpsRequired, permission: pushPermission, subscribed: pushSubscribed, subscribe: subscribePush } = usePushNotification({ autoPrompt: true });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('kemps_sidebar_collapsed') === 'true';
@@ -161,7 +161,31 @@ const Layout = () => {
       {/* Main Panel */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#f8fbff]">
         {/* Push Notification Permission Prompt Banner */}
-        {pushSupported && pushPermission === 'default' && !pushSubscribed && (
+        {/* Case 1: Secure context required (plain HTTP LAN) */}
+        {pushHttpsRequired && (
+          <div className="bg-gradient-to-r from-amber-900 via-amber-800 to-amber-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm border-b border-amber-500/40 z-30 shrink-0 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">🔒</span>
+              <span className="font-medium text-amber-100">
+                Push notifications require HTTPS. You&apos;re on a local network — use the
+                <a href="https://kmps-fed-fullstack-application.bitwizard.online" className="underline font-bold text-white ml-1 hover:text-amber-200" target="_blank" rel="noreferrer">production URL</a> to enable them.
+              </span>
+            </div>
+          </div>
+        )}
+        {/* Case 2: Permission denied — guide user to reset */}
+        {!pushHttpsRequired && pushSupported && pushPermission === 'denied' && (
+          <div className="bg-gradient-to-r from-rose-900 via-rose-800 to-rose-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm border-b border-rose-500/40 z-30 shrink-0 shadow-md">
+            <div className="flex items-center gap-2">
+              <span className="text-base shrink-0">🚫</span>
+              <span className="font-medium text-rose-100">
+                Notifications are blocked. Click the 🔒 lock icon in your browser address bar → <strong>Notifications</strong> → set to <strong>Allow</strong>, then reload.
+              </span>
+            </div>
+          </div>
+        )}
+        {/* Case 3: Permission not yet asked — show enable button */}
+        {!pushHttpsRequired && pushSupported && pushPermission === 'default' && !pushSubscribed && (
           <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-4 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm border-b border-indigo-500/30 z-30 shrink-0 shadow-md">
             <div className="flex items-center gap-2.5">
               <span className="text-base animate-bounce">🔔</span>

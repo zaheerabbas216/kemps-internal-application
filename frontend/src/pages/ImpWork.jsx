@@ -64,7 +64,7 @@ const ImpWork = () => {
   const loggedInUser = localStorage.getItem('kemps_name') || localStorage.getItem('kemps_username') || 'Admin';
 
   // Consume Custom Hooks
-  const { supported: pushSupported, subscribed: pushSubscribed, loading: pushLoading, togglePush } = usePushNotification({ autoPrompt: true });
+  const { supported: pushSupported, secureContextRequired: pushHttpsRequired, permission: pushPermission, subscribed: pushSubscribed, loading: pushLoading, togglePush } = usePushNotification({ autoPrompt: true });
 
   // Auto-refetch tasks & stats live whenever an IMP_WORK_UPDATED SSE event occurs across the system
   useSSERefetch('IMP_WORK_UPDATED', () => {
@@ -72,15 +72,27 @@ const ImpWork = () => {
   });
 
   const handleTogglePush = async () => {
+    if (pushHttpsRequired) {
+      showNotification('Push notifications require HTTPS. Open the app on the production URL to enable them.', false);
+      return;
+    }
+    if (pushPermission === 'denied') {
+      showNotification('Notifications are blocked. Click the lock icon in your browser address bar → Notifications → Allow, then reload.', false);
+      return;
+    }
     try {
       const isSubscribedNow = await togglePush();
       if (isSubscribedNow) {
         showNotification('Push notifications activated! You will receive alerts even when offline. 🔔');
       } else {
-        showNotification('Push notifications disabled for this device');
+        showNotification('Push notifications disabled for this device.');
       }
     } catch (err) {
-      showNotification(err.message || 'Failed to update push notifications', false);
+      if (err.message === 'Notification permission was denied.') {
+        showNotification('Permission denied. Click the lock icon in your address bar → Notifications → Allow, then reload.', false);
+      } else {
+        showNotification(err.message || 'Failed to update push notifications.', false);
+      }
     }
   };
 
@@ -411,17 +423,37 @@ const ImpWork = () => {
           <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={handleTogglePush}
-              disabled={pushLoading || !pushSupported}
+              disabled={pushLoading}
               className={`px-4 py-3 rounded-2xl font-bold text-sm transition-all flex items-center gap-2 border backdrop-blur-md ${
-                pushSubscribed
-                  ? 'bg-emerald-500/25 text-emerald-100 border-emerald-400/40 hover:bg-emerald-500/35 shadow-lg shadow-emerald-900/20'
-                  : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
+                pushHttpsRequired || pushPermission === 'denied'
+                  ? 'bg-white/10 text-white/50 border-white/10 cursor-not-allowed'
+                  : pushSubscribed
+                    ? 'bg-emerald-500/25 text-emerald-100 border-emerald-400/40 hover:bg-emerald-500/35 shadow-lg shadow-emerald-900/20'
+                    : 'bg-white/15 text-white border-white/20 hover:bg-white/25'
               }`}
-              title={pushSubscribed ? 'Push Notifications Active (Click to disable)' : 'Enable Push Notifications'}
+              title={
+                pushHttpsRequired
+                  ? 'Push notifications require HTTPS — use the production URL'
+                  : pushPermission === 'denied'
+                    ? 'Notifications are blocked — reset in browser site settings'
+                    : pushSubscribed
+                      ? 'Push Notifications Active (click to disable)'
+                      : 'Enable Push Notifications'
+              }
             >
-              <span className="text-base">{pushSubscribed ? '🔔' : '🔕'}</span>
+              <span className="text-base">
+                {pushHttpsRequired ? '🔒' : pushPermission === 'denied' ? '🚫' : pushSubscribed ? '🔔' : '🔕'}
+              </span>
               <span className="hidden sm:inline">
-                {pushLoading ? 'Updating...' : pushSubscribed ? 'Push Active' : 'Enable Push'}
+                {pushLoading
+                  ? 'Updating...'
+                  : pushHttpsRequired
+                    ? 'HTTPS Only'
+                    : pushPermission === 'denied'
+                      ? 'Blocked'
+                      : pushSubscribed
+                        ? 'Push Active'
+                        : 'Enable Push'}
               </span>
             </button>
             <button
