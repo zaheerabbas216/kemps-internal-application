@@ -5,6 +5,7 @@ import TablePagination from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
 import SearchInput from '../components/common/SearchInput';
 import { useAuth } from '../context/AuthContext';
+import { useSSE } from '../context/SSEContext';
 
 
 const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, ledgerStocks = {} }) => {
@@ -262,6 +263,8 @@ const Production = () => {
     fetchTodayBatches();
     fetchDropdowns();
   }, [searchQuery]);
+
+  useSSE('PRODUCTION_ADDED', () => fetchTodayBatches());
 
   const fetchTodayBatches = async () => {
     try {

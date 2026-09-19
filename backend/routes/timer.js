@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -262,6 +263,7 @@ router.post('/:machineId/start', async (req, res) => {
       [machineId, dateStr, dateTimeStr, createdBy]
     );
 
+    broadcastEvent('TIMER_STATUS_CHANGED', { machineId, action: 'start' });
     res.status(201).json({
       ok: true,
       message: `${machineRows[0].machine_name} started successfully.`,
@@ -336,6 +338,7 @@ router.post('/:machineId/stop', async (req, res) => {
       [dateTimeStr, durationSeconds, stop_reason.trim(), notes?.trim() || null, session.id]
     );
 
+    broadcastEvent('TIMER_STATUS_CHANGED', { machineId, action: 'stop' });
     res.json({
       ok: true,
       message: `${machineRows[0].machine_name} stopped successfully.`,

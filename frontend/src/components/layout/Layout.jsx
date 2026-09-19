@@ -2,11 +2,13 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Outlet, useLocation, NavLink, useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../../context/AuthContext';
+import { useSSEContext } from '../../context/SSEContext';
 
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isSuperAdmin, logout } = useAuth();
+  const { status: sseStatus } = useSSEContext();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     return localStorage.getItem('kemps_sidebar_collapsed') === 'true';
@@ -192,37 +194,46 @@ const Layout = () => {
             )}
           </div>
 
-          {/* Desktop Right — Avatar Dropdown */}
-          <div className="hidden md:flex items-center gap-4">
+          {/* Header Right — Server Status & Responsive Avatar Dropdown */}
+          <div className="flex items-center gap-2 sm:gap-4">
             {isCleanHeader ? (
-              <div className="text-[13px] font-semibold text-slate-400">
+              <div className="text-xs sm:text-[13px] font-semibold text-slate-400 hidden sm:block">
                 {getFormattedDate()}
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">Server Online</span>
+                <div className="flex items-center gap-2 sm:gap-3 bg-slate-50 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl border border-slate-100">
+                  <span className={`w-2 h-2 rounded-full ${
+                    sseStatus === 'CONNECTED' 
+                      ? 'bg-emerald-500 animate-pulse' 
+                      : sseStatus === 'RECONNECTING' 
+                        ? 'bg-amber-500 animate-pulse' 
+                        : 'bg-slate-400'
+                  }`}></span>
+                  <span className="text-[10px] sm:text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                    {sseStatus === 'CONNECTED' ? 'Server Live' : sseStatus === 'RECONNECTING' ? 'Reconnecting...' : 'Server Offline'}
+                  </span>
                 </div>
                 <button
                   onClick={() => window.location.reload()}
-                  className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-10 min-h-0"
+                  className="hidden md:inline-flex btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-10 min-h-0"
                 >
                   Refresh Data
                 </button>
               </>
             )}
 
-            {/* Avatar dropdown */}
+            {/* Avatar dropdown (Works on all screen sizes) */}
             <div className="relative" ref={avatarRef}>
               <button
                 onClick={() => setAvatarOpen(v => !v)}
-                className="flex items-center gap-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 px-3 py-2 rounded-xl transition-all duration-200 active:scale-95"
+                className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 border border-slate-200 p-1.5 sm:px-3 sm:py-2 rounded-xl transition-all duration-200 active:scale-95"
+                aria-label="User Profile Menu"
               >
-                <div className="w-7 h-7 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs">
+                <div className="w-8 h-8 sm:w-7 sm:h-7 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs shrink-0">
                   {userInitials}
                 </div>
-                <div className="text-left hidden lg:block">
+                <div className="text-left hidden sm:block">
                   <p className="text-xs font-bold text-slate-700 leading-none">{fullName}</p>
                   <p className="text-[10px] text-slate-400 font-medium mt-0.5">{roleName}</p>
                 </div>
@@ -230,36 +241,25 @@ const Layout = () => {
               </button>
 
               {avatarOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 animate-fade-in">
+                <div className="absolute right-0 top-[calc(100%+8px)] w-56 sm:w-52 bg-white border border-slate-200 rounded-2xl shadow-xl p-1.5 z-50 animate-fade-in">
                   <div className="px-3 py-2.5 border-b border-slate-100 mb-1">
-                    <p className="text-xs font-bold text-slate-800">{fullName}</p>
-                    <p className="text-[10px] text-slate-400 font-medium">{roleName}</p>
+                    <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
+                    <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">{roleName}</p>
                   </div>
                   <button
                     onClick={() => { setAvatarOpen(false); navigate('/change-password'); }}
-                    className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all flex items-center gap-2"
+                    className="w-full text-left px-3 py-2.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl transition-all flex items-center gap-2 active:bg-slate-100"
                   >
                     <span>🔑</span> Change Password
                   </button>
                   <button
                     onClick={() => { setAvatarOpen(false); handleLogout(); }}
-                    className="w-full text-left px-3 py-2 text-xs font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2"
+                    className="w-full text-left px-3 py-2.5 text-xs font-semibold text-red-500 hover:bg-red-50 rounded-xl transition-all flex items-center gap-2 active:bg-red-100"
                   >
                     <span>➔</span> Log Out
                   </button>
                 </div>
               )}
-            </div>
-          </div>
-
-          {/* Mobile Right — Avatar */}
-          <div className="flex items-center gap-2 lg:hidden">
-            <div
-              onClick={() => navigate('/change-password')}
-              className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-black text-xs cursor-pointer hover:bg-primary/20 transition-all active:scale-95"
-              title="Change Password"
-            >
-              {userInitials}
             </div>
           </div>
 

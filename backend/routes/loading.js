@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -168,6 +169,7 @@ router.post('/', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('LOADING_SESSION_UPDATED', { sessionId, tripId, action: 'trip_created' });
     res.json({
       ok: true,
       message: 'Loading logged successfully!',
@@ -700,6 +702,7 @@ router.post('/session/:id/return', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('LOADING_SESSION_UPDATED', { sessionId: id, tripId, action: 'return_logged' });
     res.json({
       ok: true,
       message: 'Active return recorded successfully.',

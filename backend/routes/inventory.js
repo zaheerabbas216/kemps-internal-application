@@ -3,6 +3,7 @@ import multer from 'multer';
 import pool from '../config/db.js';
 import { addSupplierLedgerEntry, deleteSupplierLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
 import { uploadFile } from '../services/storageService.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -294,6 +295,7 @@ router.post('/', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id: billId, action: 'create' });
     res.json({ ok: true, id: billId, message: 'Inventory bill saved and stock updated successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -838,6 +840,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id, action: 'update' });
     res.json({ ok: true, message: 'Inventory bill updated successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -873,6 +876,7 @@ router.delete('/:id', async (req, res) => {
     await deleteSupplierLedgerEntriesForReference(connection, id);
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id, action: 'delete' });
     res.json({ ok: true, message: 'Inventory bill and stock registry adjustments deleted successfully.' });
   } catch (error) {
     await connection.rollback();

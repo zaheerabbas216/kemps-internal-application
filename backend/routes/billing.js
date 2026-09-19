@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -677,6 +678,7 @@ router.post('/', async (req, res) => {
     // No extra ledger entry is needed for applied credit balance since the debit invoice and pre-existing credit entries already offset each other.
 
     await connection.commit();
+    broadcastEvent('BILL_GENERATED', { id: billId, action: 'create' });
     res.json({ ok: true, id: billId, message: 'Invoice saved successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -1028,6 +1030,7 @@ router.delete('/:id', async (req, res) => {
     await deleteLedgerEntriesForReference(connection, id);
 
     await connection.commit();
+    broadcastEvent('BILL_GENERATED', { id, action: 'delete' });
     res.json({ ok: true, message: 'Invoice deleted successfully.' });
   } catch (error) {
     await connection.rollback();

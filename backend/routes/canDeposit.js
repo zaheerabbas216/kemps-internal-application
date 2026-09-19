@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -301,7 +302,7 @@ router.post('/', async (req, res) => {
     );
 
     await connection.commit();
-
+    broadcastEvent('CAN_DEPOSIT_UPDATED', { transactionId, action: 'deposit' });
     res.json({ ok: true, transactionId, message: 'Can deposit saved successfully!' });
   } catch (error) {
     await connection.rollback();

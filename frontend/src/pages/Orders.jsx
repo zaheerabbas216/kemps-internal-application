@@ -5,10 +5,13 @@ import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
 import { useAuth } from '../context/AuthContext';
+import { useSSE } from '../context/SSEContext';
 
 const Orders = () => {
   const navigate = useNavigate();
   const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+  useSSE('ORDER_CREATED', () => { fetchWidgets(); fetchOrdersList(); });
+  useSSE('ORDER_STATUS_UPDATED', () => { fetchWidgets(); fetchOrdersList(); });
   
   const canReadUpcoming = canRead('orders-upcoming');
   const canReadNew = canRead('orders-new') || canCreate('orders') || canUpdate('orders');

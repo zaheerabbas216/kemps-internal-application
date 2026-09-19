@@ -4,10 +4,12 @@ import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchInput from '../components/common/SearchInput';
 import { useAuth } from '../context/AuthContext';
+import { useSSE } from '../context/SSEContext';
 
 const Inventory = () => {
   const navigate = useNavigate();
   const { canCreate, canUpdate, canDelete } = useAuth();
+  useSSE('INVENTORY_UPDATED', () => fetchTodayInventory());
 
   // Data states
   const [bills, setBills] = useState([]);

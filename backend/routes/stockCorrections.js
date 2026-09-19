@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { getSecondUnit, getConversionFactor } from '../helpers/conversion.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -371,6 +372,7 @@ router.post('/', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastEvent('STOCK_CORRECTED', { id: correctionId, action: 'create' });
     res.json({ ok: true, id: correctionId, message: 'Stock correction transaction saved successfully!' });
 
   } catch (error) {

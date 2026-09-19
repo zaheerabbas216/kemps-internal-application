@@ -1,5 +1,6 @@
 import express from 'express';
 import pool from '../config/db.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -364,6 +365,7 @@ router.post('/', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastEvent('PRODUCTION_ADDED', { id: batchId, action: 'create' });
     res.json({ ok: true, id: batchId, message: 'Production batch logged successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -545,6 +547,7 @@ router.put('/:id', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastEvent('PRODUCTION_ADDED', { id, action: 'update' });
     res.json({ ok: true, message: 'Production batch updated successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -606,6 +609,7 @@ router.delete('/:id', async (req, res) => {
     if (result.affectedRows === 0) throw new Error('Production batch not found.');
 
     await connection.commit();
+    broadcastEvent('PRODUCTION_ADDED', { id, action: 'delete' });
     res.json({ ok: true, message: 'Production run deleted and inventory adjusted successfully.' });
   } catch (error) {
     await connection.rollback();
