@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import { usePushNotification } from '../hooks/usePushNotification';
 import { useSSERefetch } from '../hooks/useSSE';
@@ -64,7 +64,7 @@ const ImpWork = () => {
   const loggedInUser = localStorage.getItem('kemps_name') || localStorage.getItem('kemps_username') || 'Admin';
 
   // Consume Custom Hooks
-  const { supported: pushSupported, secureContextRequired: pushHttpsRequired, permission: pushPermission, subscribed: pushSubscribed, loading: pushLoading, togglePush } = usePushNotification({ autoPrompt: true });
+  const { secureContextRequired: pushHttpsRequired, permission: pushPermission, subscribed: pushSubscribed, loading: pushLoading, togglePush } = usePushNotification({ autoPrompt: true });
 
   // Auto-refetch tasks & stats live whenever an IMP_WORK_UPDATED SSE event occurs across the system
   useSSERefetch('IMP_WORK_UPDATED', () => {

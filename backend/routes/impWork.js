@@ -277,12 +277,16 @@ router.post('/tasks', async (req, res) => {
     const newTask = createdRows[0];
 
     // Broadcast Web Push notification to all subscribers (online & offline)
-    sendPushNotificationToAll({
+    const pushResult = await sendPushNotificationToAll({
       title: `📌 New IMP Work: ${newTask.title}`,
       body: `Assigned to: ${newTask.assigned_to} | Priority: ${newTask.priority} | By: ${newTask.assigned_by}`,
       url: '/imp-work',
       tag: `imp-work-${newTask.id}`
-    }).catch((pushErr) => console.error('[PushNotify] Error broadcasting push:', pushErr));
+    });
+
+    if (pushResult.failed > 0 || pushResult.error) {
+      console.warn('[PushNotify] Task was created, but some push deliveries failed:', pushResult);
+    }
 
     // Broadcast SSE event for real-time live UI updates
     broadcastEvent('IMP_WORK_UPDATED', { action: 'created', task: newTask });

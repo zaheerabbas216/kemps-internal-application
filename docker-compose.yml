@@ -43,6 +43,10 @@ services:
       DB_NAME: ${DB_NAME:-kemps_inventory}
       JWT_SECRET: ${JWT_SECRET:-change_this_for_production}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      # Keep these keys stable across backend restarts. Changing them invalidates
+      # every existing browser push subscription.
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-5}
       DB_CONNECTION_LIMIT: ${DB_CONNECTION_LIMIT:-10}

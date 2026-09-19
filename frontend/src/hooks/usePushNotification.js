@@ -7,6 +7,14 @@ import {
   isPushSecureContext
 } from '../utils/pushNotifications';
 
+const PUSH_STATE_EVENT = 'kemps-push-state-changed';
+const PUSH_STATE_STORAGE_KEY = 'kemps_push_state_changed_at';
+
+function announcePushStateChange() {
+  window.dispatchEvent(new Event(PUSH_STATE_EVENT));
+  localStorage.setItem(PUSH_STATE_STORAGE_KEY, String(Date.now()));
+}
+
 /**
  * Custom Hook for Web Push Notifications management
  * @param {Object} options - { autoPrompt: boolean } (default true)
@@ -78,8 +86,10 @@ export function usePushNotification(options = {}) {
         loading: false
       }));
 
-      // Auto-subscribe silently only when already granted (no user gesture needed)
-      if (isLoggedIn && autoPrompt && status.permission === 'granted' && !status.subscribed) {
+      // Reconcile with the server even when the browser already has a
+      // subscription. This repairs a stale VAPID subscription and restores a
+      // DB row that may have been removed or expired.
+      if (isLoggedIn && autoPrompt && status.permission === 'granted') {
         try {
           await subscribeUserToPush(api, username);
           setPushState(prev => ({
@@ -103,6 +113,20 @@ export function usePushNotification(options = {}) {
     syncPushStatus();
   }, [syncPushStatus]);
 
+  // Keep the Layout hook, IMP Work hook, and other browser tabs in sync.
+  useEffect(() => {
+    const handleLocalChange = () => syncPushStatus();
+    const handleStorageChange = (event) => {
+      if (event.key === PUSH_STATE_STORAGE_KEY) syncPushStatus();
+    };
+    window.addEventListener(PUSH_STATE_EVENT, handleLocalChange);
+    window.addEventListener('storage', handleStorageChange);
+    return () => {
+      window.removeEventListener(PUSH_STATE_EVENT, handleLocalChange);
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, [syncPushStatus]);
+
   // Subscribe explicitly — must be called from a user gesture
   const subscribe = async () => {
     if (!isPushSecureContext()) {
@@ -122,6 +146,7 @@ export function usePushNotification(options = {}) {
         permission: 'granted',
         loading: false
       }));
+      announcePushStateChange();
       return true;
     } catch (err) {
       const isHttpsErr = err.message === 'HTTPS_REQUIRED';
@@ -145,7 +170,8 @@ export function usePushNotification(options = {}) {
         subscribed: false,
         loading: false
       }));
-      return true;
+      announcePushStateChange();
+      return false;
     } catch (err) {
       console.error('[usePushNotification] Unsubscribe failed:', err);
       setPushState(prev => ({ ...prev, loading: false, error: err.message }));

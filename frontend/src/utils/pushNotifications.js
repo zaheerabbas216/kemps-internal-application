@@ -16,6 +16,15 @@ function urlBase64ToUint8Array(base64String) {
   return outputArray;
 }
 
+function applicationServerKeysMatch(subscription, expectedKey) {
+  const currentKey = subscription?.options?.applicationServerKey;
+  if (!currentKey) return false;
+
+  const currentBytes = new Uint8Array(currentKey);
+  if (currentBytes.length !== expectedKey.length) return false;
+  return currentBytes.every((value, index) => value === expectedKey[index]);
+}
+
 /**
  * Returns true if the current context is secure enough to use Push APIs.
  * Web Push requires HTTPS or localhost — plain HTTP LAN IPs are rejected by browsers.
@@ -92,6 +101,21 @@ export async function subscribeUserToPush(apiClient, username) {
 
   // 4. Subscribe with PushManager
   let subscription = await registration.pushManager.getSubscription();
+
+  // A subscription is bound to the VAPID public key used when it was created.
+  // Re-create stale subscriptions when the backend key has changed; otherwise
+  // the browser still reports "subscribed" while every push delivery fails.
+  if (subscription && !applicationServerKeysMatch(subscription, convertedVapidKey)) {
+    const staleEndpoint = subscription.endpoint;
+    await subscription.unsubscribe();
+    subscription = null;
+    try {
+      await apiClient.post('/notifications/unsubscribe', { endpoint: staleEndpoint });
+    } catch (err) {
+      console.warn('Failed to remove stale push endpoint from server:', err);
+    }
+  }
+
   if (!subscription) {
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
@@ -127,4 +151,6 @@ export async function unsubscribeUserFromPush(apiClient) {
       console.warn('Failed to unregister endpoint from server:', err);
     }
   }
+
+  return false;
 }
