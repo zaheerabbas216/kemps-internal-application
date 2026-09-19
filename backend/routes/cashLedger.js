@@ -131,9 +131,9 @@ export const computeDailyLedger = async (targetDate) => {
      FROM customer_bills cb
      LEFT JOIN (
        SELECT bill_id,
-              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
-              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
-              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+               0 AS sub_cash,
+               0 AS sub_upi,
+               0 AS sub_bank,
               SUM(COALESCE(amount_received, 0)) AS sub_total
        FROM customer_payments
        WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -197,9 +197,9 @@ export const computeDailyLedger = async (targetDate) => {
      FROM customer_bills cb
      LEFT JOIN (
        SELECT bill_id,
-              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
-              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
-              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+               0 AS sub_cash,
+               0 AS sub_upi,
+               0 AS sub_bank,
               SUM(COALESCE(amount_received, 0)) AS sub_total
        FROM customer_payments
        WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -980,9 +980,9 @@ router.get('/', async (req, res) => {
          FROM customer_bills cb
          LEFT JOIN (
            SELECT bill_id,
-                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
-                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
-                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+                  0 AS sub_cash,
+                  0 AS sub_upi,
+                  0 AS sub_bank,
                   SUM(COALESCE(amount_received, 0)) AS sub_total
            FROM customer_payments
            WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -1085,9 +1085,9 @@ router.get('/', async (req, res) => {
          FROM customer_bills cb
          LEFT JOIN (
            SELECT bill_id,
-                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
-                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
-                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
+                  0 AS sub_cash,
+                  0 AS sub_upi,
+                  0 AS sub_bank,
                   SUM(COALESCE(amount_received, 0)) AS sub_total
            FROM customer_payments
            WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''

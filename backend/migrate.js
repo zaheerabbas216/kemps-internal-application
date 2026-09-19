@@ -918,15 +918,32 @@ export async function runMigration(shouldExit = false) {
     }
     console.log('bank_accounts table verified.');
 
-    // Check if column bank_account_id exists in bank_deposits (in case it pre-existed)
+    // Preserve legacy bank deposits while adding the account relationship.
+    // Historical rows cannot be mapped safely without user input, so the new
+    // column remains nullable on upgraded databases. New deposits always
+    // provide bank_account_id through the API.
     const [depCols] = await connection.query(
       `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'bank_deposits' AND COLUMN_NAME = 'bank_account_id'`,
       [dbName]
     );
     if (depCols.length === 0) {
-      console.log('bank_deposits table does not have bank_account_id column. Re-creating table...');
-      await connection.query(`DROP TABLE IF EXISTS bank_deposits`);
+      console.log('Adding bank_account_id to existing bank_deposits table without deleting historical rows...');
+      await connection.query(`
+        ALTER TABLE bank_deposits
+        ADD COLUMN bank_account_id INT NULL AFTER deposit_date,
+        ADD INDEX idx_bank_deposits_account (bank_account_id)
+      `);
+
+      try {
+        await connection.query(`
+          ALTER TABLE bank_deposits
+          ADD CONSTRAINT fk_bank_deposits_account
+          FOREIGN KEY (bank_account_id) REFERENCES bank_accounts(id) ON DELETE RESTRICT
+        `);
+      } catch (fkErr) {
+        console.warn('Migration note (bank_deposits account FK):', fkErr.message);
+      }
     }
 
     // 26. Create bank_deposits table if not exists

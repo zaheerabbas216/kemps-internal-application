@@ -115,6 +115,28 @@ const navGroups = [
 // ─────────────────────────────────────────────
 const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
   const location = useLocation();
+  const [isOpen, setIsOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [flyoutTop, setFlyoutTop] = useState(0);
+  const buttonRef = useRef(null);
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+        setIsHovered(false);
+      }
+    };
+    if (item.type === 'group' && (isOpen || isHovered)) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('touchstart', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [item.type, isOpen, isHovered]);
 
   if (item.type === 'section') {
     if (isCollapsed) {
@@ -174,30 +196,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
   }
 
   if (item.type === 'group') {
-    const [isOpen, setIsOpen] = useState(false);
-    const [isHovered, setIsHovered] = useState(false);
-    const [flyoutTop, setFlyoutTop] = useState(0);
-    const buttonRef = useRef(null);
-    const wrapperRef = useRef(null);
-
     const isChildActive = item.items.some(sub => sub.path === location.pathname);
-
-    useEffect(() => {
-      const handleOutsideClick = (e) => {
-        if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
-          setIsOpen(false);
-          setIsHovered(false);
-        }
-      };
-      if (isOpen || isHovered) {
-        document.addEventListener('mousedown', handleOutsideClick);
-        document.addEventListener('touchstart', handleOutsideClick);
-      }
-      return () => {
-        document.removeEventListener('mousedown', handleOutsideClick);
-        document.removeEventListener('touchstart', handleOutsideClick);
-      };
-    }, [isOpen, isHovered]);
 
     const handleMouseEnter = () => {
       if (buttonRef.current) {
@@ -319,7 +318,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
 // ─────────────────────────────────────────────
 // Sidebar component
 // ─────────────────────────────────────────────
-const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
+const Sidebar = ({ onClose, isCollapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
   const { user, isSuperAdmin, canRead, getFirstPermittedPath } = useAuth();
 

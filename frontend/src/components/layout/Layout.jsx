@@ -144,7 +144,6 @@ const Layout = () => {
         ${isCollapsed ? 'w-20' : 'w-72'}
       `}>
         <Sidebar 
-          isOpen={isSidebarOpen} 
           onClose={() => setIsSidebarOpen(false)} 
           isCollapsed={isCollapsed}
           onToggleCollapse={() => setIsCollapsed(!isCollapsed)}

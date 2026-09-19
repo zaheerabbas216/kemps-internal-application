@@ -13,7 +13,8 @@ This utility repairs historical transactions that are absent from Cash Ledger be
    ```
 
 4. Review every row under `ambiguousSplits`. The utility never guesses how a mixed or unknown payment method should be divided.
-   Also review `pendingPaymentReview`; pending transactions are reported but never promoted automatically.
+   Also review `pendingPaymentReview`; unresolved pending transactions are reported but never promoted automatically.
+   Rows under `duplicatePendingPayments` meet strict duplicate criteria and are quarantined as rejected records on apply.
 5. Apply the safe candidates:
 
    ```powershell
@@ -28,14 +29,14 @@ This utility repairs historical transactions that are absent from Cash Ledger be
 - Applying requires both `--apply` and `--yes`.
 - A MySQL advisory lock prevents concurrent reconciliation runs.
 - Repairs execute in one transaction.
-- Pending and rejected records are never promoted.
+- Pending and rejected records are never promoted. Exact legacy duplicate rows are quarantined, not approved or deleted.
 - Missing legacy ledger rows use `NOT EXISTS`, making insertion idempotent.
 - Every applied change is recorded in `cash_ledger_reconciliation_audit` with its run ID and before/after JSON.
 
 ## What it does not repair automatically
 
 - Mixed payment methods whose Cash/UPI/Bank breakdown is missing.
-- Pending or rejected approval records.
+- Pending or rejected approval records that do not meet the strict duplicate criteria.
 - Historical amounts that may have been modified by the old Cash Ledger route-startup reconciliation.
 - Business decisions about whether an advance payment should require approval.
 

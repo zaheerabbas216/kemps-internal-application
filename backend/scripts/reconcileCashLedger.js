@@ -89,6 +89,34 @@ async function getCandidates(connection) {
     ORDER BY payment_date, id
   `);
 
+  // Some legacy imports created a second, zero-split payment row for the
+  // exact receipt already stored on the invoice. The strict predicates below
+  // distinguish those shadow rows from genuine later collections.
+  const [duplicatePendingPayments] = await connection.query(`
+    SELECT cp.id, cp.bill_id, cp.payment_date, cp.payment_method,
+           cp.amount_received, cp.cash_paid, cp.upi_paid, cp.bank_paid,
+           cp.payment_status, cp.pending_amount, cp.approved_amount,
+           cp.rejected_amount, cp.approval_id, cp.remarks
+    FROM customer_payments cp
+    JOIN customer_bills cb ON cb.id = cp.bill_id
+    WHERE cp.payment_status = 'Pending Approval'
+      AND COALESCE(cp.amount_received, 0) > 0
+      AND COALESCE(cp.cash_paid, 0) = 0
+      AND COALESCE(cp.upi_paid, 0) = 0
+      AND COALESCE(cp.bank_paid, 0) = 0
+      AND COALESCE(cp.pending_amount, 0) = 0
+      AND cp.approval_id IS NULL
+      AND cp.payment_date = cb.billing_date
+      AND ABS(COALESCE(cp.amount_received, 0) - COALESCE(cb.amount_paid, 0)) <= 0.01
+      AND LOWER(TRIM(cp.payment_method)) = LOWER(TRIM(cb.payment_mode))
+    ORDER BY cp.payment_date, cp.id
+  `);
+
+  const duplicatePendingIds = new Set(duplicatePendingPayments.map(row => row.id));
+  const unresolvedPendingPayments = pendingPaymentReview.filter(
+    row => !duplicatePendingIds.has(row.id)
+  );
+
   const [ambiguousSplits] = await connection.query(`
     SELECT 'customer_bills' AS source, id, payment_mode AS method, amount_paid AS amount
     FROM customer_bills
@@ -114,7 +142,8 @@ async function getCandidates(connection) {
     billSplits,
     paymentSplits,
     missingApprovalLedger,
-    pendingPaymentReview,
+    duplicatePendingPayments,
+    pendingPaymentReview: unresolvedPendingPayments,
     ambiguousSplits
   };
 }
@@ -127,6 +156,7 @@ function printReport(candidates) {
     { category: 'Billing mode splits safe to infer', count: candidates.billSplits.length },
     { category: 'Payment mode splits safe to infer', count: candidates.paymentSplits.length },
     { category: 'Approved requests missing cash_ledger row', count: candidates.missingApprovalLedger.length },
+    { category: 'Duplicate pending rows safe to quarantine', count: candidates.duplicatePendingPayments.length },
     { category: 'Inconsistent pending payments (manual review)', count: candidates.pendingPaymentReview.length },
     { category: 'Ambiguous splits requiring manual review', count: candidates.ambiguousSplits.length }
   ]);
@@ -231,6 +261,34 @@ async function applyRepairs(connection, candidates) {
        WHERE id = ? AND COALESCE(cash_paid, 0) = 0
          AND COALESCE(upi_paid, 0) = 0 AND COALESCE(bank_paid, 0) = 0`,
       [split.cash, split.upi, split.bank, row.id]
+    );
+  }
+
+  for (const row of candidates.duplicatePendingPayments) {
+    const after = {
+      ...row,
+      amount_received: 0,
+      payment_status: 'Rejected',
+      pending_amount: 0,
+      approved_amount: 0,
+      rejected_amount: row.amount_received,
+      remarks: [row.remarks, 'Quarantined duplicate of payment recorded on invoice'].filter(Boolean).join(' | ')
+    };
+    await audit(connection, 'customer_payments', row.id, 'QUARANTINE_DUPLICATE_PENDING_PAYMENT', row, after);
+    await connection.query(
+      `UPDATE customer_payments
+       SET amount_received = 0.00,
+           payment_status = 'Rejected',
+           pending_amount = 0.00,
+           approved_amount = 0.00,
+           rejected_amount = ?,
+           remarks = ?,
+           last_status_update = NOW()
+       WHERE id = ?
+         AND payment_status = 'Pending Approval'
+         AND approval_id IS NULL
+         AND COALESCE(pending_amount, 0) = 0`,
+      [row.amount_received, after.remarks, row.id]
     );
   }
 
