@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 
 const GoodsLedger = () => {
   const navigate = useNavigate();
@@ -17,6 +18,9 @@ const GoodsLedger = () => {
   };
 
   const [ledgerDate, setLedgerDate] = useState(getTodayISTStr());
+  const [goodsPages, setGoodsPages] = useState({});
+  const [goodsLimit, setGoodsLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [ledgerData, setLedgerData] = useState({ items: [], summary: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -282,7 +286,7 @@ const GoodsLedger = () => {
   const isToday = ledgerDate === getTodayISTStr();
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -605,108 +609,125 @@ const GoodsLedger = () => {
                     <div className="overflow-x-auto">
                       <table className="table w-full">
                         <thead>
-                          <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-100">
-                            <th className="py-3 px-5 text-left w-1/3">Finished Product</th>
-                            <th className="py-3 px-5 text-center w-1/12">Unit</th>
-                            <th className="py-3 px-5 text-right">Opening</th>
-                            <th className="py-3 px-5 text-right text-emerald-600">+IN (Prod)</th>
-                            <th className="py-3 px-5 text-right text-rose-500">-OUT (Load)</th>
-                            <th className="py-3 px-5 text-right text-amber-600">+RETURN</th>
-                            <th className="py-3 px-5 text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100">=Closing</th>
+                          <tr className="bg-slate-50/50 text-slate-500 font-extrabold uppercase border-b border-slate-100">
+                            <th className={`${getDensityClass(density, true)} text-left w-1/3`}>Finished Product</th>
+                            <th className={`${getDensityClass(density, true)} text-center w-1/12`}>Unit</th>
+                            <th className={`${getDensityClass(density, true)} text-right`}>Opening</th>
+                            <th className={`${getDensityClass(density, true)} text-right text-emerald-600`}>+IN (Prod)</th>
+                            <th className={`${getDensityClass(density, true)} text-right text-rose-500`}>-OUT (Load)</th>
+                            <th className={`${getDensityClass(density, true)} text-right text-amber-600`}>+RETURN</th>
+                            <th className={`${getDensityClass(density, true)} text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100`}>=Closing</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50 font-medium">
-                          {groupItems.map((item, idx) => {
-                            const currentGroup = getProductSizeGroup(item.product_name);
-                            const prevGroup = idx > 0 ? getProductSizeGroup(groupItems[idx - 1].product_name) : null;
-                            const isNewGroup = idx > 0 && currentGroup !== prevGroup;
+                          {(() => {
+                            const catPage = goodsPages[categoryName] || 1;
+                            const currentCatItems = groupItems.slice((catPage - 1) * goodsLimit, catPage * goodsLimit);
+                            return currentCatItems.map((item, idx) => {
+                              const currentGroup = getProductSizeGroup(item.product_name);
+                              const prevGroup = idx > 0 ? getProductSizeGroup(currentCatItems[idx - 1].product_name) : null;
+                              const isNewGroup = idx > 0 && currentGroup !== prevGroup;
 
-                            return (
-                              <React.Fragment key={idx}>
-                                {isNewGroup && (
-                                  <tr className="bg-blue-50 border-y border-blue-200/80 h-3.5 select-none">
-                                    <td colSpan={7} className="py-1 px-5 bg-blue-100/50"></td>
+                              return (
+                                <React.Fragment key={idx}>
+                                  {isNewGroup && (
+                                    <tr className="bg-blue-50 border-y border-blue-200/80 h-3.5 select-none">
+                                      <td colSpan={7} className="py-1 px-5 bg-blue-100/50"></td>
+                                    </tr>
+                                  )}
+                                  <tr className="hover:bg-slate-50/40 transition-colors">
+                                    <td className={`${getDensityClass(density)} text-slate-800 font-bold`}>
+                                      {item.product_name}
+                                    </td>
+                                    <td className={`${getDensityClass(density)} text-center font-extrabold text-slate-400 uppercase`}>
+                                      BOXES
+                                    </td>
+                                    <td 
+                                      onClick={() => handleDrilldown(item, 'OPENING')}
+                                      className={`${getDensityClass(density)} text-right font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer`}
+                                    >
+                                      {item.opening_stock.toLocaleString('en-IN')}
+                                    </td>
+                                    <td 
+                                      onClick={() => handleDrilldown(item, 'IN')}
+                                      className={`${getDensityClass(density)} text-right font-semibold hover:text-blue-600 hover:underline cursor-pointer`}
+                                    >
+                                      {item.stock_in === 0 ? (
+                                        <span className="text-emerald-500 font-bold">—</span>
+                                      ) : (
+                                        <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
+                                      )}
+                                    </td>
+                                    <td 
+                                      onClick={() => handleDrilldown(item, 'OUT')}
+                                      className={`${getDensityClass(density)} text-right font-semibold hover:text-blue-600 hover:underline cursor-pointer`}
+                                    >
+                                      {item.stock_out === 0 ? (
+                                        <span className="text-rose-500 font-bold">—</span>
+                                      ) : (
+                                        <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
+                                      )}
+                                    </td>
+                                    <td 
+                                      onClick={() => handleDrilldown(item, 'RETURN')}
+                                      className={`${getDensityClass(density)} text-right font-semibold hover:text-blue-600 hover:underline cursor-pointer`}
+                                    >
+                                      {item.stock_return === 0 ? (
+                                        <span className="text-amber-500 font-bold">—</span>
+                                      ) : (
+                                        <span className="text-amber-600">+{item.stock_return.toLocaleString('en-IN')}</span>
+                                      )}
+                                    </td>
+                                    <td 
+                                      onClick={() => handleDrilldown(item, 'CLOSING')}
+                                      className={`${getDensityClass(density)} text-right font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer`}
+                                    >
+                                      {item.closing_stock.toLocaleString('en-IN')}
+                                    </td>
                                   </tr>
-                                )}
-                                <tr className="hover:bg-slate-50/40 transition-colors">
-                                  <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
-                                    {item.product_name}
-                                  </td>
-                                  <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
-                                    BOXES
-                                  </td>
-                                  <td 
-                                    onClick={() => handleDrilldown(item, 'OPENING')}
-                                    className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
-                                  >
-                                    {item.opening_stock.toLocaleString('en-IN')}
-                                  </td>
-                                  <td 
-                                    onClick={() => handleDrilldown(item, 'IN')}
-                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                                  >
-                                    {item.stock_in === 0 ? (
-                                      <span className="text-emerald-500 font-bold">—</span>
-                                    ) : (
-                                      <span className="text-emerald-600">+{item.stock_in.toLocaleString('en-IN')}</span>
-                                    )}
-                                  </td>
-                                  <td 
-                                    onClick={() => handleDrilldown(item, 'OUT')}
-                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                                  >
-                                    {item.stock_out === 0 ? (
-                                      <span className="text-rose-500 font-bold">—</span>
-                                    ) : (
-                                      <span className="text-rose-500">-{item.stock_out.toLocaleString('en-IN')}</span>
-                                    )}
-                                  </td>
-                                  <td 
-                                    onClick={() => handleDrilldown(item, 'RETURN')}
-                                    className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
-                                  >
-                                    {item.stock_return === 0 ? (
-                                      <span className="text-amber-500 font-bold">—</span>
-                                    ) : (
-                                      <span className="text-amber-600">+{item.stock_return.toLocaleString('en-IN')}</span>
-                                    )}
-                                  </td>
-                                  <td 
-                                    onClick={() => handleDrilldown(item, 'CLOSING')}
-                                    className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
-                                  >
-                                    {item.closing_stock.toLocaleString('en-IN')}
-                                  </td>
-                                </tr>
-                              </React.Fragment>
-                            );
-                          })}
+                                </React.Fragment>
+                              );
+                            });
+                          })()}
                         </tbody>
 
                         {/* Group Totals Row */}
                         <tfoot>
                           <tr className="bg-[#f8fafc] border-t border-slate-200/80 text-slate-700 font-extrabold text-xs">
-                            <td className="py-3.5 px-5">Category Total</td>
-                            <td className="py-3.5 px-5"></td>
-                            <td className="py-3.5 px-5 text-right font-black">
+                            <td className={`${getDensityClass(density)}`}>Category Total</td>
+                            <td className={`${getDensityClass(density)}`}></td>
+                            <td className={`${getDensityClass(density)} text-right font-black`}>
                               {groupTotals.opening.toLocaleString('en-IN')}
                             </td>
-                            <td className="py-3.5 px-5 text-right text-emerald-700 font-black">
+                            <td className={`${getDensityClass(density)} text-right text-emerald-700 font-black`}>
                               {groupTotals.stockIn === 0 ? '—' : `+${groupTotals.stockIn.toLocaleString('en-IN')}`}
                             </td>
-                            <td className="py-3.5 px-5 text-right text-rose-700 font-black">
+                            <td className={`${getDensityClass(density)} text-right text-rose-700 font-black`}>
                               {groupTotals.stockOut === 0 ? '—' : `-${groupTotals.stockOut.toLocaleString('en-IN')}`}
                             </td>
-                            <td className="py-3.5 px-5 text-right text-amber-700 font-black">
+                            <td className={`${getDensityClass(density)} text-right text-amber-700 font-black`}>
                               {groupTotals.stockReturn === 0 ? '—' : `+${groupTotals.stockReturn.toLocaleString('en-IN')}`}
                             </td>
-                            <td className="py-3.5 px-5 text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black">
+                            <td className={`${getDensityClass(density)} text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black`}>
                               {groupTotals.closing.toLocaleString('en-IN')}
                             </td>
                           </tr>
                         </tfoot>
                       </table>
                     </div>
+
+                    {/* TablePagination Component */}
+                    {groupItems.length > 0 && (
+                      <TablePagination
+                        page={goodsPages[categoryName] || 1}
+                        limit={goodsLimit}
+                        total={groupItems.length}
+                        onPageChange={(newPage) => setGoodsPages(prev => ({ ...prev, [categoryName]: newPage }))}
+                        onLimitChange={setGoodsLimit}
+                        density={density}
+                        onDensityChange={setDensity}
+                      />
+                    )}
                   </div>
                 );
               })}

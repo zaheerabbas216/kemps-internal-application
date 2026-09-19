@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const ExpenseHistory = () => {
   const navigate = useNavigate();
@@ -10,7 +12,8 @@ const ExpenseHistory = () => {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,7 +56,7 @@ const ExpenseHistory = () => {
     } else {
       fetchConsolidated();
     }
-  }, [currentPage, searchQuery, startDate, endDate, activeTab]);
+  }, [currentPage, limit, searchQuery, startDate, endDate, activeTab]);
 
   const fetchConsolidated = async () => {
     try {
@@ -361,14 +364,11 @@ const ExpenseHistory = () => {
         {/* Date Range & Search Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {/* Search Box */}
-          <div className="relative md:col-span-2">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search by ID, particulars, amount, creator..."
+          <div className="md:col-span-2">
+            <SearchInput
               value={searchQuery}
               onChange={handleSearchChange}
-              className="input-premium pl-11 h-11 w-full"
+              placeholder="Search by ID, particulars, amount, creator..."
             />
           </div>
 
@@ -422,14 +422,14 @@ const ExpenseHistory = () => {
               <table className="table table-zebra w-full overflow-hidden">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Expense ID</th>
-                    <th className="py-4 px-6 text-left">Date</th>
-                    <th className="py-4 px-6 text-left">Category</th>
-                    <th className="py-4 px-6 text-left">Particulars</th>
-                    <th className="py-4 px-6 text-left">Amount (₹)</th>
-                    <th className="py-4 px-6 text-left">Method</th>
-                    <th className="py-4 px-6 text-center">Status</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Expense ID</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Date</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Category</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Particulars</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Amount (₹)</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Method</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Status</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -454,15 +454,15 @@ const ExpenseHistory = () => {
                       const lockMsg = "This expense has already been approved and posted to accounts. Please create an adjustment or reversal entry.";
                       return (
                         <tr key={exp.id} className="hover:bg-blue-50/30 transition-colors group">
-                          <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{exp.id}</td>
-                          <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(exp.expense_date)}</td>
-                          <td className="py-4 px-6 text-[13px] font-semibold text-slate-600">{exp.category || 'General'}</td>
-                          <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[200px] truncate" title={exp.particulars}>{exp.particulars}</td>
-                          <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                          <td className={`${getDensityClass(density)} font-mono font-bold text-primary`}>{exp.id}</td>
+                          <td className={`${getDensityClass(density)} font-medium text-slate-550`}>{formatDateDDMMYYYY(exp.expense_date)}</td>
+                          <td className={`${getDensityClass(density)} font-semibold text-slate-600`}>{exp.category || 'General'}</td>
+                          <td className={`${getDensityClass(density)} font-bold text-slate-700 max-w-[200px] truncate`} title={exp.particulars}>{exp.particulars}</td>
+                          <td className={`${getDensityClass(density)} font-black text-slate-800`}>
                             ₹ {parseFloat(exp.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
-                          <td className="py-4 px-6 text-[13px] font-semibold text-slate-600">{exp.payment_method || 'Cash'}</td>
-                          <td className="py-4 px-6 text-center">
+                          <td className={`${getDensityClass(density)} font-semibold text-slate-600`}>{exp.payment_method || 'Cash'}</td>
+                          <td className={`${getDensityClass(density)} text-center`}>
                             <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
                               exp.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
                               exp.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
@@ -472,7 +472,7 @@ const ExpenseHistory = () => {
                               {(exp.payment_status || 'Pending Approval').toUpperCase()}
                             </span>
                           </td>
-                          <td className="py-4 px-6">
+                          <td className={getDensityClass(density)}>
                             <div className="flex items-center justify-center gap-2">
                               <button 
                                 onClick={() => handleOpenView(exp)}
@@ -506,29 +506,16 @@ const ExpenseHistory = () => {
               </table>
             </div>
 
-            {/* PAGINATION CONTROLS */}
             {!loading && totalExpenses > 0 && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-                <div className="text-[12px] font-bold text-slate-400 uppercase">
-                  Page {currentPage} of {totalPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={currentPage}
+                limit={limit}
+                total={totalExpenses}
+                onPageChange={setCurrentPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
             )}
           </>
         )}

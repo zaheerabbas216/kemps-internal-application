@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const formatCurrency = (val) => {
   const num = parseFloat(val) || 0;
@@ -142,7 +144,8 @@ const OrderDetails = () => {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit] = useState(15);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [totalCount, setTotalCount] = useState(0);
 
   // Data States
@@ -177,7 +180,7 @@ const OrderDetails = () => {
   useEffect(() => {
     fetchOrders();
     fetchWidgets();
-  }, [moduleFilter, activeTab, searchQuery, customerTypeFilter, productFilter, dateType, startDate, endDate, currentPage]);
+  }, [moduleFilter, activeTab, searchQuery, customerTypeFilter, productFilter, dateType, startDate, endDate, currentPage, limit]);
 
   const fetchProducts = async () => {
     try {
@@ -1026,45 +1029,17 @@ const OrderDetails = () => {
           </table>
         </div>
 
-        {/* Pagination Bar */}
-        <div className="p-4 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-          <div>
-            Showing Page <span className="font-bold text-slate-900">{currentPage}</span> of <span className="font-bold text-slate-900">{totalPages}</span>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1 || loading}
-              className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              Previous
-            </button>
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              const p = i + 1;
-              return (
-                <button
-                  key={p}
-                  onClick={() => setCurrentPage(p)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
-                    currentPage === p
-                      ? 'bg-primary text-white shadow-sm'
-                      : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-100'
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage >= totalPages || loading}
-              className="px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-700 font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        {!loading && totalCount > 0 && (
+          <TablePagination
+            page={currentPage}
+            limit={limit}
+            total={totalCount}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
+        )}
       </div>
 
       {/* ========================================================================= */}

@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Customer = () => {
+  const { canCreate, canUpdate, canDelete } = useAuth();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Pagination states
+  // Pagination & Density states
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [density, setDensity] = useState('medium');
   
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -191,8 +196,11 @@ const Customer = () => {
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentItems = filteredCustomers.slice(indexOfFirstItem, indexOfLastItem);
 
+  // Density padding helper
+  const cellPadding = density === 'compact' ? 'py-2 px-3 text-[11px]' : density === 'relaxed' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER & TOP ACTIONS */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -200,28 +208,27 @@ const Customer = () => {
           <h1 className="text-2xl font-black text-slate-800 tracking-tight">CUSTOMER REGISTRY</h1>
           <p className="text-slate-500 text-sm font-medium mt-1">Manage all your client information in one place.</p>
         </div>
-        <button 
-          onClick={() => handleOpenForm()}
-          className="btn-premium btn-primary-premium h-12"
-        >
-          <span className="text-xl">+</span> Register New Customer
-        </button>
+        {canCreate('customer') && (
+          <button 
+            onClick={() => handleOpenForm()}
+            className="btn-premium btn-primary-premium h-12"
+          >
+            <span className="text-xl">+</span> Register New Customer
+          </button>
+        )}
       </div>
 
       {/* SEARCH AND TABLE CONTAINER */}
       <div className="card-premium">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search by name, phone or ID..."
+          <div className="flex-1 max-w-md">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search by name, phone or ID..."
             />
           </div>
           <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -232,13 +239,13 @@ const Customer = () => {
         <div className="overflow-x-auto rounded-xl border border-slate-100">
           <table className="table table-zebra w-full overflow-hidden">
             <thead className="bg-slate-50 border-b border-slate-100">
-              <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                <th className="py-4 px-6 text-left">ID</th>
-                <th className="py-4 px-6 text-left">Customer Name</th>
-                <th className="py-4 px-6 text-left">Phone Number</th>
-                <th className="py-4 px-6 text-left">Customer Type</th>
-                <th className="py-4 px-6 text-left">GSTIN</th>
-                <th className="py-4 px-6 text-center">Actions</th>
+              <tr className="text-slate-500 font-black uppercase">
+                <th className={`${getDensityClass(density, true)} text-left`}>ID</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Customer Name</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Phone Number</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Customer Type</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>GSTIN</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -260,8 +267,8 @@ const Customer = () => {
               ) : (
                 currentItems.map((c) => (
                   <tr key={c.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{c.id}</td>
-                    <td className="py-4 px-6 text-[14px] font-bold text-slate-700">
+                    <td className={`${getDensityClass(density)} font-mono font-bold text-primary`}>{c.id}</td>
+                    <td className={`${getDensityClass(density)} font-bold text-slate-700`}>
                       <button
                         onClick={() => handleOpenCustomerDepositLedger(c)}
                         className="font-bold text-slate-700 hover:text-primary hover:underline text-left outline-none"
@@ -270,11 +277,11 @@ const Customer = () => {
                         {c.name}
                       </button>
                     </td>
-                    <td className="py-4 px-6 text-[14px] font-medium text-slate-600">
+                    <td className={`${getDensityClass(density)} font-medium text-slate-600`}>
                       <div>{c.phone}</div>
                       {c.alternatePhone && <div className="text-[10px] text-slate-400 mt-0.5">Alt: {c.alternatePhone}</div>}
                     </td>
-                    <td className="py-4 px-6 text-[13px] text-slate-600">
+                    <td className={`${getDensityClass(density)} text-slate-600`}>
                       <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
                         c.customerType === 'Distributor' 
                           ? 'bg-amber-50 border-amber-100 text-amber-600' 
@@ -285,21 +292,25 @@ const Customer = () => {
                         {c.customerType || 'General Customer'}
                       </span>
                     </td>
-                    <td className="py-4 px-6 text-[13px] text-slate-400">{c.gst || '—'}</td>
-                    <td className="py-4 px-6">
+                    <td className={`${getDensityClass(density)} text-slate-400`}>{c.gst || '—'}</td>
+                    <td className={`${getDensityClass(density)}`}>
                       <div className="flex items-center justify-center gap-2">
-                        <button 
-                          onClick={() => handleOpenForm(c)}
-                          className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                        >
-                          Edit
-                        </button>
-                        <button 
-                          onClick={() => confirmDelete(c)}
-                          className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                        >
-                          Delete
-                        </button>
+                        {canUpdate('customer') && (
+                          <button 
+                            onClick={() => handleOpenForm(c)}
+                            className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                          >
+                            Edit
+                          </button>
+                        )}
+                        {canDelete('customer') && (
+                          <button 
+                            onClick={() => confirmDelete(c)}
+                            className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                          >
+                            Delete
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -310,44 +321,15 @@ const Customer = () => {
         </div>
 
         {/* Pagination Controls */}
-        {totalPages > 1 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 bg-slate-50/50 border-t border-slate-100 rounded-b-xl mt-4">
-            <span className="text-xs text-slate-500 font-semibold">
-              Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, totalItems)} of {totalItems} records
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                disabled={activePage === 1}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ← Prev
-              </button>
-              
-              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(pageNum => (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                    activePage === pageNum
-                      ? 'bg-primary border-primary text-white'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                disabled={activePage === totalPages}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Next →
-              </button>
-            </div>
-          </div>
-        )}
+        <TablePagination 
+          page={activePage}
+          limit={itemsPerPage}
+          total={totalItems}
+          onPageChange={setCurrentPage}
+          onLimitChange={setItemsPerPage}
+          density={density}
+          onDensityChange={setDensity}
+        />
       </div>
 
       {/* FORM MODAL */}

@@ -3,13 +3,23 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const Loading = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadActive = canRead('loading-active');
+  const canReadHistory = canRead('loading-history');
 
   // Active workspace tabs: 'new-loading' | 'active-profiles' | 'history'
-  const [activeTab, setActiveTab] = useState('active-profiles');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadActive) return 'active-profiles';
+    if (canReadHistory) return 'history';
+    return 'active-profiles';
+  });
   const [isFormOpen, setIsFormOpen] = useState(false);
 
   // Master lists
@@ -51,7 +61,8 @@ const Loading = () => {
   const [activeProfiles, setActiveProfiles] = useState([]);
   const [loadingActive, setLoadingActive] = useState(false);
   const [activePage, setActivePage] = useState(1);
-  const activeLimit = 10;
+  const [activeLimit, setActiveLimit] = useState(10);
+  const [activeDensity, setActiveDensity] = useState('medium');
 
   // ==========================================
   // TODAY'S HISTORY STATE (COMPLETED/BILLED TODAY)
@@ -60,7 +71,8 @@ const Loading = () => {
   const [loadingTodayHistory, setLoadingTodayHistory] = useState(false);
   const [todayHistoryCount, setTodayHistoryCount] = useState(0);
   const [todayHistoryPage, setTodayHistoryPage] = useState(1);
-  const todayHistoryLimit = 10;
+  const [todayHistoryLimit, setTodayHistoryLimit] = useState(10);
+  const [todayHistoryDensity, setTodayHistoryDensity] = useState('medium');
 
   // ==========================================
   // PAST UNBILLED / PENDING SESSIONS STATE
@@ -78,7 +90,8 @@ const Loading = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
-  const historyLimit = 10;
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [historyDensity, setHistoryDensity] = useState('medium');
 
   // History Filters
   const [filterSearch, setFilterSearch] = useState('');
@@ -319,7 +332,7 @@ const Loading = () => {
     } else if (activeTab === 'history') {
       fetchHistory();
     }
-  }, [activeTab, historyPage, todayHistoryPage, pastPendingPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
+  }, [activeTab, historyPage, historyLimit, todayHistoryPage, todayHistoryLimit, pastPendingPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
 
   const fetchGoodsLedgerStock = async () => {
     try {
@@ -940,7 +953,7 @@ const Loading = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {!isFormOpen ? (
         <>
@@ -951,17 +964,19 @@ const Loading = () => {
               <p className="text-slate-500 text-sm font-medium mt-1">Manage daily loading sheets and log trips for customers</p>
             </div>
             <div className="flex gap-2">
-              <button 
-                type="button"
-                onClick={() => {
-                  setFormError('');
-                  setFormSuccess('');
-                  setIsFormOpen(true);
-                }}
-                className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-1.5"
-              >
-                🚚 New Loading
-              </button>
+              {canCreate('loading') && (
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setFormError('');
+                    setFormSuccess('');
+                    setIsFormOpen(true);
+                  }}
+                  className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-1.5"
+                >
+                  🚚 New Loading
+                </button>
+              )}
             </div>
           </div>
 
@@ -972,33 +987,37 @@ const Loading = () => {
                 <span>📋</span> View Loading Sheets
               </div>
               <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('active-profiles')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-                    activeTab === 'active-profiles'
-                      ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  ⚡ Active Today ({activeProfiles.length})
-                  {pastPendingCount > 0 && (
-                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-amber-100 border border-amber-200 text-amber-800 font-extrabold">
-                      {pastPendingCount} Past Pending
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('history')}
-                  className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-                    activeTab === 'history'
-                      ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                      : 'text-slate-500 hover:text-slate-700'
-                  }`}
-                >
-                  ⏳ Completed / History
-                </button>
+                {canReadActive && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('active-profiles')}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                      activeTab === 'active-profiles'
+                        ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    ⚡ Active Today ({activeProfiles.length})
+                    {pastPendingCount > 0 && (
+                      <span className="ml-1.5 px-1.5 py-0.5 rounded-full text-[9px] bg-amber-100 border border-amber-200 text-amber-800 font-extrabold">
+                        {pastPendingCount} Past Pending
+                      </span>
+                    )}
+                  </button>
+                )}
+                {canReadHistory && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('history')}
+                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                      activeTab === 'history'
+                        ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    ⏳ Completed / History
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1505,29 +1524,16 @@ const Loading = () => {
                 </tbody>
               </table>
             </div>
-            {/* Active Profiles Pagination */}
-            {!loadingActive && activeProfiles.length > activeLimit && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {activePage} of {Math.ceil(activeProfiles.length / activeLimit)} ({activeProfiles.length} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={activePage === 1}
-                    onClick={() => setActivePage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={activePage === Math.ceil(activeProfiles.length / activeLimit)}
-                    onClick={() => setActivePage(prev => Math.min(Math.ceil(activeProfiles.length / activeLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+            {!loadingActive && activeProfiles.length > 0 && (
+              <TablePagination
+                page={activePage}
+                limit={activeLimit}
+                total={activeProfiles.length}
+                onPageChange={setActivePage}
+                onLimitChange={setActiveLimit}
+                density={activeDensity}
+                onDensityChange={setActiveDensity}
+              />
             )}
           </div>
 
@@ -1655,29 +1661,16 @@ const Loading = () => {
                 </tbody>
               </table>
             </div>
-            {/* Today's History Pagination */}
             {!loadingTodayHistory && todayHistoryCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {todayHistoryPage} of {Math.ceil(todayHistoryCount / todayHistoryLimit) || 1} ({todayHistoryCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={todayHistoryPage === 1}
-                    onClick={() => setTodayHistoryPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={todayHistoryPage === Math.ceil(todayHistoryCount / todayHistoryLimit)}
-                    onClick={() => setTodayHistoryPage(prev => Math.min(Math.ceil(todayHistoryCount / todayHistoryLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={todayHistoryPage}
+                limit={todayHistoryLimit}
+                total={todayHistoryCount}
+                onPageChange={setTodayHistoryPage}
+                onLimitChange={setTodayHistoryLimit}
+                density={todayHistoryDensity}
+                onDensityChange={setTodayHistoryDensity}
+              />
             )}
           </div>
 
@@ -2027,29 +2020,16 @@ const Loading = () => {
               </table>
             </div>
 
-            {/* Pagination */}
             {!loadingHistory && historyCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {historyPage} of {Math.ceil(historyCount / historyLimit) || 1} ({historyCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={historyPage === 1}
-                    onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={historyPage === Math.ceil(historyCount / historyLimit)}
-                    onClick={() => setHistoryPage(prev => Math.min(Math.ceil(historyCount / historyLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={historyPage}
+                limit={historyLimit}
+                total={historyCount}
+                onPageChange={setHistoryPage}
+                onLimitChange={setHistoryLimit}
+                density={historyDensity}
+                onDensityChange={setHistoryDensity}
+              />
             )}
           </div>
         </div>

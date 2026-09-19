@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
 const STOP_REASONS = [
   'Lunch Break',
@@ -51,6 +52,7 @@ function calculateShiftDurationText(startTime, endTime) {
 
 const Timer = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -307,7 +309,7 @@ const Timer = () => {
   const petBottleMachines = machines.filter((m) => m.machine_type === 'PET Bottle');
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 w-full space-y-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-base-100 p-5 rounded-2xl shadow-sm border border-base-300">
         <div>

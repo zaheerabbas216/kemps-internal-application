@@ -69,6 +69,28 @@
   animation: fadeIn 0.4s ease-out forwards;
 }
 
+/* Custom thin theme scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
    RESPONSIVE DESIGN OVERRIDES
    ────────────────────────────────────────────────────────────────────────── */

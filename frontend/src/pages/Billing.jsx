@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TaxInvoiceModal from '../components/billing/TaxInvoiceModal';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Billing = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [bills, setBills] = useState([]);
@@ -15,6 +19,12 @@ const Billing = () => {
     creditApplied: 0,
     totalInvoices: 0
   });
+  // Pagination & View Mode
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [density, setDensity] = useState('medium');
+
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
@@ -29,16 +39,17 @@ const Billing = () => {
 
   useEffect(() => {
     fetchTodayBills();
-  }, [searchQuery]);
+  }, [page, limit, searchQuery]);
 
   const fetchTodayBills = async () => {
     try {
       setLoading(true);
       const res = await api.get('/billing/today', {
-        params: { search: searchQuery }
+        params: { page, limit, search: searchQuery }
       });
       if (res.data.ok) {
         setBills(res.data.bills || []);
+        setTotal(res.data.total || 0);
         setSummary(res.data.summary || { totalBilled: 0, cashCollected: 0, creditDue: 0, creditApplied: 0, totalInvoices: 0 });
         if (res.data.todayStr) {
           setTodayDateStr(res.data.todayStr);
@@ -102,8 +113,11 @@ const Billing = () => {
     return `${dd}/${mm}/${yyyy}`;
   };
 
+  const cellPaddingClass = density === 'compact' ? 'py-1.5 px-3 text-[11px]' : density === 'relaxed' ? 'py-5 px-6 text-sm' : 'py-3.5 px-5 text-xs';
+  const headerPaddingClass = density === 'compact' ? 'py-2 px-3 text-[9px]' : density === 'relaxed' ? 'py-4.5 px-6 text-xs' : 'py-4 px-5 text-[10px]';
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -112,12 +126,14 @@ const Billing = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Manage customer invoices and live transaction receipts</p>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate('/billing-form')}
-            className="btn-premium btn-primary-premium h-12"
-          >
-            <span className="text-xl">+</span> Billing
-          </button>
+          {canCreate('billing') && (
+            <button 
+              onClick={() => navigate('/billing-form')}
+              className="btn-premium btn-primary-premium text-xs px-4 h-12"
+            >
+              <span className="text-xl">+</span> Billing
+            </button>
+          )}
           <button 
             onClick={() => navigate('/billing-history')}
             className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -189,14 +205,11 @@ const Billing = () => {
 
       {/* FILTER & SEARCH */}
       <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white border border-slate-200/60 p-4 rounded-2xl shadow-sm">
-        <div className="relative w-full md:w-80">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-          <input 
-            type="text"
+        <div className="w-full md:w-80">
+          <SearchInput
             placeholder="Search by customer name, phone, invoice..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full h-11 pl-10 pr-4 rounded-xl border border-slate-200 bg-slate-50/30 text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+            onChange={(e) => { setSearchQuery(e.target.value); setPage(1); }}
           />
         </div>
         <div className="text-[11px] font-bold text-slate-450 uppercase tracking-wider">
@@ -209,46 +222,46 @@ const Billing = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                <th className="py-4 px-5">Invoice No</th>
-                <th className="py-4 px-5">Company</th>
-                <th className="py-4 px-5">Customer Details</th>
-                <th className="py-4 px-5">Customer Type</th>
-                <th className="py-4 px-5 text-right">Grand Total</th>
-                <th className="py-4 px-5 text-center">Payment Mode</th>
-                <th className="py-4 px-5 text-right">Amt Paid</th>
-                <th className="py-4 px-5 text-right">Amt Due</th>
-                <th className="py-4 px-5 text-center">Actions</th>
+              <tr className={`bg-slate-50/75 border-b border-slate-200/80 font-black text-slate-450 uppercase tracking-wider ${headerPaddingClass}`}>
+                <th className={headerPaddingClass}>Invoice No</th>
+                <th className={headerPaddingClass}>Company</th>
+                <th className={headerPaddingClass}>Customer Details</th>
+                <th className={headerPaddingClass}>Customer Type</th>
+                <th className={`text-right ${headerPaddingClass}`}>Grand Total</th>
+                <th className={`text-center ${headerPaddingClass}`}>Payment Mode</th>
+                <th className={`text-right ${headerPaddingClass}`}>Amt Paid</th>
+                <th className={`text-right ${headerPaddingClass}`}>Amt Due</th>
+                <th className={`text-center ${headerPaddingClass}`}>Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
+            <tbody className="divide-y divide-slate-100 text-slate-700 font-semibold">
               {bills.map(b => (
                 <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                  <td className="py-3.5 px-5 font-bold text-primary">{b.id}</td>
-                  <td className="py-3.5 px-5">
+                  <td className={`font-bold text-primary ${cellPaddingClass}`}>{b.id}</td>
+                  <td className={cellPaddingClass}>
                     <span className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold ${b.company.includes('Pet') ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-sky-50 text-sky-600 border border-sky-100'}`}>
                       {b.company.includes('Pet') ? 'Kemps Pet' : 'Kempannavar'}
                     </span>
                   </td>
-                  <td className="py-3.5 px-5">
+                  <td className={cellPaddingClass}>
                     <div className="font-extrabold text-slate-800">{b.customer_name}</div>
                     <div className="text-[10px] font-bold text-slate-450 mt-0.5">{b.customer_phone}</div>
                   </td>
-                  <td className="py-3.5 px-5 font-bold uppercase tracking-wider text-[10px] text-slate-500">
+                  <td className={`font-bold uppercase tracking-wider text-[10px] text-slate-500 ${cellPaddingClass}`}>
                     {b.customer_type}
                   </td>
-                  <td className="py-3.5 px-5 text-right font-black text-slate-800">
+                  <td className={`text-right font-black text-slate-800 ${cellPaddingClass}`}>
                     ₹ {parseFloat(b.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="py-3.5 px-5 text-center font-bold text-slate-600">
+                  <td className={`text-center font-bold text-slate-600 ${cellPaddingClass}`}>
                     <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] uppercase">
                       {b.payment_mode}
                     </span>
                   </td>
-                  <td className="py-3.5 px-5 text-right text-emerald-600 font-extrabold">
+                  <td className={`text-right text-emerald-600 font-extrabold ${cellPaddingClass}`}>
                     ₹ {parseFloat(b.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </td>
-                  <td className="py-3.5 px-5 text-right">
+                  <td className={`text-right ${cellPaddingClass}`}>
                     {parseFloat(b.due_amount) > 0 ? (
                       <span className="text-rose-500 font-black">
                         ₹ {parseFloat(b.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -257,29 +270,33 @@ const Billing = () => {
                       <span className="text-slate-400 font-bold">Settled</span>
                     )}
                   </td>
-                  <td className="py-3.5 px-5 text-center">
+                  <td className={`text-center ${cellPaddingClass}`}>
                     <div className="flex items-center justify-center gap-1.5">
                       <button 
                         onClick={() => handleOpenView(b)}
-                        className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 hover:text-slate-800 font-bold transition-all"
+                        className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-slate-650 hover:bg-slate-100 hover:text-slate-800 font-bold transition-all text-xs"
                         title="View Details"
                       >
                         👁 View
                       </button>
-                      <button 
-                        onClick={() => navigate('/billing-form', { state: { editBillId: b.id } })}
-                        className="px-2 py-1 rounded bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-bold transition-all"
-                        title="Edit Invoice"
-                      >
-                        ✎ Edit
-                      </button>
-                      <button 
-                        onClick={() => confirmDelete(b.id)}
-                        className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all"
-                        title="Delete Invoice"
-                      >
-                        ✕ Delete
-                      </button>
+                      {canUpdate('billing') && (
+                        <button 
+                          onClick={() => navigate('/billing-form', { state: { editBillId: b.id } })}
+                          className="px-2 py-1 rounded bg-blue-50 border border-blue-100 text-blue-600 hover:bg-blue-100 hover:text-blue-700 font-bold transition-all text-xs"
+                          title="Edit Invoice"
+                        >
+                          ✎ Edit
+                        </button>
+                      )}
+                      {canDelete('billing') && (
+                        <button 
+                          onClick={() => confirmDelete(b.id)}
+                          className="px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 font-bold transition-all text-xs"
+                          title="Delete Invoice"
+                        >
+                          ✕ Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -295,6 +312,17 @@ const Billing = () => {
             </tbody>
           </table>
         </div>
+
+        {/* Reusable Table Pagination Controls */}
+        <TablePagination
+          page={page}
+          limit={limit}
+          total={total}
+          onPageChange={setPage}
+          onLimitChange={setLimit}
+          density={density}
+          onDensityChange={setDensity}
+        />
       </div>
 
       {/* VIEW MODAL (PROFESSIONAL GST TAX INVOICE) */}

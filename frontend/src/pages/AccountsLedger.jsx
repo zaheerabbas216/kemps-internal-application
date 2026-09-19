@@ -1,10 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const AccountsLedger = () => {
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadLedgerTab = canRead('accounts-ledger-tab');
+  const canReadAnalyticsTab = canRead('accounts-ledger-analytics');
+
   // Navigation & Tabs
-  const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' | 'analytics'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadLedgerTab) return 'ledger';
+    if (canReadAnalyticsTab) return 'analytics';
+    return 'ledger';
+  });
 
   // Dropdown options
   const [customers, setCustomers] = useState([]);
@@ -25,6 +36,11 @@ const AccountsLedger = () => {
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Pagination & Density states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Document details view modal
   const [viewingBill, setViewingBill] = useState(null);
@@ -681,8 +697,13 @@ const AccountsLedger = () => {
     }
   `;
 
+  // Density padding helper
+  const cellPadding = getDensityClass(density);
+  const headerCellPadding = getDensityClass(density, true);
+  const paginatedTransactions = limit === -1 ? transactions : transactions.slice((page - 1) * limit, page * limit);
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       <style>{printStyles}</style>
 
       {/* HEADER SECTION (NO PRINT) */}
@@ -1171,26 +1192,30 @@ const AccountsLedger = () => {
 
           {/* DUAL VIEW TAB SELECTORS (NO PRINT) */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit border border-slate-200/40 no-print">
-            <button
-              onClick={() => setActiveTab('ledger')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'ledger' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📒</span> TRANSACTION JOURNAL
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'analytics' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📊</span> PERFORMANCE ANALYTICS
-            </button>
+            {canReadLedgerTab && (
+              <button
+                onClick={() => setActiveTab('ledger')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'ledger' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📒</span> TRANSACTION JOURNAL
+              </button>
+            )}
+            {canReadAnalyticsTab && (
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'analytics' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📊</span> PERFORMANCE ANALYTICS
+              </button>
+            )}
           </div>
 
           {/* TAB CONTENT 1: LEDGER TABLE */}
@@ -1210,100 +1235,113 @@ const AccountsLedger = () => {
                   <span className="loading loading-spinner text-primary"></span>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                        <th className="py-4 px-5">Date</th>
-                        <th className="py-4 px-5">Transaction Type</th>
-                        <th className="py-4 px-5">Reference No</th>
-                        <th className="py-4 px-5">Description/Particulars</th>
-                        <th className="py-4 px-5 text-right">Debit (₹)</th>
-                        <th className="py-4 px-5 text-right">Credit (₹)</th>
-                        <th className="py-4 px-5 text-right">Balance (₹)</th>
-                        <th className="py-4 px-5">Branch</th>
-                        <th className="py-4 px-5">Created By</th>
-                        <th className="py-4 px-5">Remarks</th>
-                        <th className="py-4 px-5 text-center">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
-                      {/* Opening Balance Row */}
-                      {startDate && (
-                        <tr className="bg-slate-50/50 font-bold text-slate-500 italic">
-                          <td className="py-3.5 px-5">—</td>
-                          <td className="py-3.5 px-5 uppercase text-[10px] tracking-wider font-extrabold">Opening Balance</td>
-                          <td className="py-3.5 px-5">—</td>
-                          <td className="py-3.5 px-5 text-slate-500">Opening Balance (Before {formatDateDDMMYYYY(startDate)})</td>
-                          <td className="py-3.5 px-5 text-right">—</td>
-                          <td className="py-3.5 px-5 text-right">—</td>
-                          <td className="py-3.5 px-5 text-right font-black">
-                            {formatBalance(openingBalance)}
-                          </td>
-                          <td className="py-3.5 px-5">—</td>
-                          <td className="py-3.5 px-5">—</td>
-                          <td className="py-3.5 px-5">—</td>
-                          <td className="py-3.5 px-5">—</td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-450 uppercase tracking-wider">
+                          <th className={headerCellPadding}>Date</th>
+                          <th className={headerCellPadding}>Transaction Type</th>
+                          <th className={headerCellPadding}>Reference No</th>
+                          <th className={headerCellPadding}>Description/Particulars</th>
+                          <th className={`${headerCellPadding} text-right`}>Debit (₹)</th>
+                          <th className={`${headerCellPadding} text-right`}>Credit (₹)</th>
+                          <th className={`${headerCellPadding} text-right`}>Balance (₹)</th>
+                          <th className={headerCellPadding}>Branch</th>
+                          <th className={headerCellPadding}>Created By</th>
+                          <th className={headerCellPadding}>Remarks</th>
+                          <th className={`${headerCellPadding} text-center`}>Action</th>
                         </tr>
-                      )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
+                        {/* Opening Balance Row */}
+                        {startDate && (
+                          <tr className="bg-slate-50/50 font-bold text-slate-500 italic">
+                            <td className={cellPadding}>—</td>
+                            <td className={`${cellPadding} uppercase text-[10px] tracking-wider font-extrabold`}>Opening Balance</td>
+                            <td className={cellPadding}>—</td>
+                            <td className={`${cellPadding} text-slate-500`}>Opening Balance (Before {formatDateDDMMYYYY(startDate)})</td>
+                            <td className={`${cellPadding} text-right`}>—</td>
+                            <td className={`${cellPadding} text-right`}>—</td>
+                            <td className={`${cellPadding} text-right font-black`}>
+                              {formatBalance(openingBalance)}
+                            </td>
+                            <td className={cellPadding}>—</td>
+                            <td className={cellPadding}>—</td>
+                            <td className={cellPadding}>—</td>
+                            <td className={cellPadding}>—</td>
+                          </tr>
+                        )}
 
-                      {/* Transactions rows */}
-                      {transactions.map(t => (
-                        <tr key={t.id} className="hover:bg-slate-50/40 transition-colors">
-                          <td className="py-3.5 px-5">{formatDateDDMMYYYY(t.date)}</td>
-                          <td className="py-3.5 px-5">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
-                              t.entryType === 'Sale Invoice' ? 'bg-blue-100 text-blue-800' :
-                              t.entryType === 'Sales Return' ? 'bg-orange-100 text-orange-850' :
-                              t.entryType === 'Payment' ? 'bg-emerald-100 text-emerald-800' :
-                              t.entryType === 'Advance Payment' ? 'bg-emerald-100 text-emerald-800' :
-                              t.entryType === 'Debit Note' ? 'bg-rose-100 text-rose-800' :
-                              t.entryType === 'Credit Note' ? 'bg-orange-100 text-orange-850' :
-                              t.entryType === 'Refund' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'
-                            }`}>
-                              {t.entryType}
-                            </span>
-                          </td>
-                          <td className="py-3.5 px-5 font-mono text-[11px] font-bold">
-                            <button
-                              onClick={() => handleOpenDocument(t.referenceNo)}
-                              className="text-primary hover:underline hover:text-blue-700 font-extrabold cursor-pointer"
-                              title="Click to view original document details"
-                            >
-                              {t.referenceNo}
-                            </button>
-                          </td>
-                          <td className="py-3.5 px-5 font-bold text-slate-800">{t.particular}</td>
-                          <td className="py-3.5 px-5 text-right font-bold text-slate-700">
-                            {t.debit > 0 ? `₹ ${formatCurrency(t.debit)}` : '—'}
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-extrabold text-emerald-600">
-                            {t.credit > 0 ? `₹ ${formatCurrency(t.credit)}` : '—'}
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-black text-slate-800">
-                            {formatBalance(t.runningBalance)}
-                          </td>
-                          <td className="py-3.5 px-5 text-slate-500 font-medium">{t.branch || '—'}</td>
-                          <td className="py-3.5 px-5 text-slate-500 font-medium">{t.createdBy || '—'}</td>
-                          <td className="py-3.5 px-5 text-slate-450 italic text-[11px] truncate max-w-[120px]" title={t.remarks}>{t.remarks || '—'}</td>
-                          <td className="py-3.5 px-5 text-center">
-                            <button type="button" onClick={() => handleEditTransaction(t)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-primary hover:bg-blue-100 border border-blue-100 text-[10px] font-black uppercase tracking-wide transition-colors" title="Edit journal entry">
-                              Edit
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                        {/* Transactions rows */}
+                        {paginatedTransactions.map(t => (
+                          <tr key={t.id} className="hover:bg-slate-50/40 transition-colors">
+                            <td className={cellPadding}>{formatDateDDMMYYYY(t.date)}</td>
+                            <td className={cellPadding}>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase ${
+                                t.entryType === 'Sale Invoice' ? 'bg-blue-100 text-blue-800' :
+                                t.entryType === 'Sales Return' ? 'bg-orange-100 text-orange-850' :
+                                t.entryType === 'Payment' ? 'bg-emerald-100 text-emerald-800' :
+                                t.entryType === 'Advance Payment' ? 'bg-emerald-100 text-emerald-800' :
+                                t.entryType === 'Debit Note' ? 'bg-rose-100 text-rose-800' :
+                                t.entryType === 'Credit Note' ? 'bg-orange-100 text-orange-850' :
+                                t.entryType === 'Refund' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'
+                              }`}>
+                                {t.entryType}
+                              </span>
+                            </td>
+                            <td className={`${cellPadding} font-mono text-[11px] font-bold`}>
+                              <button
+                                onClick={() => handleOpenDocument(t.referenceNo)}
+                                className="text-primary hover:underline hover:text-blue-700 font-extrabold cursor-pointer"
+                                title="Click to view original document details"
+                              >
+                                {t.referenceNo}
+                              </button>
+                            </td>
+                            <td className={`${cellPadding} font-bold text-slate-800`}>{t.particular}</td>
+                            <td className={`${cellPadding} text-right font-bold text-slate-700`}>
+                              {t.debit > 0 ? `₹ ${formatCurrency(t.debit)}` : '—'}
+                            </td>
+                            <td className={`${cellPadding} text-right font-extrabold text-emerald-600`}>
+                              {t.credit > 0 ? `₹ ${formatCurrency(t.credit)}` : '—'}
+                            </td>
+                            <td className={`${cellPadding} text-right font-black text-slate-800`}>
+                              {formatBalance(t.runningBalance)}
+                            </td>
+                            <td className={`${cellPadding} text-slate-500 font-medium`}>{t.branch || '—'}</td>
+                            <td className={`${cellPadding} text-slate-500 font-medium`}>{t.createdBy || '—'}</td>
+                            <td className={`${cellPadding} text-slate-450 italic text-[11px] truncate max-w-[120px]`} title={t.remarks}>{t.remarks || '—'}</td>
+                            <td className={`${cellPadding} text-center`}>
+                              {canUpdate('accounts-ledger') && (
+                                <button type="button" onClick={() => handleEditTransaction(t)} className="px-3 py-1.5 rounded-lg bg-blue-50 text-primary hover:bg-blue-100 border border-blue-100 text-[10px] font-black uppercase tracking-wide transition-colors" title="Edit journal entry">
+                                  Edit
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
 
-                      {transactions.length === 0 && (
-                        <tr>
-                          <td colSpan="11" className="py-12 text-center text-slate-400 font-bold bg-slate-50/10">
-                            No ledger entries found for the selected period / filters.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        {transactions.length === 0 && (
+                          <tr>
+                            <td colSpan="11" className="py-12 text-center text-slate-400 font-bold bg-slate-50/10">
+                              No ledger entries found for the selected period / filters.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <TablePagination 
+                    page={page}
+                    limit={limit}
+                    total={transactions.length}
+                    onPageChange={setPage}
+                    onLimitChange={setLimit}
+                    density={density}
+                    onDensityChange={setDensity}
+                  />
+                </>
               )}
             </div>
           )}

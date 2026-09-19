@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, deleteLedgerEntriesForReference, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -112,7 +113,12 @@ router.get('/dashboard-history', async (req, res) => {
 // GET /api/billing/today - Retrieves today's invoices and calculates stats
 router.get('/today', async (req, res) => {
   try {
-    const { search = '' } = req.query;
+    let { search = '', page = 1, limit = 10 } = req.query;
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 10;
+    const offsetCalc = (page - 1) * limit;
 
     const now = new Date();
     const offset = now.getTimezoneOffset();
@@ -152,6 +158,14 @@ router.get('/today', async (req, res) => {
       queryParams.push(wildSearch, wildSearch, wildSearch);
     }
 
+    // Count query for pagination total
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM customer_bills cb ${whereClause}`,
+      queryParams
+    );
+    const total = countRows[0].total || 0;
+
+    // Paginated rows query
     const [rows] = await pool.query(
       `SELECT 
          cb.id,
@@ -170,13 +184,15 @@ router.get('/today', async (req, res) => {
          cb.created_at
        FROM customer_bills cb
        ${whereClause} 
-       ORDER BY cb.created_at DESC`,
-      queryParams
+       ORDER BY cb.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...queryParams, limit, offsetCalc]
     );
 
     res.json({
       ok: true,
       bills: rows,
+      total,
       todayStr,
       summary
     });
@@ -662,6 +678,7 @@ router.post('/', async (req, res) => {
     // No extra ledger entry is needed for applied credit balance since the debit invoice and pre-existing credit entries already offset each other.
 
     await connection.commit();
+    broadcastEvent('BILL_GENERATED', { id: billId, action: 'create' });
     res.json({ ok: true, id: billId, message: 'Invoice saved successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -1013,6 +1030,7 @@ router.delete('/:id', async (req, res) => {
     await deleteLedgerEntriesForReference(connection, id);
 
     await connection.commit();
+    broadcastEvent('BILL_GENERATED', { id, action: 'delete' });
     res.json({ ok: true, message: 'Invoice deleted successfully.' });
   } catch (error) {
     await connection.rollback();

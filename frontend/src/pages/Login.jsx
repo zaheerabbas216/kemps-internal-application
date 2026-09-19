@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import { useAuth } from '../context/AuthContext';
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login, getFirstPermittedPath } = useAuth();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -26,26 +28,15 @@ const Login = () => {
         password: password
       });
 
-      if (response.data.ok) {
-        const user = response.data.user;
-        const isAdmin = user.is_admin || user.username.toLowerCase() === 'admin';
-        const permissions = user.permissions || null;
-
-        localStorage.setItem('kemps_logged_in', 'true');
-        localStorage.setItem('kemps_username', user.username);
-        localStorage.setItem('kemps_name', user.name || user.username);
-        localStorage.setItem('kemps_auth_token', response.data.token);
-        localStorage.setItem('kemps_is_admin', String(isAdmin));
-        localStorage.setItem('kemps_permissions', JSON.stringify(permissions));
-
-        // Determine destination: if admin or has access to /dashboard, go to /dashboard (or first allowed path)
-        if (isAdmin || !permissions || permissions.includes('/dashboard')) {
-          navigate('/dashboard');
-        } else if (permissions && permissions.length > 0) {
-          navigate(permissions[0]);
-        } else {
-          navigate('/dashboard');
-        }
+        login(
+          { ...response.data.user, token: response.data.token },
+          response.data.permissions || {}
+        );
+        const redirectPath = getFirstPermittedPath(
+          response.data.permissions || {},
+          !!response.data.user?.isSuperAdmin
+        );
+        navigate(redirectPath);
       } else {
         setError(response.data.error || 'Invalid username or password.');
       }

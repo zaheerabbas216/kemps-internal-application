@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const SalesReturn = () => {
+  const { canCreate, canUpdate, canRead } = useAuth();
+  
+  const canReadNew = canRead('sales-return-new') || canCreate('sales-return');
+  const canReadHistory = canRead('sales-return-history');
+  const canReadReports = canRead('sales-return-reports');
+
   // Tabs: 'new', 'history', 'reports'
-  const [activeTab, setActiveTab] = useState('new');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadNew) return 'new';
+    if (canReadHistory) return 'history';
+    if (canReadReports) return 'reports';
+    return 'new';
+  });
 
   // Customer & Invoice States
   const [customers, setCustomers] = useState([]);
@@ -50,7 +63,8 @@ const SalesReturn = () => {
   const [historyStart, setHistoryStart] = useState('');
   const [historyEnd, setHistoryEnd] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyLimit] = useState(10);
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [historyDensity, setHistoryDensity] = useState('medium');
   const [historyTotal, setHistoryTotal] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -122,7 +136,7 @@ const SalesReturn = () => {
     } else if (activeTab === 'reports') {
       fetchReports();
     }
-  }, [activeTab, historyPage, historySearch, historyStart, historyEnd]);
+  }, [activeTab, historyPage, historyLimit, historySearch, historyStart, historyEnd]);
 
   const fetchCustomers = async () => {
     try {
@@ -487,7 +501,7 @@ const SalesReturn = () => {
     : [];
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -498,30 +512,36 @@ const SalesReturn = () => {
 
         {/* WORKSPACE NAVIGATION TABS */}
         <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200/40 w-fit">
-          <button
-            onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ↩ NEW RETURN
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 RETURN HISTORY
-          </button>
-          <button
-            onClick={() => setActiveTab('reports')}
-            className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
-              activeTab === 'reports' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📊 REPORTS
-          </button>
+          {canReadNew && (
+            <button
+              onClick={() => setActiveTab('new')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ↩ NEW RETURN
+            </button>
+          )}
+          {canReadHistory && (
+            <button
+              onClick={() => setActiveTab('history')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 RETURN HISTORY
+            </button>
+          )}
+          {canReadReports && (
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`px-4 py-2 rounded-lg text-xs font-black tracking-wider transition-all ${
+                activeTab === 'reports' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📊 REPORTS
+            </button>
+          )}
         </div>
       </div>
 
@@ -946,29 +966,16 @@ const SalesReturn = () => {
                 </tbody>
               </table>
 
-              {/* Pagination */}
-              {Math.ceil(historyTotal / historyLimit) > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-t border-slate-100 mt-4 rounded-xl">
-                  <span className="text-xs text-slate-450 font-bold">
-                    Page {historyPage} of {Math.ceil(historyTotal / historyLimit)} ({historyTotal} returns total)
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setHistoryPage(prev => Math.max(prev - 1, 1))}
-                      disabled={historyPage === 1}
-                      className="px-3 py-1 rounded border border-slate-200 bg-white text-xs font-bold disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setHistoryPage(prev => Math.min(prev + 1, Math.ceil(historyTotal / historyLimit)))}
-                      disabled={historyPage === Math.ceil(historyTotal / historyLimit)}
-                      className="px-3 py-1 rounded border border-slate-200 bg-white text-xs font-bold disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+              {!loadingHistory && historyTotal > 0 && (
+                <TablePagination
+                  page={historyPage}
+                  limit={historyLimit}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  onLimitChange={setHistoryLimit}
+                  density={historyDensity}
+                  onDensityChange={setHistoryDensity}
+                />
               )}
             </div>
           )}

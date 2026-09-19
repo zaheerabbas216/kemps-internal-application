@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, addSupplierLedgerEntry, recalculateLedgerBalances } from '../helpers/ledgerHelper.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -106,6 +107,7 @@ router.post('/', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastEvent('PAYMENT_APPROVAL_REQUESTED', { approvalId, action: 'requested' });
     res.json({ ok: true, approvalId, message: 'Payment approval entry created.' });
   } catch (error) {
     await connection.rollback();
@@ -705,6 +707,7 @@ router.put('/:approvalId/approve', async (req, res) => {
     );
 
     await connection.commit();
+    broadcastEvent('PAYMENT_APPROVED', { approvalId, action: 'approved' });
     res.json({
       ok: true,
       message: 'Transaction approved and cash ledger updated.',

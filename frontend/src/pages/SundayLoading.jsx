@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 // Currency formatting helper
 const formatINR = (val) =>
@@ -25,6 +27,7 @@ const getTodayIST = () => {
 
 const SundayLoading = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
   const today = getTodayIST();
 
   // Dropdown lists
@@ -57,6 +60,9 @@ const SundayLoading = () => {
   const [todayRecords, setTodayRecords] = useState([]);
   const [todaySummary, setTodaySummary] = useState(null);
   const [loadingToday, setLoadingToday] = useState(false);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -664,23 +670,25 @@ const SundayLoading = () => {
             >
               Reset
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || isOverpaid}
-              className="px-8 h-12 rounded-xl bg-primary hover:bg-primary-focus text-white text-xs font-black shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95"
-            >
-              {isSubmitting ? (
-                <>
-                  <span className="loading loading-spinner loading-xs"></span>
-                  <span>Saving Record...</span>
-                </>
-              ) : (
-                <>
-                  <span>✓</span>
-                  <span>SUBMIT SUNDAY LOADING</span>
-                </>
-              )}
-            </button>
+            {canCreate('sunday-loading') && (
+              <button
+                type="submit"
+                disabled={isSubmitting || isOverpaid}
+                className="px-8 h-12 rounded-xl bg-primary hover:bg-primary-focus text-white text-xs font-black shadow-lg shadow-primary/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 active:scale-95"
+              >
+                {isSubmitting ? (
+                  <>
+                    <span className="loading loading-spinner loading-xs"></span>
+                    <span>Saving Record...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>☀️</span>
+                    <span>Record Sunday Loading</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -718,15 +726,15 @@ const SundayLoading = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                <th className="py-3 px-4">Transaction No</th>
-                <th className="py-3 px-4">Customer</th>
-                <th className="py-3 px-4">Product</th>
-                <th className="py-3 px-4 text-center">Qty</th>
-                <th className="py-3 px-4 text-right">Rate</th>
-                <th className="py-3 px-4 text-right">Total Amount</th>
-                <th className="py-3 px-4 text-right">Total Paid</th>
-                <th className="py-3 px-4 text-right">Due</th>
-                <th className="py-3 px-4 text-center">Action</th>
+                <th className={`${getDensityClass(density, true)}`}>Transaction No</th>
+                <th className={`${getDensityClass(density, true)}`}>Customer</th>
+                <th className={`${getDensityClass(density, true)}`}>Product</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Qty</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Rate</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Total Amount</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Total Paid</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Due</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -744,34 +752,34 @@ const SundayLoading = () => {
                   </td>
                 </tr>
               ) : (
-                todayRecords.map((r) => (
+                todayRecords.slice((page - 1) * limit, page * limit).map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-primary whitespace-nowrap">
+                    <td className={`${getDensityClass(density)} font-mono font-bold text-primary whitespace-nowrap`}>
                       {r.transaction_number}
                     </td>
-                    <td className="py-3 px-4">
+                    <td className={`${getDensityClass(density)}`}>
                       <p className="font-bold text-slate-800">{r.customer_name}</p>
                       {r.customer_phone && <p className="text-[11px] text-slate-400">{r.customer_phone}</p>}
                     </td>
-                    <td className="py-3 px-4 font-semibold text-slate-800">
+                    <td className={`${getDensityClass(density)} font-semibold text-slate-800`}>
                       {r.product_name}
                     </td>
-                    <td className="py-3 px-4 text-center font-bold">
+                    <td className={`${getDensityClass(density)} text-center font-bold`}>
                       {r.quantity}
                     </td>
-                    <td className="py-3 px-4 text-right font-medium">
+                    <td className={`${getDensityClass(density)} text-right font-medium`}>
                       {formatINR(r.rate)}
                     </td>
-                    <td className="py-3 px-4 text-right font-black text-slate-900">
+                    <td className={`${getDensityClass(density)} text-right font-black text-slate-900`}>
                       {formatINR(r.total_amount)}
                     </td>
-                    <td className="py-3 px-4 text-right font-bold text-emerald-600">
+                    <td className={`${getDensityClass(density)} text-right font-bold text-emerald-600`}>
                       {formatINR(r.total_paid)}
                     </td>
-                    <td className={`py-3 px-4 text-right font-bold ${r.due_amount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                    <td className={`${getDensityClass(density)} text-right font-bold ${r.due_amount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
                       {formatINR(r.due_amount)}
                     </td>
-                    <td className="py-3 px-4 text-center whitespace-nowrap">
+                    <td className={`${getDensityClass(density)} text-center whitespace-nowrap`}>
                       <button
                         type="button"
                         onClick={() => setSelectedRecordForModal(r)}
@@ -786,6 +794,15 @@ const SundayLoading = () => {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          setPage={setPage}
+          limit={limit}
+          setLimit={setLimit}
+          totalItems={todayRecords.length}
+          density={density}
+          setDensity={setDensity}
+        />
       </div>
 
       {/* ── TRANSACTION DETAILS MODAL ─────────────────────────────────────── */}

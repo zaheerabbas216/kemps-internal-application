@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const Expense = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
   
   // Data states
   const [expenses, setExpenses] = useState([]);
@@ -11,6 +15,9 @@ const Expense = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -266,14 +273,11 @@ const Expense = () => {
         
         {/* Search header container */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search today's expenses..."
+          <div className="flex-1 max-w-md">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search today's expenses..."
             />
           </div>
           <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-100">
@@ -313,7 +317,7 @@ const Expense = () => {
                   </td>
                 </tr>
               ) : (
-                expenses.map((exp) => {
+                expenses.slice((page - 1) * limit, page * limit).map((exp) => {
                   const editable = exp.payment_status === 'Pending Approval';
                   const lockMsg = "This expense has already been approved and posted to accounts. Please create an adjustment or reversal entry.";
                   return (
@@ -369,6 +373,18 @@ const Expense = () => {
             </tbody>
           </table>
         </div>
+
+        {!loading && expenses.length > 0 && (
+          <TablePagination
+            page={page}
+            limit={limit}
+            total={expenses.length}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
+        )}
       </div>
 
       {/* ADD / EDIT EXPENSE MODAL */}

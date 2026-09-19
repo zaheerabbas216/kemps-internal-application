@@ -19,33 +19,58 @@ async function initDB() {
     // Automatically check and repair any corrupted InnoDB tables / orphan tablespaces
     await repairCorruptedTables(connection, 'kemps_inventory');
 
-    console.log('Creating admins table...');
+    console.log('Creating roles table...');
     await connection.query(`
-      CREATE TABLE IF NOT EXISTS admins (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        name VARCHAR(100),
-        permissions JSON NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      CREATE TABLE IF NOT EXISTS roles (
+        id          INT AUTO_INCREMENT PRIMARY KEY,
+        name        VARCHAR(100) UNIQUE NOT NULL,
+        description TEXT,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // Ensure permissions column exists for existing installations
+    console.log('Creating role_permissions table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS role_permissions (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        role_id    INT          NOT NULL,
+        module     VARCHAR(100) NOT NULL,
+        can_read   TINYINT(1)   NOT NULL DEFAULT 0,
+        can_create TINYINT(1)   NOT NULL DEFAULT 0,
+        can_update TINYINT(1)   NOT NULL DEFAULT 0,
+        can_delete TINYINT(1)   NOT NULL DEFAULT 0,
+        UNIQUE KEY uq_role_module (role_id, module),
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    console.log('Creating admins table...');
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS admins (
+        id         INT AUTO_INCREMENT PRIMARY KEY,
+        username   VARCHAR(50)  UNIQUE NOT NULL,
+        password   VARCHAR(255) NOT NULL,
+        name       VARCHAR(100),
+        role_id    INT          NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Ensure role_id column exists for existing installations
     try {
-      await connection.query('ALTER TABLE admins ADD COLUMN permissions JSON NULL AFTER name');
+      await connection.query('ALTER TABLE admins ADD COLUMN role_id INT NULL DEFAULT NULL AFTER name');
     } catch (e) {
       // Column already exists
     }
-
-    // Seed default admin if none exists
     const [existingAdmins] = await connection.query('SELECT COUNT(*) as count FROM admins');
     if (existingAdmins[0].count === 0) {
-      console.log('Seeding default admin...');
+      console.log('Seeding default admin (superadmin, role_id = NULL)...');
       const hashedPassword = await bcrypt.hash('username', 10);
       await connection.query(
-        'INSERT INTO admins (username, password, name) VALUES (?, ?, ?)',
+        'INSERT INTO admins (username, password, name, role_id) VALUES (?, ?, ?, NULL)',
         ['admin', hashedPassword, 'Zaheer Abbas']
       );
     }
@@ -152,11 +177,23 @@ async function initDB() {
         additional_expenses DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         grand_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         remarks TEXT,
+        image_url VARCHAR(500) DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         FOREIGN KEY (supplier_id) REFERENCES company_details(id) ON DELETE RESTRICT
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Ensure image_url column exists for existing inventory_bills table
+    try {
+      const [cols] = await connection.query(`SHOW COLUMNS FROM inventory_bills LIKE 'image_url'`);
+      if (cols.length === 0) {
+        await connection.query(`ALTER TABLE inventory_bills ADD COLUMN image_url VARCHAR(500) DEFAULT NULL`);
+        console.log('Added image_url column to inventory_bills table.');
+      }
+    } catch (colErr) {
+      console.error('Error checking/adding image_url column:', colErr.message);
+    }
 
     console.log('Creating inventory_bill_items table...');
     await connection.query(`

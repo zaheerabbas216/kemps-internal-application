@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry } from '../helpers/ledgerHelper.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -383,6 +384,7 @@ router.post('/', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('SALES_RETURN_CREATED', { id: returnId, action: 'create' });
     res.json({
       ok: true,
       id: returnId,

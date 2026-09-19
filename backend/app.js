@@ -37,7 +37,14 @@ import wastageRoutes from './routes/wastage.js';
 import weightMeasurementRoutes from './routes/weightMeasurement.js';
 import toolsInventoryRoutes from './routes/toolsInventory.js';
 import impWorkRoutes from './routes/impWork.js';
+import sseRoutes from './routes/sse.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 import authMiddleware from './middleware/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -74,6 +81,7 @@ app.use(cors({
   }
 }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiter for authentication login endpoint
 const loginRateLimiter = rateLimit({
@@ -121,6 +129,7 @@ app.use('/api/wastage', authMiddleware, wastageRoutes);
 app.use('/api/weight-measurement', authMiddleware, weightMeasurementRoutes);
 app.use('/api/tools-inventory', authMiddleware, toolsInventoryRoutes);
 app.use('/api/imp-work', authMiddleware, impWorkRoutes);
+app.use('/api/sse', sseRoutes);
 // Database connection test can happen in server.js
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' });

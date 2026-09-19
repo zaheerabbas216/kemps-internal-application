@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../config/db.js';
 import { addLedgerEntry, deleteLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
 
@@ -214,6 +215,7 @@ router.post('/', async (req, res) => {
     });
 
     await connection.commit();
+    broadcastEvent('ORDER_CREATED', { id: orderId, action: 'create' });
     res.json({
       ok: true,
       id: orderId,
@@ -681,6 +683,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('ORDER_STATUS_UPDATED', { id, action: 'update' });
     res.json({
       ok: true,
       message: 'Order updated successfully!'
@@ -720,6 +723,7 @@ router.post('/:id/supply', async (req, res) => {
       [suppliedBy, id]
     );
 
+    broadcastEvent('ORDER_STATUS_UPDATED', { id, action: 'supplied' });
     res.json({
       ok: true,
       message: 'Order marked as Supplied successfully.'
@@ -774,6 +778,7 @@ router.post('/:id/cancel', async (req, res) => {
       console.error('Error cleaning up advance payment on order cancel:', e);
     }
 
+    broadcastEvent('ORDER_STATUS_UPDATED', { id, action: 'cancelled' });
     res.json({
       ok: true,
       message: 'Order cancelled successfully.'

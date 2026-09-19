@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 
 // ── colour maps ────────────────────────────────────────────────────────────
 const MODULE_BADGE = {
@@ -56,7 +57,8 @@ const CashLedger = () => {
   const [method, setMethod]           = useState('All');   // All | Cash | UPI | Bank
   const [flowType, setFlowType]       = useState('all');   // all | in | out
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 20;
+  const [limit, setLimit]             = useState(20);
+  const [density, setDensity]         = useState('medium');
 
   const [entries, setEntries]   = useState([]);
   const [total, setTotal]       = useState(0);
@@ -72,6 +74,8 @@ const CashLedger = () => {
   const [historyList, setHistoryList]         = useState([]);
   const [historyTotal, setHistoryTotal]       = useState(0);
   const [historyPage, setHistoryPage]         = useState(1);
+  const [historyLimit, setHistoryLimit]       = useState(20);
+  const [historyDensity, setHistoryDensity]   = useState('medium');
   const [historySearch, setHistorySearch]     = useState('');
   const [historyStart, setHistoryStart]       = useState('');
   const [historyEnd, setHistoryEnd]           = useState('');
@@ -366,8 +370,14 @@ const CashLedger = () => {
   const counterCash  = summary ? summary.counterCash : 0;
 
   // ── render ────────────────────────────────────────────────────────────────
+  // Density padding helper
+  const cellPadding = getDensityClass(density);
+  const headerCellPadding = getDensityClass(density, true);
+  const historyCellPadding = getDensityClass(historyDensity);
+  const historyHeaderCellPadding = getDensityClass(historyDensity, true);
+
   return (
-    <div className="space-y-6 animate-fade-in pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -611,13 +621,13 @@ const CashLedger = () => {
 
               {/* Search */}
               <div className="md:col-span-2 relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
                 <input
                   type="text"
                   placeholder="Search party, ref, description…"
                   value={search}
                   onChange={handleFilterChange(setSearch)}
-                  className="input-premium pl-10 h-11 w-full text-sm"
+                  className="input-premium !pl-10 h-11 w-full text-sm"
                 />
               </div>
 
@@ -694,14 +704,14 @@ const CashLedger = () => {
               <table className="table table-zebra w-full">
                 <thead className="bg-slate-50 border-b border-slate-100">
                   <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-3 px-4 text-left">Date</th>
-                    <th className="py-3 px-4 text-left">Ref</th>
-                    <th className="py-3 px-4 text-left">Source</th>
-                    <th className="py-3 px-4 text-left">Party / Description</th>
-                    <th className="py-3 px-4 text-left">Method</th>
-                    <th className="py-3 px-4 text-center">Type</th>
-                    <th className="py-3 px-4 text-right">Amount (₹)</th>
-                    <th className="py-3 px-4 text-center">Actions</th>
+                    <th className={`${headerCellPadding} text-left`}>Date</th>
+                    <th className={`${headerCellPadding} text-left`}>Ref</th>
+                    <th className={`${headerCellPadding} text-left`}>Source</th>
+                    <th className={`${headerCellPadding} text-left`}>Party / Description</th>
+                    <th className={`${headerCellPadding} text-left`}>Method</th>
+                    <th className={`${headerCellPadding} text-center`}>Type</th>
+                    <th className={`${headerCellPadding} text-right`}>Amount (₹)</th>
+                    <th className={`${headerCellPadding} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -746,29 +756,29 @@ const CashLedger = () => {
                               : 'hover:bg-blue-50/20 transition-colors'
                           }
                         >
-                          <td className="py-3 px-4 text-[13px] font-semibold text-slate-600 whitespace-nowrap">
+                          <td className={`${cellPadding} font-semibold text-slate-600 whitespace-nowrap`}>
                             {fmt(e.txn_date)}
                           </td>
-                          <td className={`py-3 px-4 font-mono text-[12px] font-bold ${
+                          <td className={`${cellPadding} font-mono font-bold ${
                             isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700 font-black' : 'text-primary'
                           } max-w-[130px] truncate`} title={e.ref_id}>
                             {e.ref_id}
                           </td>
-                          <td className="py-3 px-4">
+                          <td className={cellPadding}>
                             <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${modBg}`}>
                               {e.source_module}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-[13px] font-medium text-slate-700 max-w-[260px]">
+                          <td className={`${cellPadding} font-medium text-slate-700 max-w-[260px]`}>
                             <p className="font-bold text-slate-800 truncate">{e.party || '—'}</p>
                             <p className="text-[11px] text-slate-400 truncate">{e.description}</p>
                           </td>
-                          <td className="py-3 px-4">
+                          <td className={cellPadding}>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${methBg}`}>
                               {e.method || '—'}
                             </span>
                           </td>
-                          <td className="py-3 px-4 text-center">
+                          <td className={`${cellPadding} text-center`}>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
                               isOpening
                                 ? 'bg-amber-100 text-amber-800 border-amber-300'
@@ -785,7 +795,7 @@ const CashLedger = () => {
                                 : isIn ? '▲ IN' : '▼ OUT'}
                             </span>
                           </td>
-                          <td className={`py-3 px-4 text-right text-[15px] font-black whitespace-nowrap ${
+                          <td className={`${cellPadding} text-right font-black whitespace-nowrap ${
                             isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700' : isIn ? 'text-emerald-600' : 'text-red-500'
                           }`}>
                             <div className="flex items-center justify-end gap-2">
@@ -812,7 +822,7 @@ const CashLedger = () => {
                               )}
                             </div>
                           </td>
-                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                          <td className={`${cellPadding} text-center whitespace-nowrap`}>
                             <button
                               type="button"
                               onClick={() => handleViewTxnDetails(e)}
@@ -831,29 +841,15 @@ const CashLedger = () => {
             </div>
 
             {/* Pagination */}
-            {!loading && total > 0 && (
-              <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
-                <div className="text-[12px] font-bold text-slate-400 uppercase">
-                  Page {currentPage} of {totalPages} &nbsp;·&nbsp; {total} records
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 text-[12px] font-bold shadow-sm transition-all"
-                  >
-                    ← Prev
-                  </button>
-                  <button
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 text-[12px] font-bold shadow-sm transition-all"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
+            <TablePagination 
+              page={currentPage}
+              limit={limit}
+              total={total}
+              onPageChange={setCurrentPage}
+              onLimitChange={setLimit}
+              density={density}
+              onDensityChange={setDensity}
+            />
           </div>
         </>
       )}
@@ -864,13 +860,13 @@ const CashLedger = () => {
           {/* History Filters */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
             <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
               <input
                 type="text"
                 placeholder="Search history date, user…"
                 value={historySearch}
                 onChange={(e) => { setHistorySearch(e.target.value); setHistoryPage(1); }}
-                className="input-premium pl-10 h-11 w-full text-sm"
+                className="input-premium !pl-10 h-11 w-full text-sm"
               />
             </div>
             <div className="flex items-center gap-2">
@@ -903,19 +899,19 @@ const CashLedger = () => {
             <table className="table table-zebra w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                  <th className="py-3 px-3 text-left">Ledger Date</th>
-                  <th className="py-3 px-3 text-right">Opening (₹)</th>
-                  <th className="py-3 px-3 text-right text-emerald-600">Cash In (₹)</th>
-                  <th className="py-3 px-3 text-right text-indigo-600">UPI In (₹)</th>
-                  <th className="py-3 px-3 text-right text-sky-600">Bank In (₹)</th>
-                  <th className="py-3 px-3 text-right text-violet-600">Credit Adj (₹)</th>
-                  <th className="py-3 px-3 text-right">Total In (₹)</th>
-                  <th className="py-3 px-3 text-right">Total Out (₹)</th>
-                  <th className="py-3 px-3 text-right">Net Closing (₹)</th>
-                  <th className="py-3 px-3 text-right">Submitted (₹)</th>
-                  <th className="py-3 px-3 text-right">Counter Cash (₹)</th>
-                  <th className="py-3 px-3 text-center">Txns</th>
-                  <th className="py-3 px-3 text-center">Actions</th>
+                  <th className={`${historyHeaderCellPadding} text-left`}>Ledger Date</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Opening (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right text-emerald-600`}>Cash In (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right text-indigo-600`}>UPI In (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right text-sky-600`}>Bank In (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right text-violet-600`}>Credit Adj (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Total In (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Total Out (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Net Closing (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Submitted (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-right`}>Counter Cash (₹)</th>
+                  <th className={`${historyHeaderCellPadding} text-center`}>Txns</th>
+                  <th className={`${historyHeaderCellPadding} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -937,45 +933,45 @@ const CashLedger = () => {
                 ) : (
                   historyList.map((row) => (
                     <tr key={row.id} className="hover:bg-blue-50/20 transition-colors">
-                      <td className="py-3 px-3 text-[13px] font-black text-slate-800">
+                      <td className={`${historyCellPadding} font-black text-slate-800`}>
                         {fmt(row.ledgerDate)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-amber-700">
+                      <td className={`${historyCellPadding} text-right font-bold text-amber-700`}>
                         {formatINR(row.totalOpening)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-emerald-600">
+                      <td className={`${historyCellPadding} text-right font-bold text-emerald-600`}>
                         +{formatINR(row.cashIn)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-indigo-600">
+                      <td className={`${historyCellPadding} text-right font-bold text-indigo-600`}>
                         +{formatINR(row.upiIn)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-sky-600">
+                      <td className={`${historyCellPadding} text-right font-bold text-sky-600`}>
                         +{formatINR(row.bankIn)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-violet-600">
+                      <td className={`${historyCellPadding} text-right font-bold text-violet-600`}>
                         {formatINR(row.creditAdjusted || 0)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[13px] font-black text-emerald-700">
+                      <td className={`${historyCellPadding} text-right font-black text-emerald-700`}>
                         +{formatINR(row.totalIn)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-red-500">
+                      <td className={`${historyCellPadding} text-right font-bold text-red-500`}>
                         −{formatINR(row.totalOut)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[13px] font-black text-primary">
+                      <td className={`${historyCellPadding} text-right font-black text-primary`}>
                         {formatINR(row.netClosing)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[12px] font-bold text-slate-700">
+                      <td className={`${historyCellPadding} text-right font-bold text-slate-700`}>
                         {formatINR(row.cashSubmitted)}
                       </td>
-                      <td className="py-3 px-3 text-right text-[13px] font-black text-emerald-700">
+                      <td className={`${historyCellPadding} text-right font-black text-emerald-700`}>
                         {formatINR(row.counterCash)}
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className={`${historyCellPadding} text-center`}>
                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
                           {row.totalTransactions} txns
                         </span>
                       </td>
-                      <td className="py-3 px-3 text-center">
+                      <td className={`${historyCellPadding} text-center`}>
                         <button
                           onClick={() => handleViewDayReport(row.ledgerDate)}
                           className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-1.5 font-bold"
@@ -991,29 +987,15 @@ const CashLedger = () => {
           </div>
 
           {/* History Pagination */}
-          {!loadingHistory && historyTotal > 0 && (
-            <div className="flex items-center justify-between mt-5 pt-4 border-t border-slate-100">
-              <div className="text-[12px] font-bold text-slate-400 uppercase">
-                Page {historyPage} of {historyPages} &nbsp;·&nbsp; {historyTotal} saved reports
-              </div>
-              <div className="flex gap-2">
-                <button
-                  disabled={historyPage === 1}
-                  onClick={() => setHistoryPage(p => Math.max(1, p - 1))}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 text-[12px] font-bold shadow-sm transition-all"
-                >
-                  ← Prev
-                </button>
-                <button
-                  disabled={historyPage === historyPages}
-                  onClick={() => setHistoryPage(p => Math.min(historyPages, p + 1))}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-40 text-[12px] font-bold shadow-sm transition-all"
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
+          <TablePagination 
+            page={historyPage}
+            limit={historyLimit}
+            total={historyTotal}
+            onPageChange={setHistoryPage}
+            onLimitChange={setHistoryLimit}
+            density={historyDensity}
+            onDensityChange={setHistoryDensity}
+          />
         </div>
       )}
 

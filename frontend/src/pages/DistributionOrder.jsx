@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const getTodayIST = () => {
   const now = new Date();
@@ -15,9 +17,19 @@ const getTodayIST = () => {
 
 const DistributionOrder = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+
+  const canReadActive = canRead('distribution-order-active');
+  const canReadNew = canRead('distribution-order-new') || canCreate('distribution-order') || canUpdate('distribution-order');
+  const canReadHistory = canRead('distribution-order-history');
 
   // Active view tabs: 'active' | 'new' | 'history'
-  const [activeTab, setActiveTab] = useState('active');
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadActive) return 'active';
+    if (canReadNew) return 'new';
+    if (canReadHistory) return 'history';
+    return 'active';
+  });
 
   // Master lists
   const [finishedProducts, setFinishedProducts] = useState([]);
@@ -36,7 +48,8 @@ const DistributionOrder = () => {
   const [filterEndDate, setFilterEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Orders lists
   const [orders, setOrders] = useState([]);
@@ -99,7 +112,7 @@ const DistributionOrder = () => {
 
   useEffect(() => {
     fetchOrdersList();
-  }, [activeTab, currentPage, filterSearch, filterStartDate, filterEndDate]);
+  }, [activeTab, currentPage, limit, filterSearch, filterStartDate, filterEndDate]);
 
   const fetchDropdownMasters = async () => {
     try {
@@ -504,7 +517,7 @@ const DistributionOrder = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -513,30 +526,36 @@ const DistributionOrder = () => {
           <p className="text-slate-500 text-sm font-medium mt-1">Book and manage wholesale distributor shipments</p>
         </div>
         <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40 shrink-0">
-          <button
-            onClick={() => { setActiveTab('active'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'active' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            📋 Active Orders
-          </button>
-          <button
-            onClick={() => setActiveTab('new')}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {isEditing ? '✏️ Edit Order' : '🚚 New Order'}
-          </button>
-          <button
-            onClick={() => { setActiveTab('history'); handleResetForm(); }}
-            className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
-              activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            ⏳ History
-          </button>
+          {canReadActive && (
+            <button
+              onClick={() => { setActiveTab('active'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'active' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              📋 Active Orders
+            </button>
+          )}
+          {canReadNew && (
+            <button
+              onClick={() => setActiveTab('new')}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'new' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {isEditing ? '✏️ Edit Order' : '🚚 New Order'}
+            </button>
+          )}
+          {canReadHistory && (
+            <button
+              onClick={() => { setActiveTab('history'); handleResetForm(); }}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase ${
+                activeTab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              ⏳ History
+            </button>
+          )}
         </div>
       </div>
 
@@ -1027,29 +1046,16 @@ const DistributionOrder = () => {
               </table>
             </div>
 
-            {/* Pagination */}
             {!loadingList && totalCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {currentPage} of {Math.ceil(totalCount / limit) || 1} ({totalCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold transition-all"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentPage === Math.ceil(totalCount / limit)}
-                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / limit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold transition-all"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={currentPage}
+                limit={limit}
+                total={totalCount}
+                onPageChange={setCurrentPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
             )}
           </div>
         </div>

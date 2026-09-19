@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -234,6 +236,16 @@ function printTable(title, html) {
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────────
 
 const TotalSales = () => {
+  const { canRead } = useAuth();
+  
+  const canReadOverview = canRead('total-sales-overview');
+  const canReadMonthly = canRead('total-sales-monthly');
+  const canReadProducts = canRead('total-sales-products');
+  const canReadCustomers = canRead('total-sales-customers');
+  const canReadCollection = canRead('total-sales-collection');
+  const canReadCompanies = canRead('total-sales-companies');
+  const canReadTop = canRead('total-sales-top');
+
   const today = getISTDateStr();
   const firstDay = getFirstDayOfMonth();
 
@@ -242,7 +254,16 @@ const TotalSales = () => {
   const [endDate, setEndDate]       = useState(today);
   const [company, setCompany]       = useState('All');
   const [companies, setCompanies]   = useState([]);
-  const [activeTab, setActiveTab]   = useState('overview');
+  const [activeTab, setActiveTab]   = useState(() => {
+    if (canReadOverview) return 'overview';
+    if (canReadMonthly) return 'monthly';
+    if (canReadProducts) return 'products';
+    if (canReadCustomers) return 'customers';
+    if (canReadCollection) return 'collection';
+    if (canReadCompanies) return 'companies';
+    if (canReadTop) return 'top';
+    return 'overview';
+  });
   const [year, setYear]             = useState(new Date().getFullYear());
 
   // ── Data states ────────────────────────────────────────────────────────────────
@@ -253,6 +274,8 @@ const TotalSales = () => {
   const [customers, setCustomers]   = useState([]);
   const [custTotal, setCustTotal]   = useState(0);
   const [custPage, setCustPage]     = useState(1);
+  const [custLimit, setCustLimit]   = useState(10);
+  const [custDensity, setCustDensity] = useState('medium');
   const [custSearch, setCustSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
   const [custInvoices, setCustInvoices] = useState([]);
@@ -333,12 +356,12 @@ const TotalSales = () => {
     setLoadingCust(true);
     try {
       const res = await api.get('/sales-report/customer-wise', {
-        params: { startDate, endDate, company, page: custPage, limit: 20, search: custSearch }
+        params: { startDate, endDate, company, page: custPage, limit: custLimit, search: custSearch }
       });
       if (res.data.ok) { setCustomers(res.data.customers); setCustTotal(res.data.total); }
     } catch (_) {}
     setLoadingCust(false);
-  }, [startDate, endDate, company, custPage, custSearch]);
+  }, [startDate, endDate, company, custPage, custLimit, custSearch]);
 
   // ── Fetch Collection ──────────────────────────────────────────────────────────
   const fetchCollection = useCallback(async () => {
@@ -615,13 +638,13 @@ const TotalSales = () => {
         {/* Tab bar */}
         <div className="px-4 pt-4 border-b border-slate-100">
           <div className="flex gap-1 flex-wrap pb-3 overflow-x-auto">
-            <TabBtn active={activeTab==='overview'}   onClick={() => setActiveTab('overview')}   icon="📈">Overview</TabBtn>
-            <TabBtn active={activeTab==='monthly'}    onClick={() => setActiveTab('monthly')}    icon="📅">Monthly Trend</TabBtn>
-            <TabBtn active={activeTab==='products'}   onClick={() => setActiveTab('products')}   icon="🏷️">Product-wise</TabBtn>
-            <TabBtn active={activeTab==='customers'}  onClick={() => setActiveTab('customers')}  icon="👤">Customer-wise</TabBtn>
-            <TabBtn active={activeTab==='collection'} onClick={() => setActiveTab('collection')} icon="💳">Collection</TabBtn>
-            <TabBtn active={activeTab==='companies'}  onClick={() => setActiveTab('companies')}  icon="🏢">Company-wise</TabBtn>
-            <TabBtn active={activeTab==='top'}        onClick={() => setActiveTab('top')}        icon="🏆">Top Customers</TabBtn>
+            {canReadOverview && <TabBtn active={activeTab==='overview'}   onClick={() => setActiveTab('overview')}   icon="📈">Overview</TabBtn>}
+            {canReadMonthly && <TabBtn active={activeTab==='monthly'}    onClick={() => setActiveTab('monthly')}    icon="📅">Monthly Trend</TabBtn>}
+            {canReadProducts && <TabBtn active={activeTab==='products'}   onClick={() => setActiveTab('products')}   icon="🏷️">Product-wise</TabBtn>}
+            {canReadCustomers && <TabBtn active={activeTab==='customers'}  onClick={() => setActiveTab('customers')}  icon="👤">Customer-wise</TabBtn>}
+            {canReadCollection && <TabBtn active={activeTab==='collection'} onClick={() => setActiveTab('collection')} icon="💳">Collection</TabBtn>}
+            {canReadCompanies && <TabBtn active={activeTab==='companies'}  onClick={() => setActiveTab('companies')}  icon="🏢">Company-wise</TabBtn>}
+            {canReadTop && <TabBtn active={activeTab==='top'}        onClick={() => setActiveTab('top')}        icon="🏆">Top Customers</TabBtn>}
           </div>
         </div>
 
@@ -998,27 +1021,15 @@ const TotalSales = () => {
                         </tbody>
                       </table>
                     </div>
-                    {/* Pagination */}
-                    <div className="flex items-center justify-between pt-2">
-                      <p className="text-[12px] text-slate-500 font-medium">{custTotal} customers</p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          disabled={custPage <= 1}
-                          onClick={() => setCustPage(p => p-1)}
-                          className="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-40"
-                        >
-                          ← Prev
-                        </button>
-                        <span className="text-xs text-slate-500 font-medium">Page {custPage} of {Math.ceil(custTotal/20)}</span>
-                        <button
-                          disabled={custPage >= Math.ceil(custTotal/20)}
-                          onClick={() => setCustPage(p => p+1)}
-                          className="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-40"
-                        >
-                          Next →
-                        </button>
-                      </div>
-                    </div>
+                    <TablePagination
+                      page={custPage}
+                      limit={custLimit}
+                      total={custTotal}
+                      onPageChange={setCustPage}
+                      onLimitChange={setCustLimit}
+                      density={custDensity}
+                      onDensityChange={setCustDensity}
+                    />
                   </>
                 )}
               </>

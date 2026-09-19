@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 // Helper for formatting INR Currency
 const formatINR = (val) =>
@@ -25,7 +27,8 @@ const SundayLoadingHistory = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 15;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Data States
   const [records, setRecords] = useState([]);
@@ -95,7 +98,7 @@ const SundayLoadingHistory = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentPage, search, productId, startDate, endDate]);
+  }, [currentPage, limit, search, productId, startDate, endDate]);
 
   useEffect(() => {
     fetchHistory();
@@ -285,16 +288,11 @@ const SundayLoadingHistory = () => {
             <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
               Search Reference
             </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-              <input
-                type="text"
-                placeholder="Search by customer, phone, SL ref, or product..."
-                value={search}
-                onChange={handleFilterChange(setSearch)}
-                className="w-full h-11 pl-9 pr-3 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-xs font-semibold"
-              />
-            </div>
+            <SearchInput
+              value={search}
+              onChange={handleFilterChange(setSearch)}
+              placeholder="Search by customer, phone, SL ref, or product..."
+            />
           </div>
 
           {/* Product Filter */}
@@ -302,16 +300,16 @@ const SundayLoadingHistory = () => {
             <label className="block text-[10px] font-black uppercase text-slate-400 mb-1">
               Product Filter
             </label>
-            <select
-              value={productId}
-              onChange={handleFilterChange(setProductId)}
-              className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-xs font-bold"
-            >
-              <option value="All">All Products</option>
-              {finishedProducts.map(p => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
+            <SearchableSelect
+              options={[
+                { value: 'All', label: 'All Products' },
+                ...finishedProducts.map(p => ({ value: String(p.id), label: p.name }))
+              ]}
+              value={String(productId)}
+              onChange={(val) => handleFilterChange(setProductId)({ target: { value: val } })}
+              placeholder="All Products"
+              searchPlaceholder="Search product..."
+            />
           </div>
 
           {/* From Date */}
@@ -378,19 +376,19 @@ const SundayLoadingHistory = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/70 text-[10px] font-black uppercase text-slate-500 tracking-wider">
-                <th className="py-3 px-3">Txn No</th>
-                <th className="py-3 px-3">Date</th>
-                <th className="py-3 px-3">Customer</th>
-                <th className="py-3 px-3">Product</th>
-                <th className="py-3 px-2 text-center">Qty</th>
-                <th className="py-3 px-3 text-right">Rate</th>
-                <th className="py-3 px-3 text-right">Total (₹)</th>
-                <th className="py-3 px-2 text-right">Cash</th>
-                <th className="py-3 px-2 text-right">UPI</th>
-                <th className="py-3 px-2 text-right">Bank</th>
-                <th className="py-3 px-3 text-right">Paid (₹)</th>
-                <th className="py-3 px-3 text-right">Due (₹)</th>
-                <th className="py-3 px-3 text-center">Actions</th>
+                <th className={getDensityClass(density, true)}>Txn No</th>
+                <th className={getDensityClass(density, true)}>Date</th>
+                <th className={getDensityClass(density, true)}>Customer</th>
+                <th className={getDensityClass(density, true)}>Product</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Qty</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Rate</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Total (₹)</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Cash</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>UPI</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Bank</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Paid (₹)</th>
+                <th className={`${getDensityClass(density, true)} text-right`}>Due (₹)</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
@@ -411,17 +409,17 @@ const SundayLoadingHistory = () => {
                 records.map((r) => (
                   <tr key={r.id} className="hover:bg-slate-50/80 transition-colors">
                     {/* Txn No */}
-                    <td className="py-3 px-3 font-mono font-bold text-primary whitespace-nowrap">
+                    <td className={`${getDensityClass(density)} font-mono font-bold text-primary whitespace-nowrap`}>
                       {r.transaction_number}
                     </td>
 
                     {/* Date */}
-                    <td className="py-3 px-3 font-semibold text-slate-600 whitespace-nowrap">
+                    <td className={`${getDensityClass(density)} font-semibold text-slate-600 whitespace-nowrap`}>
                       {fmtDate(r.loading_date)}
                     </td>
 
                     {/* Customer */}
-                    <td className="py-3 px-3 max-w-[170px]">
+                    <td className={`${getDensityClass(density)} max-w-[170px]`}>
                       <p className="font-bold text-slate-800 truncate" title={r.customer_name}>
                         {r.customer_name}
                       </p>
@@ -431,52 +429,52 @@ const SundayLoadingHistory = () => {
                     </td>
 
                     {/* Product */}
-                    <td className="py-3 px-3 font-semibold text-slate-800 max-w-[150px] truncate" title={r.product_name}>
+                    <td className={`${getDensityClass(density)} font-semibold text-slate-800 max-w-[150px] truncate`} title={r.product_name}>
                       {r.product_name}
                     </td>
 
                     {/* Quantity */}
-                    <td className="py-3 px-2 text-center font-bold text-slate-900">
+                    <td className={`${getDensityClass(density)} text-center font-bold text-slate-900`}>
                       {r.quantity}
                     </td>
 
                     {/* Rate */}
-                    <td className="py-3 px-3 text-right font-medium text-slate-600">
+                    <td className={`${getDensityClass(density)} text-right font-medium text-slate-600`}>
                       {formatINR(r.rate)}
                     </td>
 
                     {/* Total Amount */}
-                    <td className="py-3 px-3 text-right font-black text-slate-900">
+                    <td className={`${getDensityClass(density)} text-right font-black text-slate-900`}>
                       {formatINR(r.total_amount)}
                     </td>
 
                     {/* Cash */}
-                    <td className="py-3 px-2 text-right font-semibold text-emerald-700">
+                    <td className={`${getDensityClass(density)} text-right font-semibold text-emerald-700`}>
                       {r.cash_amount > 0 ? formatINR(r.cash_amount) : '—'}
                     </td>
 
                     {/* UPI */}
-                    <td className="py-3 px-2 text-right font-semibold text-indigo-700">
+                    <td className={`${getDensityClass(density)} text-right font-semibold text-indigo-700`}>
                       {r.upi_amount > 0 ? formatINR(r.upi_amount) : '—'}
                     </td>
 
                     {/* Bank */}
-                    <td className="py-3 px-2 text-right font-semibold text-sky-700">
+                    <td className={`${getDensityClass(density)} text-right font-semibold text-sky-700`}>
                       {r.bank_amount > 0 ? formatINR(r.bank_amount) : '—'}
                     </td>
 
                     {/* Total Paid */}
-                    <td className="py-3 px-3 text-right font-black text-emerald-600">
+                    <td className={`${getDensityClass(density)} text-right font-black text-emerald-600`}>
                       {formatINR(r.total_paid)}
                     </td>
 
                     {/* Due */}
-                    <td className={`py-3 px-3 text-right font-black ${r.due_amount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
+                    <td className={`${getDensityClass(density)} text-right font-black ${r.due_amount > 0 ? 'text-amber-700' : 'text-slate-400'}`}>
                       {formatINR(r.due_amount)}
                     </td>
 
                     {/* Actions */}
-                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                    <td className={`${getDensityClass(density)} text-center whitespace-nowrap`}>
                       <div className="flex items-center justify-center gap-1.5">
                         <button
                           type="button"
@@ -514,32 +512,16 @@ const SundayLoadingHistory = () => {
           </table>
         </div>
 
-        {/* Pagination */}
         {!loading && totalRecords > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-100">
-            <span className="text-xs font-bold text-slate-400 uppercase">
-              Page {currentPage} of {totalPages} &nbsp;·&nbsp; {totalRecords} total records
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-bold shadow-xs transition-all"
-              >
-                ← Prev
-              </button>
-              <span className="text-xs font-black text-slate-700 px-2">{currentPage}</span>
-              <button
-                type="button"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-700 bg-white hover:bg-slate-50 disabled:opacity-40 text-xs font-bold shadow-xs transition-all"
-              >
-                Next →
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            page={currentPage}
+            limit={limit}
+            total={totalRecords}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
         )}
       </div>
 

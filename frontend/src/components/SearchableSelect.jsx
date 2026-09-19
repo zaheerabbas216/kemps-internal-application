@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import SearchInput from './common/SearchInput';
 
 /**
  * SearchableSelect — A dropdown with a built-in search bar.
@@ -149,31 +150,16 @@ const SearchableSelect = ({
         >
           {/* Search input */}
           <div className="p-2 border-b border-slate-100 bg-slate-50/50">
-            <div className="relative">
-              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs pointer-events-none">
-                🔍
-              </span>
-              <input
-                ref={searchRef}
-                type="text"
-                value={search}
-                onChange={e => {
-                  setSearch(e.target.value);
-                  setHighlightIndex(0);
-                }}
-                placeholder={searchPlaceholder}
-                className="w-full h-8 pl-7 pr-7 text-xs rounded-lg border border-slate-200 bg-white focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none transition-all font-medium"
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => { setSearch(''); setHighlightIndex(-1); searchRef.current?.focus(); }}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            <SearchInput
+              ref={searchRef}
+              size="sm"
+              value={search}
+              onChange={e => {
+                setSearch(e.target.value);
+                setHighlightIndex(0);
+              }}
+              placeholder={searchPlaceholder}
+            />
           </div>
 
           {/* Options list */}

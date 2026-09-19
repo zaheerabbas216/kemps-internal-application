@@ -1,8 +1,25 @@
 import express from 'express';
+import multer from 'multer';
 import pool from '../config/db.js';
 import { addSupplierLedgerEntry, deleteSupplierLedgerEntriesForReference } from '../helpers/ledgerHelper.js';
+import { uploadFile } from '../services/storageService.js';
+import { broadcastEvent } from '../services/sseService.js';
 
 const router = express.Router();
+
+// Multer memory storage for image upload
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, WEBP, GIF images and PDF documents are allowed.'));
+    }
+  }
+});
 
 // Helper to generate custom sequence ID (e.g. BILL-2026-00001)
 async function generateId(prefix, table, idColumn) {
@@ -50,6 +67,20 @@ async function generateId(prefix, table, idColumn) {
   return `${prefix}-${yyyy}-${String(seq).padStart(5, '0')}`;
 }
 
+// POST /api/inventory/upload - Upload inventory bill/receipt image
+router.post('/upload', upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: 'No image file provided.' });
+    }
+    const imageUrl = await uploadFile(req.file);
+    res.json({ ok: true, imageUrl, message: 'Image uploaded successfully.' });
+  } catch (error) {
+    console.error('Image upload error:', error);
+    res.status(500).json({ ok: false, error: error.message || 'Failed to upload image.' });
+  }
+});
+
 // POST /api/inventory - Save Inventory Bill (Transaction Safe)
 router.post('/', async (req, res) => {
   const connection = await pool.getConnection();
@@ -67,6 +98,7 @@ router.post('/', async (req, res) => {
       additionalExpenses,
       grandTotal,
       remarks,
+      imageUrl,
       items
     } = req.body;
 
@@ -102,8 +134,8 @@ router.post('/', async (req, res) => {
     // 1. Insert into inventory_bills (Bill Header)
     await connection.query(
       `INSERT INTO inventory_bills 
-       (id, bill_date, supplier_id, billed_to, bill_number, payment_method, sub_total, total_tax, additional_expenses, grand_total, remarks, status, advance_paid, credit_note, is_manual, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
+       (id, bill_date, supplier_id, billed_to, bill_number, payment_method, sub_total, total_tax, additional_expenses, grand_total, remarks, image_url, status, advance_paid, credit_note, is_manual, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NOW())`,
       [
         billId,
         billDate,
@@ -116,6 +148,7 @@ router.post('/', async (req, res) => {
         additionalExpenses || 0,
         grandTotal || 0,
         remarks || '',
+        imageUrl || req.body.image_url || null,
         status,
         advancePaid,
         creditNote
@@ -263,6 +296,7 @@ router.post('/', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id: billId, action: 'create' });
     res.json({ ok: true, id: billId, message: 'Inventory bill saved and stock updated successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -320,6 +354,7 @@ router.get('/today', async (req, res) => {
         b.billed_to,
         b.payment_method,
         b.grand_total,
+        b.image_url,
         c.company_name AS supplier_name,
         GROUP_CONCAT(DISTINCT rm.sub_product_name SEPARATOR ', ') AS products_summary
        FROM inventory_bills b
@@ -414,6 +449,7 @@ router.get('/history', async (req, res) => {
         b.billed_to,
         b.payment_method,
         b.grand_total,
+        b.image_url,
         c.company_name AS supplier_name,
         GROUP_CONCAT(DISTINCT rm.sub_product_name SEPARATOR ', ') AS products_summary
        FROM inventory_bills b
@@ -521,6 +557,7 @@ router.get('/:id', async (req, res) => {
         b.additional_expenses,
         b.grand_total,
         b.remarks,
+        b.image_url,
         b.description,
         b.is_manual,
         b.advance_paid,
@@ -590,6 +627,7 @@ router.put('/:id', async (req, res) => {
       additionalExpenses,
       grandTotal,
       remarks,
+      imageUrl,
       items
     } = req.body;
 
@@ -630,7 +668,7 @@ router.put('/:id', async (req, res) => {
     await connection.query(
       `UPDATE inventory_bills 
        SET bill_date = ?, supplier_id = ?, billed_to = ?, bill_number = ?, payment_method = ?, 
-           sub_total = ?, total_tax = ?, additional_expenses = ?, grand_total = ?, remarks = ?, status = ?,
+           sub_total = ?, total_tax = ?, additional_expenses = ?, grand_total = ?, remarks = ?, image_url = ?, status = ?,
            advance_paid = ?, credit_note = ?
        WHERE id = ?`,
       [
@@ -644,6 +682,7 @@ router.put('/:id', async (req, res) => {
         additionalExpenses || 0,
         grandTotal || 0,
         remarks || '',
+        imageUrl || req.body.image_url || null,
         status,
         advancePaid,
         creditNote,
@@ -802,6 +841,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id, action: 'update' });
     res.json({ ok: true, message: 'Inventory bill updated successfully!' });
   } catch (error) {
     await connection.rollback();
@@ -837,6 +877,7 @@ router.delete('/:id', async (req, res) => {
     await deleteSupplierLedgerEntriesForReference(connection, id);
 
     await connection.commit();
+    broadcastEvent('INVENTORY_UPDATED', { id, action: 'delete' });
     res.json({ ok: true, message: 'Inventory bill and stock registry adjustments deleted successfully.' });
   } catch (error) {
     await connection.rollback();

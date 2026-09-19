@@ -1,10 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const MaintenanceMaster = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('particulars'); // 'particulars' or 'sub-products'
+  const { canRead, canCreate, canUpdate, canDelete } = useAuth();
+
+  const canReadParticulars = canRead('maintenance-particulars');
+  const canReadSubProducts = canRead('maintenance-sub-products');
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadParticulars) return 'particulars';
+    if (canReadSubProducts) return 'sub-products';
+    return 'particulars';
+  });
+
+  useEffect(() => {
+    if (activeTab === 'particulars' && !canReadParticulars && canReadSubProducts) {
+      setActiveTab('sub-products');
+    } else if (activeTab === 'sub-products' && !canReadSubProducts && canReadParticulars) {
+      setActiveTab('particulars');
+    }
+  }, [canReadParticulars, canReadSubProducts, activeTab]);
 
   // ==========================================
   // PARTICULARS STATE
@@ -12,6 +32,9 @@ const MaintenanceMaster = () => {
   const [particulars, setParticulars] = useState([]);
   const [loadingParticulars, setLoadingParticulars] = useState(true);
   const [searchParticularQuery, setSearchParticularQuery] = useState('');
+  const [partPage, setPartPage] = useState(1);
+  const [partLimit, setPartLimit] = useState(25);
+  const [partDensity, setPartDensity] = useState('medium');
 
   const [isParticularModalOpen, setIsParticularModalOpen] = useState(false);
   const [editingParticular, setEditingParticular] = useState(null);
@@ -29,6 +52,9 @@ const MaintenanceMaster = () => {
   const [loadingSubProducts, setLoadingSubProducts] = useState(true);
   const [searchSubQuery, setSearchSubQuery] = useState('');
   const [selectedParticularFilter, setSelectedParticularFilter] = useState('All');
+  const [subPage, setSubPage] = useState(1);
+  const [subLimit, setSubLimit] = useState(25);
+  const [subDensity, setSubDensity] = useState('medium');
 
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [editingSub, setEditingSub] = useState(null);
@@ -262,7 +288,7 @@ const MaintenanceMaster = () => {
   const totalSubProductsCount = subProducts.length;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-16 animate-fadeIn">
+    <div className="space-y-6 w-full pb-16 animate-fadeIn">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
@@ -348,40 +374,41 @@ const MaintenanceMaster = () => {
 
       {/* TABS SELECTOR */}
       <div className="flex border-b border-slate-200">
-        <button
-          onClick={() => setActiveTab('particulars')}
-          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'particulars'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span>📁</span> Maintenance Particulars ({totalParticularsCount})
-        </button>
-        <button
-          onClick={() => setActiveTab('sub-products')}
-          className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
-            activeTab === 'sub-products'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          <span>🔩</span> Sub Products ({totalSubProductsCount})
-        </button>
+        {canReadParticulars && (
+          <button
+            onClick={() => setActiveTab('particulars')}
+            className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'particulars'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>📁</span> Maintenance Particulars ({totalParticularsCount})
+          </button>
+        )}
+        {canReadSubProducts && (
+          <button
+            onClick={() => setActiveTab('sub-products')}
+            className={`px-6 py-3 font-bold text-sm border-b-2 transition-all flex items-center gap-2 ${
+              activeTab === 'sub-products'
+                ? 'border-primary text-primary'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>🔩</span> Sub Products ({totalSubProductsCount})
+          </button>
+        )}
       </div>
 
       {/* TAB 1: PARTICULARS */}
-      {activeTab === 'particulars' && (
+      {activeTab === 'particulars' && canReadParticulars && (
         <div className="card-premium space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div className="relative w-full sm:w-80">
-              <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">🔍</span>
-              <input
-                type="text"
+            <div className="w-full sm:w-80">
+              <SearchInput
                 placeholder="Search particulars..."
                 value={searchParticularQuery}
                 onChange={(e) => setSearchParticularQuery(e.target.value)}
-                className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-sm"
               />
             </div>
             <button
@@ -417,17 +444,17 @@ const MaintenanceMaster = () => {
                     </td>
                   </tr>
                 ) : (
-                  particulars.map((item, index) => (
+                  particulars.slice((partPage - 1) * partLimit, partPage * partLimit).map((item, index) => (
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-6 text-xs font-mono font-bold text-slate-400">{index + 1}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-slate-800 flex items-center gap-2">
+                      <td className={`${partDensity === 'compact' ? 'py-2 px-6 text-[12px]' : partDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-xs'} font-mono font-bold text-slate-400`}>{(partPage - 1) * partLimit + index + 1}</td>
+                      <td className={`${partDensity === 'compact' ? 'py-2 px-6 text-[12px]' : partDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-sm'} font-bold text-slate-800 flex items-center gap-2`}>
                         <span className="w-2 h-2 rounded-full bg-primary inline-block"></span>
                         {item.name}
                       </td>
-                      <td className="py-4 px-6 text-xs text-slate-500 max-w-[250px] truncate">
+                      <td className={`${partDensity === 'compact' ? 'py-2 px-6 text-[12px]' : partDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-xs'} text-slate-500 max-w-[250px] truncate`}>
                         {item.description || '—'}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className={`${partDensity === 'compact' ? 'py-2 px-6' : partDensity === 'high' ? 'py-6 px-6' : 'py-4 px-6'} text-center`}>
                         <button
                           onClick={() => {
                             setSelectedParticularFilter(String(item.id));
@@ -438,7 +465,7 @@ const MaintenanceMaster = () => {
                           {item.sub_product_count || 0} Sub Items ↗
                         </button>
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className={`${partDensity === 'compact' ? 'py-2 px-6' : partDensity === 'high' ? 'py-6 px-6' : 'py-4 px-6'} text-center`}>
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => handleOpenSubModal(null, item.id)}
@@ -467,6 +494,15 @@ const MaintenanceMaster = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            page={partPage}
+            setPage={setPartPage}
+            limit={partLimit}
+            setLimit={setPartLimit}
+            totalItems={particulars.length}
+            density={partDensity}
+            setDensity={setPartDensity}
+          />
         </div>
       )}
 
@@ -475,14 +511,11 @@ const MaintenanceMaster = () => {
         <div className="card-premium space-y-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
-              <div className="relative w-full sm:w-64">
-                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">🔍</span>
-                <input
-                  type="text"
+              <div className="w-full sm:w-64">
+                <SearchInput
                   placeholder="Search sub products..."
                   value={searchSubQuery}
                   onChange={(e) => setSearchSubQuery(e.target.value)}
-                  className="w-full h-10 pl-9 pr-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-sm"
                 />
               </div>
 
@@ -510,11 +543,11 @@ const MaintenanceMaster = () => {
             <table className="table table-zebra w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                  <th className="py-3 px-6 text-left">#</th>
-                  <th className="py-3 px-6 text-left">Sub Product Name</th>
-                  <th className="py-3 px-6 text-left">Linked Particular</th>
-                  <th className="py-3 px-6 text-left">Description</th>
-                  <th className="py-3 px-6 text-center">Actions</th>
+                  <th className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-5 px-6' : 'py-3 px-6'} text-left`}>#</th>
+                  <th className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-5 px-6' : 'py-3 px-6'} text-left`}>Sub Product Name</th>
+                  <th className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-5 px-6' : 'py-3 px-6'} text-left`}>Linked Particular</th>
+                  <th className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-5 px-6' : 'py-3 px-6'} text-left`}>Description</th>
+                  <th className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-5 px-6' : 'py-3 px-6'} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -531,21 +564,21 @@ const MaintenanceMaster = () => {
                     </td>
                   </tr>
                 ) : (
-                  subProducts.map((item, index) => (
+                  subProducts.slice((subPage - 1) * subLimit, subPage * subLimit).map((item, index) => (
                     <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-6 text-xs font-mono font-bold text-slate-400">{index + 1}</td>
-                      <td className="py-4 px-6 text-sm font-bold text-slate-800">
+                      <td className={`${subDensity === 'compact' ? 'py-2 px-6 text-[12px]' : subDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-xs'} font-mono font-bold text-slate-400`}>{(subPage - 1) * subLimit + index + 1}</td>
+                      <td className={`${subDensity === 'compact' ? 'py-2 px-6 text-[12px]' : subDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-sm'} font-bold text-slate-800`}>
                         {item.name}
                       </td>
-                      <td className="py-4 px-6 text-xs font-semibold">
+                      <td className={`${subDensity === 'compact' ? 'py-2 px-6 text-[12px]' : subDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-xs'} font-semibold`}>
                         <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200">
                           {item.particular_name}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-xs text-slate-500 max-w-[250px] truncate">
+                      <td className={`${subDensity === 'compact' ? 'py-2 px-6 text-[12px]' : subDensity === 'high' ? 'py-6 px-6 text-[14px]' : 'py-4 px-6 text-xs'} text-slate-500 max-w-[250px] truncate`}>
                         {item.description || '—'}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className={`${subDensity === 'compact' ? 'py-2 px-6' : subDensity === 'high' ? 'py-6 px-6' : 'py-4 px-6'} text-center`}>
                         <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => handleOpenSubModal(item)}
@@ -567,6 +600,14 @@ const MaintenanceMaster = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            page={subPage}
+            setPage={setSubPage}
+            limit={subLimit}
+            setLimit={setSubLimit}
+            totalItems={subProducts.length}
+            density={subDensity}
+          />
         </div>
       )}
 

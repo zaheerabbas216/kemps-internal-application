@@ -1,9 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import SearchableSelect from '../components/SearchableSelect';
+
+import { useAuth } from '../context/AuthContext';
 
 const SupplierLedger = () => {
+  const { canRead } = useAuth();
+  const canReadLedgerTab = canRead('supplier-ledger-tab');
+  const canReadAnalyticsTab = canRead('supplier-ledger-analytics');
+
   // Navigation & Tabs
-  const [activeTab, setActiveTab] = useState('ledger'); // 'ledger' | 'analytics'
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadLedgerTab) return 'ledger';
+    if (canReadAnalyticsTab) return 'analytics';
+    return 'ledger';
+  });
+
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [density, setDensity] = useState('medium');
 
   // Dropdown options
   const [suppliers, setSuppliers] = useState([]);
@@ -28,6 +46,7 @@ const SupplierLedger = () => {
 
   // Re-fetch data when supplier changes
   useEffect(() => {
+    setPage(1);
     if (selectedSupplierId) {
       fetchSummary();
       fetchTransactions();
@@ -235,7 +254,7 @@ const SupplierLedger = () => {
   `;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       <style>{printStyles}</style>
 
       {/* HEADER SECTION (NO PRINT) */}
@@ -275,27 +294,18 @@ const SupplierLedger = () => {
             <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
               Select Supplier
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={supSearch}
-                onChange={(e) => setSupSearch(e.target.value)}
-                className="w-1/3 h-11 px-3 rounded-xl border border-slate-200 bg-slate-50/20 text-slate-700 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-xs font-semibold"
-              />
-              <select
-                value={selectedSupplierId}
-                onChange={(e) => setSelectedSupplierId(e.target.value)}
-                className="w-2/3 h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-extrabold focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm"
-              >
-                <option value="">-- Click to Select Supplier --</option>
-                {filteredSuppliers.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.phone ? `(${s.phone})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <SearchableSelect
+              options={suppliers.map(s => ({
+                value: String(s.id),
+                label: `${s.name}${s.phone ? ` (${s.phone})` : ''}`,
+                rawName: s.name,
+                badge: s.phone || null
+              }))}
+              value={String(selectedSupplierId || '')}
+              onChange={(val) => setSelectedSupplierId(val)}
+              placeholder="-- Click to Select Supplier --"
+              searchPlaceholder="Search supplier by name or phone..."
+            />
           </div>
 
           {/* Date Range Fields */}
@@ -417,26 +427,30 @@ const SupplierLedger = () => {
 
           {/* DUAL VIEW TAB SELECTORS (NO PRINT) */}
           <div className="flex bg-slate-100 p-1.5 rounded-2xl w-fit border border-slate-200/40 no-print">
-            <button
-              onClick={() => setActiveTab('ledger')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'ledger' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📒</span> TRANSACTION JOURNAL
-            </button>
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
-                activeTab === 'analytics' 
-                  ? 'bg-white text-slate-800 shadow-sm font-extrabold'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <span>📊</span> PERFORMANCE ANALYTICS
-            </button>
+            {canReadLedgerTab && (
+              <button
+                onClick={() => setActiveTab('ledger')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'ledger' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📒</span> TRANSACTION JOURNAL
+              </button>
+            )}
+            {canReadAnalyticsTab && (
+              <button
+                onClick={() => setActiveTab('analytics')}
+                className={`px-5 py-2.5 rounded-xl text-xs font-black tracking-wider transition-all flex items-center gap-2 ${
+                  activeTab === 'analytics' 
+                    ? 'bg-white text-slate-800 shadow-sm font-extrabold'
+                    : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <span>📊</span> PERFORMANCE ANALYTICS
+              </button>
+            )}
           </div>
 
           {/* TAB CONTENT 1: LEDGER TABLE */}
@@ -456,63 +470,74 @@ const SupplierLedger = () => {
                   <span className="loading loading-spinner text-primary"></span>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-455 uppercase tracking-wider">
-                        <th className="py-4 px-5">Date</th>
-                        <th className="py-4 px-5">Particulars</th>
-                        <th className="py-4 px-5">Reference No</th>
-                        <th className="py-4 px-5 text-right">Debit (₹) [Paid]</th>
-                        <th className="py-4 px-5 text-right">Credit (₹) [Purchased]</th>
-                        <th className="py-4 px-5 text-right">Balance (₹)</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
-                      {/* Opening Balance Row */}
-                      {startDate && (
-                        <tr className="bg-slate-50/50 font-bold text-slate-500 italic">
-                          <td>—</td>
-                          <td className="py-3.5 px-5 uppercase text-[10px] tracking-wider font-extrabold">Opening Balance (Before {formatDateDDMMYYYY(startDate)})</td>
-                          <td>—</td>
-                          <td className="text-right">—</td>
-                          <td className="text-right">—</td>
-                          <td className="text-right font-black">
-                            {formatBalance(openingBalance)}
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-455 uppercase tracking-wider">
+                          <th className={`${getDensityClass(density, true)}`}>Date</th>
+                          <th className={`${getDensityClass(density, true)}`}>Particulars</th>
+                          <th className={`${getDensityClass(density, true)}`}>Reference No</th>
+                          <th className={`${getDensityClass(density, true)} text-right`}>Debit (₹) [Paid]</th>
+                          <th className={`${getDensityClass(density, true)} text-right`}>Credit (₹) [Purchased]</th>
+                          <th className={`${getDensityClass(density, true)} text-right`}>Balance (₹)</th>
                         </tr>
-                      )}
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
+                        {/* Opening Balance Row */}
+                        {startDate && (
+                          <tr className="bg-slate-50/50 font-bold text-slate-500 italic">
+                            <td className={getDensityClass(density)}>—</td>
+                            <td className={`${getDensityClass(density)} uppercase text-[10px] tracking-wider font-extrabold`}>Opening Balance (Before {formatDateDDMMYYYY(startDate)})</td>
+                            <td className={getDensityClass(density)}>—</td>
+                            <td className={`${getDensityClass(density)} text-right`}>—</td>
+                            <td className={`${getDensityClass(density)} text-right`}>—</td>
+                            <td className={`${getDensityClass(density)} text-right font-black`}>
+                              {formatBalance(openingBalance)}
+                            </td>
+                          </tr>
+                        )}
 
-                      {/* Transactions rows */}
-                      {transactions.map(t => (
-                        <tr key={t.id} className="hover:bg-slate-50/40 transition-colors">
-                          <td className="py-3.5 px-5">{formatDateDDMMYYYY(t.date)}</td>
-                          <td className="py-3.5 px-5 font-bold text-slate-800">{t.particular}</td>
-                          <td className="py-3.5 px-5 font-mono text-[11px] text-slate-500 font-bold">
-                            {t.referenceNo}
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-extrabold text-emerald-600">
-                            {t.debit > 0 ? `₹ ${formatCurrency(t.debit)}` : '—'}
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-bold text-slate-700">
-                            {t.credit > 0 ? `₹ ${formatCurrency(t.credit)}` : '—'}
-                          </td>
-                          <td className="py-3.5 px-5 text-right font-black text-slate-800">
-                            {formatBalance(t.runningBalance)}
-                          </td>
-                        </tr>
-                      ))}
+                        {/* Transactions rows */}
+                        {transactions.slice((page - 1) * limit, page * limit).map(t => (
+                          <tr key={t.id} className="hover:bg-slate-50/40 transition-colors">
+                            <td className={`${getDensityClass(density)}`}>{formatDateDDMMYYYY(t.date)}</td>
+                            <td className={`${getDensityClass(density)} font-bold text-slate-800`}>{t.particular}</td>
+                            <td className={`${getDensityClass(density)} font-mono text-slate-500 font-bold`}>
+                              {t.referenceNo}
+                            </td>
+                            <td className={`${getDensityClass(density)} text-right font-extrabold text-emerald-600`}>
+                              {t.debit > 0 ? `₹ ${formatCurrency(t.debit)}` : '—'}
+                            </td>
+                            <td className={`${getDensityClass(density)} text-right font-bold text-slate-700`}>
+                              {t.credit > 0 ? `₹ ${formatCurrency(t.credit)}` : '—'}
+                            </td>
+                            <td className={`${getDensityClass(density)} text-right font-black text-slate-800`}>
+                              {formatBalance(t.runningBalance)}
+                            </td>
+                          </tr>
+                        ))}
 
-                      {transactions.length === 0 && (
-                        <tr>
-                          <td colSpan="6" className="py-12 text-center text-slate-400 font-bold bg-slate-50/10">
-                            No ledger entries found for the selected period.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                        {transactions.length === 0 && (
+                          <tr>
+                            <td colSpan="6" className="py-12 text-center text-slate-400 font-bold bg-slate-50/10">
+                              No ledger entries found for the selected period.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <TablePagination
+                    page={page}
+                    setPage={setPage}
+                    limit={limit}
+                    setLimit={setLimit}
+                    totalItems={transactions.length}
+                    density={density}
+                    setDensity={setDensity}
+                  />
+                </>
               )}
             </div>
           )}

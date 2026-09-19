@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TaxInvoiceModal from '../components/billing/TaxInvoiceModal';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 
 const BillingHistory = () => {
   const navigate = useNavigate();
@@ -14,9 +15,10 @@ const BillingHistory = () => {
   const [endDate, setEndDate] = useState('');
   const [company, setCompany] = useState('All');
 
-  // Pagination
+  // Pagination & Density
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -156,7 +158,6 @@ const BillingHistory = () => {
               .header { text-align: center; margin-bottom: 25px; border-bottom: 2px solid #e2e8f0; padding-bottom: 15px; }
               .header h2 { margin: 0; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; }
               .header p { margin: 5px 0 0 0; font-size: 12px; color: #64748b; font-weight: bold; }
-              .filter-info { font-size: 11px; margin-bottom: 15px; color: #475569; }
               table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 12px; }
               th { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 10px; text-align: left; font-weight: 800; text-transform: uppercase; color: #475569; font-size: 10px; }
               td { border: 1px solid #e2e8f0; padding: 8px 10px; font-weight: 500; }
@@ -169,10 +170,6 @@ const BillingHistory = () => {
             <div class="header">
               <h2>Billing Ledger Report</h2>
               <p>Kemp's Beverages & Bottling Plants</p>
-            </div>
-            <div class="filter-info">
-              Generated On: ${new Date().toLocaleString('en-IN')}<br/>
-              Filters: Company "${company}" | Search "${search || 'N/A'}" | Date Range: ${startDate ? formatDateDDMMYYYY(startDate) : 'Beginning'} to ${endDate ? formatDateDDMMYYYY(endDate) : 'Today'}
             </div>
             <table>
               <thead>
@@ -235,25 +232,47 @@ const BillingHistory = () => {
         <head>
           <title>Invoice - ${bill.id}</title>
           <style>
-            body { font-family: 'Courier New', Courier, monospace; padding: 15px; color: #000; width: 320px; font-size: 12px; line-height: 1.4; }
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            @media print {
+              html, body {
+                width: 80mm;
+                margin: 0 auto;
+                padding: 0;
+              }
+            }
+            * {
+              box-sizing: border-box;
+            }
+            body {
+              font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, 'Courier New', monospace;
+              padding: 3mm 2mm;
+              color: #000;
+              width: 76mm;
+              margin: 0 auto;
+              font-size: 11px;
+              line-height: 1.35;
+              background: #fff;
+              -webkit-font-smoothing: antialiased;
+            }
             .receipt { width: 100%; }
             .center { text-align: center; }
-            .bold { font-weight: bold; }
-            .divider { border-bottom: 1px dashed #000; margin: 8px 0; }
-            .header h3 { margin: 0; text-transform: uppercase; font-size: 14px; }
-            .header p { margin: 2px 0; font-size: 10px; }
-            .meta-table, .items-table { width: 100%; border-collapse: collapse; font-size: 11px; }
-            .meta-table td { padding: 1px 0; }
-            .items-table th { border-bottom: 1px dashed #000; padding: 4px 0; text-align: left; font-size: 10px; }
-            .items-table td { padding: 4px 0; vertical-align: top; }
+            .bold { font-weight: 700; }
+            .black { font-weight: 900; }
+            .divider { border-bottom: 1px dashed #000; margin: 6px 0; }
+            .header h3 { margin: 0; text-transform: uppercase; font-size: 13.5px; font-weight: 900; letter-spacing: -0.2px; }
+            .header p { margin: 2px 0; font-size: 9.5px; color: #111; }
+            .meta-table, .items-table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+            .meta-table td { padding: 1.5px 0; }
+            .items-table th { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; text-align: left; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+            .items-table td { padding: 3px 0; vertical-align: top; }
             .right { text-align: right; }
-            .total-section { margin-top: 10px; font-size: 11px; }
-            .total-row { display: flex; justify-content: space-between; padding: 2px 0; }
-            .footer-msg { margin-top: 20px; text-align: center; font-size: 10px; }
-            @media print {
-              body { padding: 0; margin: 0; }
-            }
-          </style>
+            .mono { font-family: 'SFMono-Regular', Consolas, monospace; }
+            .total-section { margin-top: 6px; font-size: 10.5px; }
+            .total-row { display: flex; justify-content: space-between; padding: 1.5px 0; }
+            .footer-msg { margin-top: 10px; text-align: center; font-size: 9.5px; }
         </head>
         <body>
           <div class="receipt">
@@ -419,8 +438,12 @@ const BillingHistory = () => {
 
   const totalPages = Math.ceil(total / limit) || 1;
 
+  // Density padding helper
+  const cellPadding = getDensityClass(density);
+  const headerCellPadding = getDensityClass(density, true);
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -535,17 +558,17 @@ const BillingHistory = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                    <th className="py-4 px-5">Invoice No</th>
-                    <th className="py-4 px-5">Billing Date</th>
-                    <th className="py-4 px-5">Company</th>
-                    <th className="py-4 px-5">Customer details</th>
-                    <th className="py-4 px-5">Customer Type</th>
-                    <th className="py-4 px-5 text-right">Grand Total</th>
-                    <th className="py-4 px-5 text-center">Payment Mode</th>
-                    <th className="py-4 px-5 text-right">Amt Paid</th>
-                    <th className="py-4 px-5 text-right">Amt Due</th>
-                    <th className="py-4 px-5 text-center">Payment Status</th>
-                    <th className="py-4 px-5 text-center">Actions</th>
+                    <th className={headerCellPadding}>Invoice No</th>
+                    <th className={headerCellPadding}>Billing Date</th>
+                    <th className={headerCellPadding}>Company</th>
+                    <th className={headerCellPadding}>Customer details</th>
+                    <th className={headerCellPadding}>Customer Type</th>
+                    <th className={`${headerCellPadding} text-right`}>Grand Total</th>
+                    <th className={`${headerCellPadding} text-center`}>Payment Mode</th>
+                    <th className={`${headerCellPadding} text-right`}>Amt Paid</th>
+                    <th className={`${headerCellPadding} text-right`}>Amt Due</th>
+                    <th className={`${headerCellPadding} text-center`}>Payment Status</th>
+                    <th className={`${headerCellPadding} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-750 text-xs font-semibold">
@@ -554,30 +577,30 @@ const BillingHistory = () => {
 
                     return (
                       <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3.5 px-5 font-black text-primary">{b.id}</td>
-                        <td className="py-3.5 px-5">{formatDateDDMMYYYY(b.billing_date)}</td>
-                        <td className="py-3.5 px-5">
+                        <td className={`${cellPadding} font-black text-primary`}>{b.id}</td>
+                        <td className={cellPadding}>{formatDateDDMMYYYY(b.billing_date)}</td>
+                        <td className={cellPadding}>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${b.company.includes('Pet') ? 'bg-indigo-50 text-indigo-600' : 'bg-sky-50 text-sky-600'}`}>
                             {b.company.includes('Pet') ? 'Kemps Pet' : 'Kempannavar'}
                           </span>
                         </td>
-                        <td className="py-3.5 px-5">
+                        <td className={cellPadding}>
                           <div className="font-extrabold text-slate-800">{b.customer_name}</div>
                           <div className="text-[10px] font-bold text-slate-400 mt-0.5">{b.customer_phone}</div>
                         </td>
-                        <td className="py-3.5 px-5 uppercase text-[9px] tracking-wider text-slate-500 font-bold">
+                        <td className={`${cellPadding} uppercase text-[9px] tracking-wider text-slate-500 font-bold`}>
                           {b.customer_type}
                         </td>
-                        <td className="py-3.5 px-5 text-right font-black text-slate-800">
+                        <td className={`${cellPadding} text-right font-black text-slate-800`}>
                           ₹ {parseFloat(b.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3.5 px-5 text-center text-slate-550 font-bold uppercase text-[10px]">
+                        <td className={`${cellPadding} text-center text-slate-550 font-bold uppercase text-[10px]`}>
                           {b.payment_mode}
                         </td>
-                        <td className="py-3.5 px-5 text-right text-emerald-600 font-extrabold">
+                        <td className={`${cellPadding} text-right text-emerald-600 font-extrabold`}>
                           ₹ {parseFloat(b.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                         </td>
-                        <td className="py-3.5 px-5 text-right">
+                        <td className={`${cellPadding} text-right`}>
                           {parseFloat(b.due_amount) > 0 ? (
                             <span className="text-rose-500 font-black">
                               ₹ {parseFloat(b.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -586,7 +609,7 @@ const BillingHistory = () => {
                             <span className="text-slate-400 font-semibold">Settled</span>
                           )}
                         </td>
-                        <td className="py-3.5 px-5 text-center">
+                        <td className={`${cellPadding} text-center`}>
                           <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
                             b.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
                             b.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
@@ -596,7 +619,7 @@ const BillingHistory = () => {
                             {(b.payment_status || 'Unpaid').toUpperCase()}
                           </span>
                         </td>
-                        <td className="py-3.5 px-5 text-center">
+                        <td className={`${cellPadding} text-center`}>
                           <div className="flex items-center justify-center gap-1.5">
                             <button 
                               onClick={() => handleOpenView(b)}
@@ -658,29 +681,15 @@ const BillingHistory = () => {
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-                <span className="text-xs text-slate-450 font-bold">
-                  Showing Page {page} of {totalPages} ({total} entries total)
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-                    disabled={page === 1}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={page === totalPages}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
+            <TablePagination 
+              page={page}
+              limit={limit}
+              total={total}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              density={density}
+              onDensityChange={setDensity}
+            />
           </>
         )}
       </div>

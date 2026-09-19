@@ -1,10 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
 
 const ProductMaster = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('finished-products'); // 'finished-products' or 'raw-materials'
+  const { canCreate, canUpdate, canDelete, canRead } = useAuth();
+  
+  const canReadFinished = canRead('product-master-finished');
+  const canReadRaw = canRead('product-master-raw');
+
+  const [activeTab, setActiveTab] = useState(() => {
+    if (canReadFinished) return 'finished-products';
+    if (canReadRaw) return 'raw-materials';
+    return 'finished-products';
+  });
 
   // ==========================================
   // RAW MATERIALS STATE
@@ -61,7 +73,8 @@ const ProductMaster = () => {
   const [loadingFp, setLoadingFp] = useState(true);
   const [searchFpQuery, setSearchFpQuery] = useState('');
   const [currentFpPage, setCurrentFpPage] = useState(1);
-  const fpPageLimit = 10;
+  const [fpPageLimit, setFpPageLimit] = useState(10);
+  const [fpDensity, setFpDensity] = useState('medium');
 
   const [isFpCategoryModalOpen, setIsFpCategoryModalOpen] = useState(false);
   const [newFpCategoryName, setNewFpCategoryName] = useState('');
@@ -122,7 +135,7 @@ const ProductMaster = () => {
     } else {
       fetchFinishedProducts();
     }
-  }, [activeTab, currentRmPage, searchRmQuery, currentFpPage, searchFpQuery]);
+  }, [activeTab, currentRmPage, searchRmQuery, currentFpPage, fpPageLimit, searchFpQuery]);
 
   // --- RM Fetching ---
   const fetchRmCategories = async () => {
@@ -607,32 +620,36 @@ const ProductMaster = () => {
 
       {/* TABS SELECTOR */}
       <div className="flex border-b border-slate-200/80">
-        <button
-          onClick={() => setActiveTab('finished-products')}
-          className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
-            activeTab === 'finished-products' 
-              ? 'text-primary' 
-              : 'text-slate-400 hover:text-slate-650'
-          }`}
-        >
-          <span>🛒</span> Finished Products
-          {activeTab === 'finished-products' && (
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab('raw-materials')}
-          className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
-            activeTab === 'raw-materials' 
-              ? 'text-primary' 
-              : 'text-slate-400 hover:text-slate-650'
-          }`}
-        >
-          <span>🪨</span> Raw Materials
-          {activeTab === 'raw-materials' && (
-            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
-          )}
-        </button>
+        {canReadFinished && (
+          <button
+            onClick={() => setActiveTab('finished-products')}
+            className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
+              activeTab === 'finished-products' 
+                ? 'text-primary' 
+                : 'text-slate-400 hover:text-slate-650'
+            }`}
+          >
+            <span>🛒</span> Finished Products
+            {activeTab === 'finished-products' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
+            )}
+          </button>
+        )}
+        {canReadRaw && (
+          <button
+            onClick={() => setActiveTab('raw-materials')}
+            className={`flex items-center gap-2 py-4 px-6 font-bold text-[14px] transition-all relative ${
+              activeTab === 'raw-materials' 
+                ? 'text-primary' 
+                : 'text-slate-400 hover:text-slate-650'
+            }`}
+          >
+            <span>🪨</span> Raw Materials
+            {activeTab === 'raw-materials' && (
+              <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full"></div>
+            )}
+          </button>
+        )}
       </div>
 
       {activeTab === 'finished-products' ? (
@@ -711,14 +728,11 @@ const ProductMaster = () => {
 
             {/* Search and records count */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search products..."
+              <div className="flex-1 max-w-md">
+                <SearchInput
                   value={searchFpQuery}
                   onChange={handleFpSearchChange}
-                  className="input-premium pl-11 h-10 w-full"
+                  placeholder="Search products..."
                 />
               </div>
               <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -731,10 +745,10 @@ const ProductMaster = () => {
               <table className="table table-zebra w-full overflow-hidden">
                 <thead className="bg-[#0b1324] text-white border-b border-slate-100">
                   <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Product Name</th>
-                    <th className="py-4 px-6 text-left">Category</th>
-                    <th className="py-4 px-6 text-left">Status</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
+                    <th className={`${getDensityClass(fpDensity, true)} text-left`}>Product Name</th>
+                    <th className={`${getDensityClass(fpDensity, true)} text-left`}>Category</th>
+                    <th className={`${getDensityClass(fpDensity, true)} text-left`}>Status</th>
+                    <th className={`${getDensityClass(fpDensity, true)} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -756,8 +770,8 @@ const ProductMaster = () => {
                   ) : (
                     finishedProducts.map((item) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
-                        <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.name}</td>
-                        <td className="py-4 px-6">
+                        <td className={`${getDensityClass(fpDensity)} font-bold text-slate-700`}>{item.name}</td>
+                        <td className={`${getDensityClass(fpDensity)}`}>
                           {item.category_name ? (
                             <span className="bg-blue-50 text-blue-600 rounded-lg px-2.5 py-1 text-xs font-bold border border-blue-100/50">
                               {item.category_name}
@@ -766,7 +780,7 @@ const ProductMaster = () => {
                             <span className="text-slate-400 text-xs italic">—</span>
                           )}
                         </td>
-                        <td className="py-4 px-6">
+                        <td className={`${getDensityClass(fpDensity)}`}>
                           {item.status === 1 ? (
                             <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
                               Active
@@ -777,7 +791,7 @@ const ProductMaster = () => {
                             </span>
                           )}
                         </td>
-                        <td className="py-4 px-6">
+                        <td className={`${getDensityClass(fpDensity)}`}>
                           <div className="flex items-center justify-center gap-2">
                             <button 
                               onClick={() => handleToggleFpStatus(item)}
@@ -812,29 +826,16 @@ const ProductMaster = () => {
               </table>
             </div>
 
-            {/* PAGINATION CONTROLS */}
             {!loadingFp && totalFpCount > 0 && (
-              <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-                <div className="text-[12px] font-bold text-slate-400 uppercase">
-                  Page {currentFpPage} of {totalFpPages}
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentFpPage === 1}
-                    onClick={() => setCurrentFpPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentFpPage === totalFpPages}
-                    onClick={() => setCurrentFpPage(prev => Math.min(totalFpPages, prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={currentFpPage}
+                limit={fpPageLimit}
+                total={totalFpCount}
+                onPageChange={setCurrentFpPage}
+                onLimitChange={setFpPageLimit}
+                density={fpDensity}
+                onDensityChange={setFpDensity}
+              />
             )}
           </div>
         </div>
@@ -948,14 +949,11 @@ const ProductMaster = () => {
 
             {/* Search and records count */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search category or subproduct..."
+              <div className="flex-1 max-w-md">
+                <SearchInput
                   value={searchRmQuery}
                   onChange={handleRmSearchChange}
-                  className="input-premium pl-11 h-10 w-full"
+                  placeholder="Search category or subproduct..."
                 />
               </div>
               <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -1006,22 +1004,22 @@ const ProductMaster = () => {
                           <table className="table table-zebra w-full overflow-hidden">
                             <thead className="bg-[#0b1324] text-white border-b border-slate-100">
                               <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                                <th className="py-4 px-6 text-left">Sub Product</th>
-                                <th className="py-4 px-6 text-left">Unit</th>
-                                <th className="py-4 px-6 text-left">Qty in PC (per KG)</th>
-                                <th className="py-4 px-6 text-left">Status</th>
-                                <th className="py-4 px-6 text-center">Actions</th>
+                                <th className={`${getDensityClass(fpDensity, true)} text-left`}>Sub Product</th>
+                                <th className={`${getDensityClass(fpDensity, true)} text-left`}>Unit</th>
+                                <th className={`${getDensityClass(fpDensity, true)} text-left`}>Qty in PC (per KG)</th>
+                                <th className={`${getDensityClass(fpDensity, true)} text-left`}>Status</th>
+                                <th className={`${getDensityClass(fpDensity, true)} text-center`}>Actions</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-50">
                               {currentCatItems.map((item) => (
                                 <tr key={item.id} className="hover:bg-slate-50/40 transition-colors group">
-                                  <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.sub_product_name}</td>
-                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500 uppercase">{item.unit}</td>
-                                  <td className="py-4 px-6 text-[13px] font-bold text-slate-500">
+                                  <td className={`${getDensityClass(fpDensity)} font-bold text-slate-700`}>{item.sub_product_name}</td>
+                                  <td className={`${getDensityClass(fpDensity)} font-bold text-slate-500 uppercase`}>{item.unit}</td>
+                                  <td className={`${getDensityClass(fpDensity)} font-bold text-slate-500`}>
                                     {item.qty_in_pc_per_kg !== null && item.qty_in_pc_per_kg !== undefined ? `${item.qty_in_pc_per_kg} pcs` : '—'}
                                   </td>
-                                  <td className="py-4 px-6">
+                                  <td className={`${getDensityClass(fpDensity)}`}>
                                     {item.status === 1 ? (
                                       <span className="bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded text-[11px] font-bold border border-emerald-100">
                                         Active
@@ -1032,7 +1030,7 @@ const ProductMaster = () => {
                                       </span>
                                     )}
                                   </td>
-                                  <td className="py-4 px-6">
+                                  <td className={`${getDensityClass(fpDensity)}`}>
                                     <div className="flex items-center justify-center gap-2">
                                       <button 
                                         type="button"

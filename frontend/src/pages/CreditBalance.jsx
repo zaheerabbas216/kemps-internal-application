@@ -3,9 +3,12 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import { useAuth } from '../context/AuthContext';
 
 const CreditBalance = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate } = useAuth();
 
   // Statistics
   const [stats, setStats] = useState({
@@ -26,9 +29,10 @@ const CreditBalance = () => {
   const [company, setCompany] = useState('All Companies');
   const [customerType, setCustomerType] = useState('All Types');
 
-  // Pagination
+  // Pagination & Density
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [total, setTotal] = useState(0);
 
   // Modals
@@ -289,7 +293,7 @@ const CreditBalance = () => {
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -584,43 +588,43 @@ const CreditBalance = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                    <th className="py-4 px-5">Due ID</th>
-                    <th className="py-4 px-5">Invoice No</th>
-                    <th className="py-4 px-5">Date</th>
-                    <th className="py-4 px-5">Customer Name</th>
-                    <th className="py-4 px-5">Company</th>
-                    <th className="py-4 px-5">Customer Type</th>
-                    <th className="py-4 px-5 text-right">Invoice Amount</th>
-                    <th className="py-4 px-5 text-right">Amount Paid</th>
-                    <th className="py-4 px-5 text-right">Outstanding Balance</th>
-                    <th className="py-4 px-5 text-center">Actions</th>
+                    <th className={getDensityClass(density, true)}>Due ID</th>
+                    <th className={getDensityClass(density, true)}>Invoice No</th>
+                    <th className={getDensityClass(density, true)}>Date</th>
+                    <th className={getDensityClass(density, true)}>Customer Name</th>
+                    <th className={getDensityClass(density, true)}>Company</th>
+                    <th className={getDensityClass(density, true)}>Customer Type</th>
+                    <th className={`${getDensityClass(density, true)} text-right`}>Invoice Amount</th>
+                    <th className={`${getDensityClass(density, true)} text-right`}>Amount Paid</th>
+                    <th className={`${getDensityClass(density, true)} text-right`}>Outstanding Balance</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-750 text-xs font-semibold">
                   {bills.map(b => (
                     <tr key={b.id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-3.5 px-5 font-mono text-[10px] text-slate-400">DUE-{b.id.split('-').pop()}</td>
-                      <td className="py-3.5 px-5 font-black text-primary">{b.id}</td>
-                      <td className="py-3.5 px-5">{formatDateDDMMYYYY(b.billing_date)}</td>
-                      <td className="py-3.5 px-5">
+                      <td className={`${getDensityClass(density)} font-mono text-[10px] text-slate-400`}>DUE-{b.id.split('-').pop()}</td>
+                      <td className={`${getDensityClass(density)} font-black text-primary`}>{b.id}</td>
+                      <td className={getDensityClass(density)}>{formatDateDDMMYYYY(b.billing_date)}</td>
+                      <td className={getDensityClass(density)}>
                         <div className="font-extrabold text-slate-800">{b.customer_name}</div>
                         <div className="text-[10px] font-bold text-slate-400 mt-0.5">{b.customer_phone}</div>
                       </td>
-                      <td className="py-3.5 px-5">
+                      <td className={getDensityClass(density)}>
                         <span className={`px-2.5 py-1 rounded-lg text-[9px] font-extrabold ${b.company.includes('Pet') ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-sky-50 text-sky-600 border border-sky-100'}`}>
                           {b.company.includes('Pet') ? 'Kemps Pet' : 'Kempannavar'}
                         </span>
                       </td>
-                      <td className="py-3.5 px-5 uppercase text-[9px] tracking-wider text-slate-500 font-bold">
+                      <td className={`${getDensityClass(density)} uppercase text-[9px] tracking-wider text-slate-500 font-bold`}>
                         {b.customer_type}
                       </td>
-                      <td className="py-3.5 px-5 text-right font-bold text-slate-700">
+                      <td className={`${getDensityClass(density)} text-right font-bold text-slate-700`}>
                         ₹ {parseFloat(b.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-3.5 px-5 text-right text-emerald-600 font-extrabold">
+                      <td className={`${getDensityClass(density)} text-right text-emerald-600 font-extrabold`}>
                         ₹ {parseFloat(b.amount_paid).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                       </td>
-                      <td className="py-3.5 px-5 text-right text-rose-500 font-black text-sm">
+                      <td className={`${getDensityClass(density)} text-right text-rose-500 font-black text-sm`}>
                         <div>₹ {parseFloat(b.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>
                         {b.has_pending_payment ? (
                           <div className="text-[9px] text-amber-600 font-black bg-amber-50 px-1.5 py-0.5 rounded border border-amber-100 mt-1 w-max ml-auto uppercase tracking-wider">
@@ -628,7 +632,7 @@ const CreditBalance = () => {
                           </div>
                         ) : null}
                       </td>
-                      <td className="py-3.5 px-5 text-center">
+                      <td className={`${getDensityClass(density)} text-center`}>
                         <div className="flex items-center justify-center gap-1.5">
                           {b.has_pending_payment ? (
                             <button 
@@ -639,13 +643,15 @@ const CreditBalance = () => {
                               <span>⏳</span> Pending Verify
                             </button>
                           ) : (
-                            <button 
-                              onClick={() => handleOpenPay(b)}
-                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
-                              title="Collect Outstanding Payment"
-                            >
-                              <span>💵</span> Receive Payment
-                            </button>
+                            (canCreate('credit-balance') || canUpdate('credit-balance')) && (
+                              <button 
+                                onClick={() => handleOpenPay(b)}
+                                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] transition-all flex items-center gap-1"
+                                title="Collect Outstanding Payment"
+                              >
+                                <span>💵</span> Receive Payment
+                              </button>
+                            )
                           )}
                           <button 
                             onClick={() => handleOpenTimeline(b)}
@@ -671,29 +677,15 @@ const CreditBalance = () => {
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-                <span className="text-xs text-slate-450 font-bold">
-                  Showing Page {page} of {totalPages} ({total} active dues total)
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-                    disabled={page === 1}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={page === totalPages}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
+            <TablePagination 
+              page={page}
+              limit={limit}
+              total={total}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              density={density}
+              onDensityChange={setDensity}
+            />
           </>
         )}
       </div>

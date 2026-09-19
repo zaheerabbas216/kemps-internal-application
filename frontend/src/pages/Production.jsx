@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
+import SearchInput from '../components/common/SearchInput';
+import { useAuth } from '../context/AuthContext';
+import { useSSE } from '../context/SSEContext';
 
 
 const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, ledgerStocks = {} }) => {
@@ -99,14 +103,12 @@ const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, led
       {isOpen && (
         <div className="absolute left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl z-[9999] overflow-hidden flex flex-col max-h-[350px]">
           {/* Search box */}
-          <div className="p-2 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
-            <span className="text-slate-400 text-sm pl-2">🔍</span>
-            <input
-              type="text"
+          <div className="p-2 border-b border-slate-100 bg-slate-50/50">
+            <SearchInput
+              size="sm"
               placeholder="Search by material or category..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full h-9 bg-transparent text-sm text-slate-700 outline-none placeholder-slate-400"
               autoFocus
             />
           </div>
@@ -179,6 +181,7 @@ const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, led
 
 const Production = () => {
   const navigate = useNavigate();
+  const { canCreate, canUpdate, canDelete } = useAuth();
 
   // Data states
   const [batches, setBatches] = useState([]);
@@ -190,6 +193,9 @@ const Production = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Dropdown options
   const [finishedProducts, setFinishedProducts] = useState([]);
@@ -257,6 +263,8 @@ const Production = () => {
     fetchTodayBatches();
     fetchDropdowns();
   }, [searchQuery]);
+
+  useSSE('PRODUCTION_ADDED', () => fetchTodayBatches());
 
   const fetchTodayBatches = async () => {
     try {
@@ -912,12 +920,14 @@ const Production = () => {
               <p className="text-slate-500 text-sm font-medium mt-1">Log final product outputs and automatically calculate material counts</p>
             </div>
             <div className="flex items-center gap-3">
-              <button 
-                onClick={handleOpenAdd}
-                className="btn-premium btn-primary-premium h-12"
-              >
-                <span className="text-xl">+</span> Add Production
-              </button>
+              {canCreate('production') && (
+                <button 
+                  onClick={handleOpenAdd}
+                  className="btn-premium btn-primary-premium h-12"
+                >
+                  <span className="text-xl">+</span> Add Production
+                </button>
+              )}
               <button 
                 onClick={() => navigate('/production-history')}
                 className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-12"
@@ -972,14 +982,11 @@ const Production = () => {
           {/* TODAY'S TABLE DATA */}
           <div className="card-premium">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search today's production batches..."
+              <div className="flex-1 max-w-md">
+                <SearchInput
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input-premium pl-11 h-10 w-full"
+                  placeholder="Search today's production batches..."
                 />
               </div>
               <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-100">
@@ -1015,7 +1022,7 @@ const Production = () => {
                       </td>
                     </tr>
                   ) : (
-                    batches.map((b) => (
+                    batches.slice((page - 1) * limit, page * limit).map((b) => (
                       <tr key={b.id} className="hover:bg-blue-50/30 transition-colors">
                         <td className="py-4 px-6 text-[12px] font-mono font-bold text-primary">{b.id}</td>
                         <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(b.production_date)}</td>
@@ -1030,18 +1037,22 @@ const Production = () => {
                             >
                               View
                             </button>
-                            <button
-                              onClick={() => handleOpenEdit(b)}
-                              className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => confirmDelete(b.id)}
-                              className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
-                            >
-                              Delete
-                            </button>
+                            {canUpdate('production') && (
+                              <button
+                                onClick={() => handleOpenEdit(b)}
+                                className="btn btn-ghost btn-xs text-primary hover:bg-primary/10 rounded-lg px-2"
+                              >
+                                Edit
+                              </button>
+                            )}
+                            {canDelete('production') && (
+                              <button
+                                onClick={() => confirmDelete(b.id)}
+                                className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50 rounded-lg px-2"
+                              >
+                                Delete
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1050,6 +1061,18 @@ const Production = () => {
                 </tbody>
               </table>
             </div>
+
+            {!loading && batches.length > 0 && (
+              <TablePagination
+                page={page}
+                limit={limit}
+                total={batches.length}
+                onPageChange={setPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
+            )}
           </div>
         </div>
       )}
