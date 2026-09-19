@@ -33,7 +33,12 @@ import supplierLedgerRoutes from './routes/supplierLedger.js';
 import cashLedgerRoutes from './routes/cashLedger.js';
 import timerRoutes from './routes/timer.js';
 import sundayLoadingRoutes from './routes/sundayLoading.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import authMiddleware from './middleware/auth.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -70,6 +75,7 @@ app.use(cors({
   }
 }));
 app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Rate limiter for authentication login endpoint
 const loginRateLimiter = rateLimit({

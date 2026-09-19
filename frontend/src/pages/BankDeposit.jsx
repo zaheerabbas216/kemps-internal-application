@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const BankDeposit = () => {
   const navigate = useNavigate();
@@ -13,6 +15,9 @@ const BankDeposit = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [thisMonthTotal, setThisMonthTotal] = useState(0);
   const [rangeTotal, setRangeTotal] = useState(0);
 
@@ -429,14 +434,11 @@ const BankDeposit = () => {
         
         {/* Search header container */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-50/50 p-4 rounded-2xl border border-slate-150/60 mb-6">
-          <div className="relative flex-1 max-w-xs">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search deposits..."
+          <div className="flex-1 max-w-xs">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search deposits..."
             />
           </div>
 
@@ -518,7 +520,7 @@ const BankDeposit = () => {
                   </td>
                 </tr>
               ) : (
-                deposits.map((dep) => (
+                deposits.slice((page - 1) * limit, page * limit).map((dep) => (
                   <tr key={dep.id} className="hover:bg-blue-50/30 transition-colors group">
                     <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{dep.id}</td>
                     <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(dep.deposit_date)}</td>
@@ -561,6 +563,18 @@ const BankDeposit = () => {
             </tbody>
           </table>
         </div>
+
+        {!loading && deposits.length > 0 && (
+          <TablePagination
+            page={page}
+            limit={limit}
+            total={deposits.length}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
+        )}
       </div>
 
       {/* RECORD DEPOSIT MODAL (MATCHING SCREENSHOT) */}

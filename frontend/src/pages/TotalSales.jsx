@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -253,6 +254,8 @@ const TotalSales = () => {
   const [customers, setCustomers]   = useState([]);
   const [custTotal, setCustTotal]   = useState(0);
   const [custPage, setCustPage]     = useState(1);
+  const [custLimit, setCustLimit]   = useState(10);
+  const [custDensity, setCustDensity] = useState('medium');
   const [custSearch, setCustSearch] = useState('');
   const [selectedCust, setSelectedCust] = useState(null);
   const [custInvoices, setCustInvoices] = useState([]);
@@ -333,12 +336,12 @@ const TotalSales = () => {
     setLoadingCust(true);
     try {
       const res = await api.get('/sales-report/customer-wise', {
-        params: { startDate, endDate, company, page: custPage, limit: 20, search: custSearch }
+        params: { startDate, endDate, company, page: custPage, limit: custLimit, search: custSearch }
       });
       if (res.data.ok) { setCustomers(res.data.customers); setCustTotal(res.data.total); }
     } catch (_) {}
     setLoadingCust(false);
-  }, [startDate, endDate, company, custPage, custSearch]);
+  }, [startDate, endDate, company, custPage, custLimit, custSearch]);
 
   // ── Fetch Collection ──────────────────────────────────────────────────────────
   const fetchCollection = useCallback(async () => {
@@ -990,27 +993,15 @@ const TotalSales = () => {
                         </tbody>
                       </table>
                     </div>
-                    {/* Pagination */}
-                    <div className="flex items-center justify-between pt-2">
-                      <p className="text-[12px] text-slate-500 font-medium">{custTotal} customers</p>
-                      <div className="flex items-center gap-2">
-                        <button
-                          disabled={custPage <= 1}
-                          onClick={() => setCustPage(p => p-1)}
-                          className="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-40"
-                        >
-                          ← Prev
-                        </button>
-                        <span className="text-xs text-slate-500 font-medium">Page {custPage} of {Math.ceil(custTotal/20)}</span>
-                        <button
-                          disabled={custPage >= Math.ceil(custTotal/20)}
-                          onClick={() => setCustPage(p => p+1)}
-                          className="h-8 px-3 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold hover:bg-slate-200 disabled:opacity-40"
-                        >
-                          Next →
-                        </button>
-                      </div>
-                    </div>
+                    <TablePagination
+                      page={custPage}
+                      limit={custLimit}
+                      total={custTotal}
+                      onPageChange={setCustPage}
+                      onLimitChange={setCustLimit}
+                      density={custDensity}
+                      onDensityChange={setCustDensity}
+                    />
                   </>
                 )}
               </>

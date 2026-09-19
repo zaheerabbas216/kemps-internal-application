@@ -112,7 +112,12 @@ router.get('/dashboard-history', async (req, res) => {
 // GET /api/billing/today - Retrieves today's invoices and calculates stats
 router.get('/today', async (req, res) => {
   try {
-    const { search = '' } = req.query;
+    let { search = '', page = 1, limit = 10 } = req.query;
+    page = parseInt(page, 10);
+    limit = parseInt(limit, 10);
+    if (isNaN(page) || page < 1) page = 1;
+    if (isNaN(limit) || limit < 1) limit = 10;
+    const offsetCalc = (page - 1) * limit;
 
     const now = new Date();
     const offset = now.getTimezoneOffset();
@@ -152,6 +157,14 @@ router.get('/today', async (req, res) => {
       queryParams.push(wildSearch, wildSearch, wildSearch);
     }
 
+    // Count query for pagination total
+    const [countRows] = await pool.query(
+      `SELECT COUNT(*) AS total FROM customer_bills cb ${whereClause}`,
+      queryParams
+    );
+    const total = countRows[0].total || 0;
+
+    // Paginated rows query
     const [rows] = await pool.query(
       `SELECT 
          cb.id,
@@ -170,13 +183,15 @@ router.get('/today', async (req, res) => {
          cb.created_at
        FROM customer_bills cb
        ${whereClause} 
-       ORDER BY cb.created_at DESC`,
-      queryParams
+       ORDER BY cb.created_at DESC
+       LIMIT ? OFFSET ?`,
+      [...queryParams, limit, offsetCalc]
     );
 
     res.json({
       ok: true,
       bills: rows,
+      total,
       todayStr,
       summary
     });

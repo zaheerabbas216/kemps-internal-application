@@ -69,7 +69,9 @@ export const computeItemGst = (item) => {
  * Generate isolated printable HTML document for A4 or A2 paper sizes
  */
 export const generatePrintableInvoiceHtml = (bill, itemsList, companyInfo, paperSize = 'A4') => {
-  const isA2 = paperSize.toUpperCase() === 'A2';
+  const paperUpper = String(paperSize).toUpperCase();
+  const isPos80 = paperUpper === 'POS-80' || paperUpper === 'POS-80C' || paperUpper === '80MM' || paperUpper === 'POS';
+  const isA2 = paperUpper === 'A2';
   const computedItems = (itemsList || []).map(computeItemGst);
 
   // Aggregates
@@ -105,6 +107,146 @@ export const generatePrintableInvoiceHtml = (bill, itemsList, companyInfo, paper
   const companyPhone = companyInfo?.phone_number || '';
   const companyGst = companyInfo?.gst_number || '';
   const companyAddress = companyInfo?.address || '';
+
+  if (isPos80) {
+    return `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <title>POS-80c Slip - ${bill.id}</title>
+        <style>
+          @page {
+            size: 80mm auto;
+            margin: 0;
+          }
+          @media print {
+            html, body {
+              width: 80mm;
+              margin: 0 auto;
+              padding: 0;
+            }
+          }
+          * {
+            box-sizing: border-box;
+          }
+          body {
+            width: 76mm;
+            margin: 0 auto;
+            padding: 3mm 2mm;
+            font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #000;
+            background: #fff;
+            -webkit-font-smoothing: antialiased;
+          }
+          .receipt { width: 100%; }
+          .text-center { text-align: center; }
+          .text-right { text-align: right; }
+          .text-left { text-align: left; }
+          .font-bold { font-weight: 700; }
+          .font-black { font-weight: 900; }
+          .divider { border-bottom: 1px dashed #000; margin: 5px 0; }
+          .header-box { text-align: center; margin-bottom: 4px; }
+          .company-title { font-size: 13.5px; font-weight: 900; text-transform: uppercase; letter-spacing: -0.2px; }
+          .company-sub { font-size: 9.5px; color: #111; margin-top: 1px; }
+          .invoice-tag { font-size: 11px; font-weight: 900; text-transform: uppercase; text-align: center; letter-spacing: 0.5px; margin: 3px 0; }
+          .row-line { display: flex; justify-content: space-between; margin-bottom: 2px; font-size: 10.5px; }
+          .item-table { width: 100%; border-collapse: collapse; margin: 3px 0; font-size: 10.5px; }
+          .item-table th { border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+          .item-table td { padding: 3px 0; vertical-align: top; }
+          .total-row { display: flex; justify-content: space-between; padding: 1.5px 0; font-size: 10.5px; }
+          .grand-total { font-size: 13px; font-weight: 900; border-top: 1px dashed #000; border-bottom: 1px dashed #000; padding: 3px 0; margin: 3px 0; }
+          .footer-msg { text-align: center; margin-top: 8px; font-size: 9.5px; }
+        </style>
+      </head>
+      <body>
+        <div class="receipt">
+          <div class="header-box">
+            <div class="company-title">${companyName}</div>
+            <div class="company-sub">
+              ${companyAddress ? `${companyAddress}<br/>` : ''}
+              ${companyPhone ? `Ph: ${companyPhone} ` : ''}${companyGst ? `| GST: ${companyGst}` : ''}
+            </div>
+          </div>
+
+          <div class="divider"></div>
+          <div class="invoice-tag">TAX INVOICE (POS-80c)</div>
+          <div class="divider"></div>
+
+          <div class="row-line">
+            <span>Inv: <strong class="font-black">${bill.id}</strong></span>
+            <span>Date: ${formatInvoiceDate(bill.billing_date)}</span>
+          </div>
+          <div class="row-line">
+            <span>Cust: <strong>${bill.customer_name || 'General Customer'}</strong></span>
+            <span>Mode: <strong>${(bill.payment_mode || 'Cash').toUpperCase()}</strong></span>
+          </div>
+          ${bill.customer_phone ? `<div class="row-line"><span>Phone: ${bill.customer_phone}</span></div>` : ''}
+          ${bill.customer_gstin ? `<div class="row-line"><span>GSTIN: ${bill.customer_gstin}</span></div>` : ''}
+
+          <table class="item-table">
+            <thead>
+              <tr>
+                <th class="text-left">Product</th>
+                <th class="text-center" style="width: 15%;">Qty</th>
+                <th class="text-right" style="width: 22%;">Rate</th>
+                <th class="text-right" style="width: 25%;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${computedItems.map(i => `
+                <tr>
+                  <td class="text-left font-bold">
+                    ${i.productName}
+                    <div style="font-size: 8.5px; font-weight: normal; color: #333;">GST ${i.taxPercent}%</div>
+                  </td>
+                  <td class="text-center font-bold">${i.quantity}</td>
+                  <td class="text-right">₹${i.basicRate.toFixed(2)}</td>
+                  <td class="text-right font-bold">₹${i.totalAmount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+
+          <div class="divider"></div>
+
+          <div class="total-row">
+            <span>Taxable Val:</span>
+            <span>₹ ${totalTaxable.toFixed(2)}</span>
+          </div>
+          <div class="total-row">
+            <span>CGST Total:</span>
+            <span>₹ ${totalCgst.toFixed(2)}</span>
+          </div>
+          <div class="total-row">
+            <span>SGST Total:</span>
+            <span>₹ ${totalSgst.toFixed(2)}</span>
+          </div>
+          <div class="total-row grand-total">
+            <span>GRAND TOTAL:</span>
+            <span>₹ ${grandTotal.toFixed(2)}</span>
+          </div>
+          <div class="total-row">
+            <span>Paid (${bill.payment_mode || 'Cash'}):</span>
+            <span>₹ ${amountPaid.toFixed(2)}</span>
+          </div>
+          <div class="total-row" style="font-weight: 800;">
+            <span>Balance Due:</span>
+            <span>₹ ${dueAmount.toFixed(2)}</span>
+          </div>
+
+          <div class="divider"></div>
+          <div class="footer-msg">
+            <div class="font-bold">Thank You! Visit Again</div>
+            <div>Computer Generated Slip</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 
   // CSS sizing scale for A4 vs A2
   const fontSizeBase = isA2 ? '22px' : '11px';
@@ -623,6 +765,14 @@ const TaxInvoiceModal = ({ isOpen, onClose, bill, items = [], companyDetails = n
             </button>
             <button
               type="button"
+              onClick={() => printInvoiceDocument(bill, items, companyDetails, 'POS-80c')}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm shadow-emerald-600/20"
+              title="Print 80mm Thermal Receipt POS Slip"
+            >
+              <span>🧾</span> Print POS-80c
+            </button>
+            <button
+              type="button"
               onClick={() => printInvoiceDocument(bill, items, companyDetails, 'A2')}
               className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm shadow-indigo-600/20"
               title="Print Large A2 Invoice"
@@ -840,6 +990,13 @@ const TaxInvoiceModal = ({ isOpen, onClose, bill, items = [], companyDetails = n
             className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-hover text-white font-bold text-xs transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
           >
             🖨️ Print A4
+          </button>
+          <button
+            type="button"
+            onClick={() => printInvoiceDocument(bill, items, companyDetails, 'POS-80c')}
+            className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-all uppercase tracking-wider flex items-center gap-1.5 shadow-sm"
+          >
+            🧾 Print POS-80c
           </button>
           <button
             type="button"

@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 // ─── Helpers ────────────────────────────────
 const fmt = (n) =>
@@ -240,6 +241,9 @@ const PaymentApproval = () => {
   const [approvals, setApprovals] = useState([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [density, setDensity] = useState('medium');
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('Pending');
@@ -260,6 +264,9 @@ const PaymentApproval = () => {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerStart, setLedgerStart] = useState('');
   const [ledgerEnd, setLedgerEnd] = useState('');
+  const [ledgerPage, setLedgerPage] = useState(1);
+  const [ledgerLimit, setLedgerLimit] = useState(25);
+  const [ledgerDensity, setLedgerDensity] = useState('medium');
 
   // Modals
   const [viewEntry, setViewEntry] = useState(null);
@@ -373,7 +380,7 @@ const PaymentApproval = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-16 pt-8">
+    <div className="space-y-6 animate-fade-in w-full pb-16 pt-8">
       
       {/* Toast */}
       {toast && (
@@ -473,11 +480,13 @@ const PaymentApproval = () => {
                 <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
                   className="h-9 px-3 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />
               </div>
-              <div className="relative flex-1 min-w-52">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
-                <input type="text" placeholder="Search by ID, reference, customer, vendor..."
-                  value={search} onChange={e => setSearch(e.target.value)}
-                  className="w-full h-9 pl-9 pr-4 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 bg-slate-50/50 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/10" />
+              <div className="flex-1 min-w-52">
+                <SearchInput
+                  size="sm"
+                  placeholder="Search by ID, reference, customer, vendor..."
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                />
               </div>
               <button onClick={clearFilters}
                 className="px-3 py-2 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
@@ -506,7 +515,7 @@ const PaymentApproval = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {approvals.map(entry => (
+              {approvals.slice((page - 1) * limit, page * limit).map(entry => (
                 <TransactionCard
                   key={entry.approval_id}
                   entry={entry}
@@ -515,6 +524,15 @@ const PaymentApproval = () => {
                   onView={setViewEntry}
                 />
               ))}
+              <TablePagination
+                page={page}
+                setPage={setPage}
+                limit={limit}
+                setLimit={setLimit}
+                totalItems={approvals.length}
+                density={density}
+                setDensity={setDensity}
+              />
             </div>
           )}
         </>
@@ -554,42 +572,51 @@ const PaymentApproval = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
-                      <th className="py-3.5 px-4">Approval ID</th>
-                      <th className="py-3.5 px-4">Reference</th>
-                      <th className="py-3.5 px-4">Source</th>
-                      <th className="py-3.5 px-4">Type</th>
-                      <th className="py-3.5 px-4">Description</th>
-                      <th className="py-3.5 px-4 text-right">Amount</th>
-                      <th className="py-3.5 px-4 text-right">Opening</th>
-                      <th className="py-3.5 px-4 text-right">Closing</th>
-                      <th className="py-3.5 px-4">Approved By</th>
-                      <th className="py-3.5 px-4">Date & Time</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Approval ID</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Reference</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Source</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Type</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Description</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'} text-right`}>Amount</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'} text-right`}>Opening</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'} text-right`}>Closing</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Approved By</th>
+                      <th className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3.5 px-4'}`}>Date & Time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                    {ledger.map((row) => (
+                    {ledger.slice((ledgerPage - 1) * ledgerLimit, ledgerPage * ledgerLimit).map((row) => (
                       <tr key={row.id} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="py-3 px-4 font-bold text-primary">{row.approval_id}</td>
-                        <td className="py-3 px-4">{row.reference_no || '—'}</td>
-                        <td className="py-3 px-4">
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'} font-bold text-primary`}>{row.approval_id}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'}`}>{row.reference_no || '—'}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3 px-4'}`}>
                           <span className={`px-2 py-0.5 rounded border text-[10px] font-extrabold ${MODULE_LABELS[row.source_module]?.color || 'bg-slate-50 text-slate-600 border-slate-200'}`}>
                             {MODULE_LABELS[row.source_module]?.icon} {MODULE_LABELS[row.source_module]?.label || row.source_module}
                           </span>
                         </td>
-                        <td className={`py-3 px-4 font-extrabold ${TYPE_STYLES[row.type]}`}>{row.type}</td>
-                        <td className="py-3 px-4 text-slate-500 text-[11px] max-w-48 truncate">{row.description}</td>
-                        <td className={`py-3 px-4 text-right font-black ${row.type === 'Cash In' ? 'text-emerald-600' : 'text-red-500'}`}>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3 px-4'} font-extrabold ${TYPE_STYLES[row.type]}`}>{row.type}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[11px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[13px]' : 'py-3 px-4 text-[11px]'} text-slate-500 max-w-48 truncate`}>{row.description}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4' : ledgerDensity === 'high' ? 'py-5 px-4' : 'py-3 px-4'} text-right font-black ${row.type === 'Cash In' ? 'text-emerald-600' : 'text-red-500'}`}>
                           {row.type === 'Cash In' ? '+' : '-'}{fmt(row.amount)}
                         </td>
-                        <td className="py-3 px-4 text-right text-slate-600">{fmt(row.opening_balance)}</td>
-                        <td className="py-3 px-4 text-right font-black text-slate-800">{fmt(row.closing_balance)}</td>
-                        <td className="py-3 px-4">{row.approved_by}</td>
-                        <td className="py-3 px-4 text-slate-500">{fmtDateTime(row.approved_at_fmt || row.approved_at)}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'} text-right text-slate-600`}>{fmt(row.opening_balance)}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'} text-right font-black text-slate-800`}>{fmt(row.closing_balance)}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'}`}>{row.approved_by}</td>
+                        <td className={`${ledgerDensity === 'compact' ? 'py-2 px-4 text-[12px]' : ledgerDensity === 'high' ? 'py-5 px-4 text-[14px]' : 'py-3 px-4'} text-slate-500`}>{fmtDateTime(row.approved_at_fmt || row.approved_at)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <TablePagination
+                page={ledgerPage}
+                setPage={setLedgerPage}
+                limit={ledgerLimit}
+                setLimit={setLedgerLimit}
+                totalItems={ledger.length}
+                density={ledgerDensity}
+                setDensity={setLedgerDensity}
+              />
             </div>
           )}
         </div>

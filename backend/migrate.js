@@ -117,11 +117,22 @@ async function ensureCoreTables(connection) {
       additional_expenses DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
       grand_total DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
       remarks TEXT,
+      image_url VARCHAR(500) DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       FOREIGN KEY (supplier_id) REFERENCES company_details(id) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  try {
+    const [cols] = await connection.query(`SHOW COLUMNS FROM inventory_bills LIKE 'image_url'`);
+    if (cols.length === 0) {
+      await connection.query(`ALTER TABLE inventory_bills ADD COLUMN image_url VARCHAR(500) DEFAULT NULL`);
+      console.log('Added image_url column to inventory_bills in migrate.js');
+    }
+  } catch (colErr) {
+    console.error('Error checking/adding image_url to inventory_bills in migrate.js:', colErr.message);
+  }
 
   await connection.query(`
     CREATE TABLE IF NOT EXISTS inventory_bill_items (

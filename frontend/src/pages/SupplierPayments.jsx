@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 
 const SupplierPayments = () => {
   const navigate = useNavigate();
@@ -12,7 +13,11 @@ const SupplierPayments = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('PENDING'); // 'ALL', 'PENDING', 'SETTLED', 'CANCELLED'
 
-  // Master Data
+  // Pagination States
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [density, setDensity] = useState('medium');
+
   const [suppliers, setSuppliers] = useState([]);
   const [bills, setBills] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -88,6 +93,7 @@ const SupplierPayments = () => {
   }, []);
 
   useEffect(() => {
+    setPage(1);
     if (activeTab === 'pending') {
       fetchBills();
     } else {
@@ -792,7 +798,7 @@ const SupplierPayments = () => {
               No pending credit bills found.
             </div>
           ) : (
-            bills.map((bill) => {
+            bills.slice((page - 1) * limit, page * limit).map((bill) => {
               const settledPct = bill.grand_total > 0 
                 ? Math.min(100, Math.max(0, ((parseFloat(bill.advance_paid) + parseFloat(bill.credit_note) + parseFloat(bill.total_paid)) / parseFloat(bill.grand_total)) * 100))
                 : 0;
@@ -900,6 +906,15 @@ const SupplierPayments = () => {
               );
             })
           )}
+          <TablePagination
+            page={page}
+            setPage={setPage}
+            limit={limit}
+            setLimit={setLimit}
+            totalItems={bills.length}
+            density={density}
+            setDensity={setDensity}
+          />
         </div>
       ) : (
         /* PAYMENT HISTORY TABLE VIEW */
@@ -908,14 +923,14 @@ const SupplierPayments = () => {
             <table className="table table-zebra w-full overflow-hidden">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr className="text-slate-550 text-[11px] font-black uppercase tracking-wider">
-                  <th className="py-4 px-6 text-left">Date</th>
-                  <th className="py-4 px-6 text-left">Company</th>
-                  <th className="py-4 px-6 text-left">Bill No</th>
-                  <th className="py-4 px-6 text-left">Amount (₹)</th>
-                  <th className="py-4 px-6 text-left">Mode</th>
-                  <th className="py-4 px-6 text-center">Status</th>
-                  <th className="py-4 px-6 text-left">Notes</th>
-                  <th className="py-4 px-6 text-center">Actions</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Date</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Company</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Bill No</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Amount (₹)</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Mode</th>
+                  <th className={`${getDensityClass(density, true)} text-center`}>Status</th>
+                  <th className={`${getDensityClass(density, true)} text-left`}>Notes</th>
+                  <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -933,11 +948,11 @@ const SupplierPayments = () => {
                     </td>
                   </tr>
                 ) : (
-                  payments.map((p) => (
+                  payments.slice((page - 1) * limit, page * limit).map((p) => (
                     <tr key={p.id} className="hover:bg-blue-50/30 transition-colors">
-                      <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(p.payment_date)}</td>
-                      <td className="py-4 px-6 text-[14px] font-bold text-slate-700 max-w-[220px] truncate" title={p.supplier_name}>{p.supplier_name}</td>
-                      <td className="py-4 px-6 text-[13px] font-mono font-bold">
+                      <td className={`${getDensityClass(density)} font-medium text-slate-550`}>{formatDateDDMMYYYY(p.payment_date)}</td>
+                      <td className={`${getDensityClass(density)} font-bold text-slate-700 max-w-[220px] truncate`} title={p.supplier_name}>{p.supplier_name}</td>
+                      <td className={`${getDensityClass(density)} font-mono font-bold`}>
                         <button
                           type="button"
                           onClick={() => handleViewBillDetails(p.bill_id)}
@@ -946,10 +961,10 @@ const SupplierPayments = () => {
                           {p.bill_number || p.bill_id}
                         </button>
                       </td>
-                      <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                      <td className={`${getDensityClass(density)} font-black text-slate-800`}>
                         ₹ {parseFloat(p.amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className="py-4 px-6">
+                      <td className={`${getDensityClass(density)}`}>
                         <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${
                           p.payment_mode === 'Bank Transfer' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
                           p.payment_mode === 'Cash' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
@@ -959,7 +974,7 @@ const SupplierPayments = () => {
                           {p.payment_mode}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className={`${getDensityClass(density)} text-center`}>
                         <span className={`px-2 py-0.5 rounded text-[9px] font-extrabold ${
                           p.payment_status === 'Approved' ? 'bg-emerald-50 text-emerald-600' :
                           p.payment_status === 'Pending Approval' ? 'bg-amber-50 text-amber-600' :
@@ -969,10 +984,10 @@ const SupplierPayments = () => {
                           {(p.payment_status || 'Pending Approval').toUpperCase()}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-[13px] text-slate-400 max-w-[200px] truncate" title={p.notes || ''}>
+                      <td className={`${getDensityClass(density)} text-slate-400 max-w-[200px] truncate`} title={p.notes || ''}>
                         {p.notes || '—'}
                       </td>
-                      <td className="py-4 px-6 text-center">
+                      <td className={`${getDensityClass(density)} text-center`}>
                         <button
                           type="button"
                           onClick={() => handleViewBillDetails(p.bill_id)}
@@ -987,6 +1002,15 @@ const SupplierPayments = () => {
               </tbody>
             </table>
           </div>
+          <TablePagination
+            page={page}
+            setPage={setPage}
+            limit={limit}
+            setLimit={setLimit}
+            totalItems={payments.length}
+            density={density}
+            setDensity={setDensity}
+          />
         </div>
       )}
 

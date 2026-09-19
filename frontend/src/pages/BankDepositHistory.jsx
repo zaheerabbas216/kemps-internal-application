@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const BankDepositHistory = () => {
   const navigate = useNavigate();
@@ -11,7 +13,8 @@ const BankDepositHistory = () => {
   const [totalDeposits, setTotalDeposits] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,7 +46,7 @@ const BankDepositHistory = () => {
 
   useEffect(() => {
     fetchDepositHistory();
-  }, [currentPage, searchQuery, startDate, endDate, filterBankAccountId]);
+  }, [currentPage, limit, searchQuery, startDate, endDate, filterBankAccountId]);
 
   useEffect(() => {
     fetchBankAccounts();
@@ -347,14 +350,11 @@ const BankDepositHistory = () => {
         {/* Filters Grid */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           {/* Search Box */}
-          <div className="relative md:col-span-2">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search by ID, Creator, Notes, Bank..."
+          <div className="md:col-span-2">
+            <SearchInput
               value={searchQuery}
               onChange={handleSearchChange}
-              className="input-premium pl-11 h-11 w-full"
+              placeholder="Search by ID, Creator, Notes, Bank..."
             />
           </div>
 
@@ -480,29 +480,16 @@ const BankDepositHistory = () => {
           </table>
         </div>
 
-        {/* PAGINATION CONTROLS */}
         {!loading && totalDeposits > 0 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-            <div className="text-[12px] font-bold text-slate-400 uppercase">
-              Page {currentPage} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Previous
-              </button>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            page={currentPage}
+            limit={limit}
+            total={totalDeposits}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
         )}
       </div>
 

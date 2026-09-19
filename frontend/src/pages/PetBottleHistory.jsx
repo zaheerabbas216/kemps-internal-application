@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const PetBottleHistory = () => {
   const navigate = useNavigate();
@@ -10,7 +12,8 @@ const PetBottleHistory = () => {
   const [totalBatches, setTotalBatches] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Filters state
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,7 +53,7 @@ const PetBottleHistory = () => {
 
   useEffect(() => {
     fetchHistory();
-  }, [currentPage, searchQuery, startDate, endDate]);
+  }, [currentPage, limit, searchQuery, startDate, endDate]);
 
   useEffect(() => {
     fetchDropdowns();
@@ -367,7 +370,7 @@ const PetBottleHistory = () => {
   const totalPages = Math.ceil(totalBatches / limit) || 1;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -399,14 +402,11 @@ const PetBottleHistory = () => {
         {/* Date Range & Search Inputs */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           {/* Search Box */}
-          <div className="relative md:col-span-2">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search by ID, product, preform weight, notes..."
+          <div className="md:col-span-2">
+            <SearchInput
               value={searchQuery}
               onChange={handleSearchChange}
-              className="input-premium pl-11 h-11 w-full"
+              placeholder="Search by ID, product, preform weight, notes..."
             />
           </div>
 
@@ -534,29 +534,16 @@ const PetBottleHistory = () => {
           </table>
         </div>
 
-        {/* PAGINATION CONTROLS */}
         {!loading && totalBatches > 0 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-            <div className="text-[12px] font-bold text-slate-400 uppercase">
-              Page {currentPage} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Previous
-              </button>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            page={currentPage}
+            limit={limit}
+            total={totalBatches}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
         )}
       </div>
 

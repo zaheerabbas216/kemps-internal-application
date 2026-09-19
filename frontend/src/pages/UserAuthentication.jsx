@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const UserAuthentication = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [density, setDensity] = useState('medium');
   
   // Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -200,14 +205,11 @@ const UserAuthentication = () => {
       {/* SEARCH AND TABLE CONTAINER */}
       <div className="card-premium">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search by name, username, or ID..."
+          <div className="flex-1 max-w-md">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search by name, username, or ID..."
             />
           </div>
           <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -219,12 +221,12 @@ const UserAuthentication = () => {
           <table className="table table-zebra w-full overflow-hidden">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                <th className="py-4 px-6 text-left">User ID</th>
-                <th className="py-4 px-6 text-left">Full Name</th>
-                <th className="py-4 px-6 text-left">Username (Login ID)</th>
-                <th className="py-4 px-6 text-left">Password</th>
-                <th className="py-4 px-6 text-left">Registered Date</th>
-                <th className="py-4 px-6 text-center">Actions</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-left`}>User ID</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-left`}>Full Name</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-left`}>Username (Login ID)</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-left`}>Password</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-left`}>Registered Date</th>
+                <th className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'} text-center`}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -244,12 +246,12 @@ const UserAuthentication = () => {
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user) => {
+                filteredUsers.slice((page - 1) * limit, page * limit).map((user) => {
                   const isSelf = user.username === currentLoggedUser;
                   return (
                     <tr key={user.id} className="hover:bg-blue-50/30 transition-colors group">
-                      <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{user.id}</td>
-                      <td className="py-4 px-6 text-[14px] font-bold text-slate-700">
+                      <td className={`${density === 'compact' ? 'py-2 px-6 text-[12px]' : density === 'high' ? 'py-5 px-6 text-[14px]' : 'py-4 px-6 text-[13px]'} font-mono font-bold text-primary`}>{user.id}</td>
+                      <td className={`${density === 'compact' ? 'py-2 px-6 text-[12px]' : density === 'high' ? 'py-5 px-6 text-[14px]' : 'py-4 px-6 text-[14px]'} font-bold text-slate-700`}>
                         <div className="flex items-center gap-2">
                           <span>{user.name || '—'}</span>
                           {isSelf && (
@@ -259,16 +261,16 @@ const UserAuthentication = () => {
                           )}
                         </div>
                       </td>
-                      <td className="py-4 px-6 text-[14px] font-medium text-slate-600">{user.username}</td>
-                      <td className="py-4 px-6 text-[14px] font-mono text-slate-600">
+                      <td className={`${density === 'compact' ? 'py-2 px-6 text-[12px]' : density === 'high' ? 'py-5 px-6 text-[14px]' : 'py-4 px-6 text-[14px]'} font-medium text-slate-600`}>{user.username}</td>
+                      <td className={`${density === 'compact' ? 'py-2 px-6 text-[12px]' : density === 'high' ? 'py-5 px-6 text-[14px]' : 'py-4 px-6 text-[14px]'} font-mono text-slate-600`}>
                         {user.password && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$')) ? (
                           <span className="text-slate-400 italic">••••••••</span>
                         ) : (
                           user.password || '—'
                         )}
                       </td>
-                      <td className="py-4 px-6 text-[13px] text-slate-400">{formatDateDDMMYYYY(user.created_at)}</td>
-                      <td className="py-4 px-6">
+                      <td className={`${density === 'compact' ? 'py-2 px-6 text-[12px]' : density === 'high' ? 'py-5 px-6 text-[14px]' : 'py-4 px-6 text-[13px]'} text-slate-400`}>{formatDateDDMMYYYY(user.created_at)}</td>
+                      <td className={`${density === 'compact' ? 'py-2 px-6' : density === 'high' ? 'py-5 px-6' : 'py-4 px-6'}`}>
                         <div className="flex items-center justify-center gap-2">
                           <button 
                             onClick={() => handleOpenForm(user)}
@@ -300,6 +302,15 @@ const UserAuthentication = () => {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          setPage={setPage}
+          limit={limit}
+          setLimit={setLimit}
+          totalItems={filteredUsers.length}
+          density={density}
+          setDensity={setDensity}
+        />
       </div>
 
       {/* FORM MODAL */}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 
 const RawMaterialLedger = () => {
   const navigate = useNavigate();
@@ -18,6 +19,8 @@ const RawMaterialLedger = () => {
 
   const [ledgerDate, setLedgerDate] = useState(getTodayISTStr());
   const [rmCurrentPages, setRmCurrentPages] = useState({});
+  const [rmLimit, setRmLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [ledgerData, setLedgerData] = useState({ items: [], summary: {} });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -329,7 +332,7 @@ const RawMaterialLedger = () => {
   const totalMatchingItems = Object.values(groupedItems).reduce((acc, curr) => acc + curr.length, 0);
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -724,33 +727,33 @@ const RawMaterialLedger = () => {
                       <div className="overflow-x-auto rounded-xl border border-slate-100 mt-2 bg-white">
                         <table className="table w-full">
                           <thead>
-                            <tr className="bg-slate-50/50 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider border-b border-slate-100">
-                              <th className="py-3 px-5 text-left w-2/5">Sub Product</th>
-                              <th className="py-3 px-5 text-center w-1/12">Unit</th>
-                              <th className="py-3 px-5 text-right">Opening</th>
-                              <th className="py-3 px-5 text-right text-emerald-600">+IN</th>
-                              <th className="py-3 px-5 text-right text-rose-500">-OUT</th>
-                              <th className="py-3 px-5 text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100">=Closing</th>
+                            <tr className="bg-slate-50/50 text-slate-500 font-extrabold uppercase border-b border-slate-100">
+                              <th className={`${getDensityClass(density, true)} text-left w-2/5`}>Sub Product</th>
+                              <th className={`${getDensityClass(density, true)} text-center w-1/12`}>Unit</th>
+                              <th className={`${getDensityClass(density, true)} text-right`}>Opening</th>
+                              <th className={`${getDensityClass(density, true)} text-right text-emerald-600`}>+IN</th>
+                              <th className={`${getDensityClass(density, true)} text-right text-rose-500`}>-OUT</th>
+                              <th className={`${getDensityClass(density, true)} text-right text-blue-600 bg-blue-50/20 w-1/6 border-l border-slate-100`}>=Closing</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50 font-medium">
                             {currentCatItems.map((item, subIdx) => (
                               <tr key={subIdx} className="hover:bg-slate-50/40 transition-colors">
-                                <td className="py-3 px-5 text-[13px] text-slate-800 font-bold">
+                                <td className={`${getDensityClass(density)} text-slate-800 font-bold`}>
                                   {item.sub_product_name}
                                 </td>
-                                <td className="py-3 px-5 text-center text-[11px] font-extrabold text-slate-400 uppercase">
+                                <td className={`${getDensityClass(density)} text-center font-extrabold text-slate-400 uppercase`}>
                                   {item.unit}
                                 </td>
                                 <td 
                                   onClick={() => handleDrilldown(item, 'OPENING')}
-                                  className="py-3 px-5 text-right text-[13px] font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer"
+                                  className={`${getDensityClass(density)} text-right font-semibold text-slate-600 hover:text-blue-600 hover:underline cursor-pointer`}
                                 >
                                   {item.opening_stock.toLocaleString('en-IN')}
                                 </td>
                                 <td 
                                   onClick={() => handleDrilldown(item, 'IN')}
-                                  className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                  className={`${getDensityClass(density)} text-right font-semibold hover:text-blue-600 hover:underline cursor-pointer`}
                                 >
                                   {item.stock_in === 0 ? (
                                     <span className="text-emerald-500 font-bold">—</span>
@@ -760,7 +763,7 @@ const RawMaterialLedger = () => {
                                 </td>
                                 <td 
                                   onClick={() => handleDrilldown(item, 'OUT')}
-                                  className="py-3 px-5 text-right text-[13px] font-semibold hover:text-blue-600 hover:underline cursor-pointer"
+                                  className={`${getDensityClass(density)} text-right font-semibold hover:text-blue-600 hover:underline cursor-pointer`}
                                 >
                                   {item.stock_out === 0 ? (
                                     <span className="text-rose-500 font-bold">—</span>
@@ -770,7 +773,7 @@ const RawMaterialLedger = () => {
                                 </td>
                                 <td 
                                   onClick={() => handleDrilldown(item, 'CLOSING')}
-                                  className="py-3 px-5 text-right text-[13px] font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer"
+                                  className={`${getDensityClass(density)} text-right font-extrabold text-slate-800 bg-blue-50/20 border-l border-slate-100 hover:text-blue-600 hover:underline cursor-pointer`}
                                 >
                                   {item.closing_stock.toLocaleString('en-IN')}
                                 </td>
@@ -781,18 +784,18 @@ const RawMaterialLedger = () => {
                           {/* Group Totals Row */}
                           <tfoot>
                             <tr className="bg-[#f8fafc] border-t border-slate-200/80 text-slate-700 font-extrabold text-xs">
-                              <td className="py-3.5 px-5">Category Total</td>
-                              <td className="py-3.5 px-5"></td>
-                              <td className="py-3.5 px-5 text-right font-black">
+                              <td className={`${getDensityClass(density)}`}>Category Total</td>
+                              <td className={`${getDensityClass(density)}`}></td>
+                              <td className={`${getDensityClass(density)} text-right font-black`}>
                                 {groupTotals.opening.toLocaleString('en-IN')}
                               </td>
-                              <td className="py-3.5 px-5 text-right text-emerald-700 font-black">
+                              <td className={`${getDensityClass(density)} text-right text-emerald-700 font-black`}>
                                 {groupTotals.stockIn === 0 ? '—' : `+${groupTotals.stockIn.toLocaleString('en-IN')}`}
                               </td>
-                              <td className="py-3.5 px-5 text-right text-rose-700 font-black">
+                              <td className={`${getDensityClass(density)} text-right text-rose-700 font-black`}>
                                 {groupTotals.stockOut === 0 ? '—' : `-${groupTotals.stockOut.toLocaleString('en-IN')}`}
                               </td>
-                              <td className="py-3.5 px-5 text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black">
+                              <td className={`${getDensityClass(density)} text-right text-slate-800 bg-blue-55/20 border-l border-slate-200/80 font-black`}>
                                 {groupTotals.closing.toLocaleString('en-IN')}
                               </td>
                             </tr>
@@ -800,46 +803,18 @@ const RawMaterialLedger = () => {
                         </table>
                       </div>
 
-                      {/* Pagination Controls */}
-                      {totalCatPages > 1 && (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-3 border-t border-slate-100">
-                          <span className="text-xs text-slate-500 font-semibold">
-                            Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, groupItems.length)} of {groupItems.length} records
-                          </span>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              disabled={activeCatPage === 1}
-                              onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage - 1 }))}
-                              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                            >
-                              ← Prev
-                            </button>
-                            
-                            {Array.from({ length: totalCatPages }, (_, i) => i + 1).map(pageNum => (
-                              <button
-                                key={pageNum}
-                                type="button"
-                                onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: pageNum }))}
-                                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                                  activeCatPage === pageNum
-                                    ? 'bg-primary border-primary text-white'
-                                    : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                                  }`}
-                              >
-                                {pageNum}
-                              </button>
-                            ))}
-                            
-                            <button
-                              type="button"
-                              disabled={activeCatPage === totalCatPages}
-                              onClick={() => setRmCurrentPages(prev => ({ ...prev, [categoryName]: activeCatPage + 1 }))}
-                              className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                            >
-                              Next →
-                            </button>
-                          </div>
+                      {/* Standard TablePagination Component */}
+                      {groupItems.length > 0 && (
+                        <div className="mt-3">
+                          <TablePagination
+                            page={activeCatPage}
+                            limit={itemsPerPage}
+                            total={groupItems.length}
+                            onPageChange={(newPage) => setRmCurrentPages(prev => ({ ...prev, [categoryName]: newPage }))}
+                            onLimitChange={setRmLimit}
+                            density={density}
+                            onDensityChange={setDensity}
+                          />
                         </div>
                       )}
                     </div>

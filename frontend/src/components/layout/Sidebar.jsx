@@ -242,18 +242,35 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
   if (item.type === 'group') {
     const [isOpen, setIsOpen] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
+    const [flyoutTop, setFlyoutTop] = useState(0);
+    const buttonRef = React.useRef(null);
 
     const isChildActive = item.items.some(sub => sub.path === location.pathname);
+
+    const handleMouseEnter = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setFlyoutTop(rect.top);
+      }
+      setIsHovered(true);
+    };
 
     if (isCollapsed) {
       return (
         <div 
           className="relative group/flyout"
-          onMouseEnter={() => setIsHovered(true)}
+          onMouseEnter={handleMouseEnter}
           onMouseLeave={() => setIsHovered(false)}
         >
           <button
-            onClick={() => setIsOpen(!isOpen)}
+            ref={buttonRef}
+            onClick={() => {
+              if (buttonRef.current) {
+                const rect = buttonRef.current.getBoundingClientRect();
+                setFlyoutTop(rect.top);
+              }
+              setIsOpen(!isOpen);
+            }}
             title={item.title}
             className={`sidebar-item justify-center px-0 h-11 w-11 mx-auto ${
               isChildActive || isOpen ? 'sidebar-item-active' : 'sidebar-item-inactive'
@@ -263,12 +280,15 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
           </button>
 
           {(isHovered || isOpen) && (
-            <div className="absolute left-full top-0 ml-3 z-50 bg-white border border-slate-200/90 rounded-2xl shadow-xl p-2 min-w-[200px] animate-fade-in">
-              <div className="px-3 py-1.5 text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100 mb-1 flex items-center gap-2">
+            <div 
+              style={{ top: `${Math.max(10, Math.min(window.innerHeight - 300, flyoutTop))}px` }}
+              className="fixed left-[84px] z-[9999] bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
+            >
+              <div className="px-3 py-1.5 text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 mb-1 flex items-center gap-2">
                 <span>{item.icon}</span>
                 <span>{item.title}</span>
               </div>
-              <div className="space-y-1">
+              <div className="space-y-1 max-h-[70vh] overflow-y-auto scrollbar-hide">
                 {item.items.map((sub, idx) => (
                   <NavLink
                     key={idx}

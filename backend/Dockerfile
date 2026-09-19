@@ -24,6 +24,8 @@ COPY . .
 # Remove test files that shouldn't be in production
 RUN rm -f test_*.js .env.example
 
+RUN mkdir -p uploads && chown -R appuser:appgroup /app
+
 USER appuser
 
 EXPOSE 8000

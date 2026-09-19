@@ -98,7 +98,7 @@ const BillingForm = () => {
           finishedProductId: matchedId,
           quantity: String(i.quantity),
           rateWithTax: '',
-          taxPercent: 18,
+          taxPercent: '',
           basicRate: 0,
           totalAmount: 0
         };
@@ -235,7 +235,7 @@ const BillingForm = () => {
       finishedProductId: String(i.finishedProductId),
       quantity: String(i.quantity),
       rateWithTax: '',
-      taxPercent: 18,
+      taxPercent: '',
       basicRate: 0,
       totalAmount: 0
     }));
@@ -509,7 +509,7 @@ const BillingForm = () => {
       finishedProductId: '',
       quantity: '',
       rateWithTax: '',
-      taxPercent: 18,
+      taxPercent: '',
       basicRate: 0,
       totalAmount: 0
     };
@@ -529,9 +529,11 @@ const BillingForm = () => {
           // Recalculate line totals
           const qty = parseInt(updated.quantity, 10) || 0;
           const rTax = parseFloat(updated.rateWithTax) || 0.00;
-          const taxPct = parseFloat(updated.taxPercent) || 0.00;
+          const taxPct = updated.taxPercent !== '' && updated.taxPercent !== null && !isNaN(parseFloat(updated.taxPercent))
+            ? parseFloat(updated.taxPercent)
+            : null;
 
-          updated.basicRate = rTax / (1 + taxPct / 100);
+          updated.basicRate = taxPct !== null ? rTax / (1 + taxPct / 100) : 0;
           updated.totalAmount = qty * rTax;
 
           return updated;
@@ -614,11 +616,15 @@ const BillingForm = () => {
         return setFormError('Rate with Tax cannot be negative.');
       }
 
+      if (item.taxPercent === '' || item.taxPercent === null || item.taxPercent === undefined) {
+        return setFormError('Tax (%) is a required field. Please select Tax (%) for all product rows.');
+      }
+
       itemsPayload.push({
         finishedProductId: parseInt(item.finishedProductId, 10),
         quantity: qty,
         rateWithTax: rate,
-        taxPercent: parseFloat(item.taxPercent) || 0
+        taxPercent: parseFloat(item.taxPercent)
       });
     }
 
@@ -1096,22 +1102,24 @@ const BillingForm = () => {
                 <div className="md:col-span-1 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                      Tax (%)
+                      Tax (%) *
                     </label>
                   </div>
                   <select
-                    value={row.taxPercent}
+                    value={row.taxPercent ?? ''}
                     onChange={(e) => handleItemRowChange(row.id, 'taxPercent', e.target.value)}
                     className="w-full h-11 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                    required
                   >
+                    <option value="">-- Tax % --</option>
                     {TAX_OPTIONS.map(tax => (
                       <option key={tax} value={tax}>{tax}%</option>
                     ))}
                   </select>
                   <div className="text-[9px] font-bold text-slate-400 text-center">
-                    {parseFloat(row.taxPercent) > 0 
+                    {row.taxPercent !== '' && row.taxPercent !== null && parseFloat(row.taxPercent) > 0 
                       ? `${(parseFloat(row.taxPercent) / 2)}% + ${(parseFloat(row.taxPercent) / 2)}%`
-                      : '0%'}
+                      : row.taxPercent !== '' && row.taxPercent !== null ? '0%' : 'Required'}
                   </div>
                 </div>
 

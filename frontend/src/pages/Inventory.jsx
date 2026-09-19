@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const Inventory = () => {
   const navigate = useNavigate();
@@ -11,6 +13,9 @@ const Inventory = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Dropdown options
   const [suppliers, setSuppliers] = useState([]);
@@ -32,8 +37,12 @@ const Inventory = () => {
     billedTo: '',
     billNumber: '',
     paymentMethod: '',
-    remarks: ''
+    remarks: '',
+    imageUrl: ''
   });
+
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState('');
 
   // Bill Items Form State (Dynamic array of products)
   const [billItems, setBillItems] = useState([]);
@@ -126,7 +135,8 @@ const Inventory = () => {
             billedTo: res.data.bill.billed_to,
             billNumber: res.data.bill.bill_number,
             paymentMethod: res.data.bill.payment_method,
-            remarks: res.data.bill.remarks || ''
+            remarks: res.data.bill.remarks || '',
+            imageUrl: res.data.bill.image_url || ''
           });
 
           // Format items
@@ -162,11 +172,13 @@ const Inventory = () => {
         billedTo: '',
         billNumber: '',
         paymentMethod: '',
-        remarks: ''
+        remarks: '',
+        imageUrl: ''
       });
       // Start with 1 empty product row
       setBillItems([createNewItemRow()]);
     }
+    setImageUploadError('');
     setIsFormOpen(true);
   };
 
@@ -179,11 +191,50 @@ const Inventory = () => {
       billedTo: '',
       billNumber: '',
       paymentMethod: '',
-      remarks: ''
+      remarks: '',
+      imageUrl: ''
     });
     setBillItems([]);
     setFormError('');
     setFormSuccess('');
+    setImageUploadError('');
+  };
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      setImageUploadError('File size exceeds 10MB limit.');
+      return;
+    }
+
+    setImageUploadError('');
+    setUploadingImage(true);
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const res = await api.post('/inventory/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      if (res.data.ok && res.data.imageUrl) {
+        setBillHeader(prev => ({ ...prev, imageUrl: res.data.imageUrl }));
+      } else {
+        setImageUploadError(res.data.error || 'Failed to upload image.');
+      }
+    } catch (err) {
+      console.error('Image upload error:', err);
+      setImageUploadError(err.response?.data?.error || err.message || 'Image upload failed.');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setBillHeader(prev => ({ ...prev, imageUrl: '' }));
+    setImageUploadError('');
   };
 
   const createNewItemRow = () => {
@@ -709,6 +760,85 @@ const Inventory = () => {
                     className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
                   />
                 </div>
+
+                {/* Image / Bill Copy Upload Section */}
+                <div className="md:col-span-2 space-y-2 pt-2 border-t border-slate-100">
+                  <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider flex items-center justify-between">
+                    <span>Invoice / Bill Receipt Copy (Image Upload)</span>
+                    <span className="text-[10px] font-normal text-slate-400">JPG, PNG, WEBP, PDF up to 10MB</span>
+                  </label>
+
+                  {billHeader.imageUrl ? (
+                    <div className="relative border-2 border-dashed border-emerald-200 bg-emerald-50/30 rounded-2xl p-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 overflow-hidden">
+                        {billHeader.imageUrl.toLowerCase().endsWith('.pdf') ? (
+                          <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs uppercase shadow-sm shrink-0">
+                            PDF
+                          </div>
+                        ) : (
+                          <img
+                            src={billHeader.imageUrl}
+                            alt="Bill Copy Preview"
+                            className="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-sm bg-white shrink-0"
+                          />
+                        )}
+                        <div className="overflow-hidden">
+                          <p className="text-xs font-bold text-slate-700 truncate">Uploaded Attachment</p>
+                          <a
+                            href={billHeader.imageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1 mt-0.5 truncate"
+                          >
+                            <span>🔗 View Original File</span>
+                          </a>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleRemoveImage}
+                        className="px-3 py-1.5 rounded-xl bg-red-50 text-red-600 border border-red-200 text-xs font-bold hover:bg-red-100 transition-all flex items-center gap-1 shrink-0"
+                      >
+                        ✕ Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <label className="border-2 border-dashed border-slate-200 hover:border-primary/50 bg-slate-50/50 hover:bg-blue-50/20 rounded-2xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all duration-200 text-center">
+                        {uploadingImage ? (
+                          <div className="py-2 flex items-center gap-2 text-primary font-bold text-xs">
+                            <span className="loading loading-spinner loading-xs"></span>
+                            Uploading file to storage...
+                          </div>
+                        ) : (
+                          <div className="py-1 flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-blue-50 text-primary flex items-center justify-center text-lg font-bold shrink-0">
+                              📷
+                            </div>
+                            <div className="text-left">
+                              <span className="text-xs font-bold text-slate-700 block">Click to upload bill / receipt image</span>
+                              <span className="text-[11px] font-medium text-slate-400 block">Drag & drop or select image from computer</span>
+                            </div>
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                          onChange={handleImageUpload}
+                          disabled={uploadingImage}
+                          className="hidden"
+                        />
+                      </label>
+
+                      {imageUploadError && (
+                        <p className="text-xs font-semibold text-red-500 mt-1.5 flex items-center gap-1">
+                          ⚠️ {imageUploadError}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1124,14 +1254,11 @@ const Inventory = () => {
           <div className="card-premium">
             
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-              <div className="relative flex-1 max-w-md">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-                <input 
-                  type="text" 
-                  placeholder="Search by bill number, supplier, product..."
+              <div className="flex-1 max-w-md">
+                <SearchInput
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="input-premium pl-11 h-10 w-full"
+                  placeholder="Search by bill number, supplier, product..."
                 />
               </div>
               <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-100">
@@ -1143,15 +1270,15 @@ const Inventory = () => {
             <div className="overflow-x-auto rounded-xl border border-slate-100">
               <table className="table table-zebra w-full overflow-hidden">
                 <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Entry ID</th>
-                    <th className="py-4 px-6 text-left">Bill No</th>
-                    <th className="py-4 px-6 text-left">Supplier</th>
-                    <th className="py-4 px-6 text-left">Billed To</th>
-                    <th className="py-4 px-6 text-left">Products</th>
-                    <th className="py-4 px-6 text-left">Total Amount</th>
-                    <th className="py-4 px-6 text-left">Payment Mode</th>
-                    <th className="py-4 px-6 text-center">Actions</th>
+                  <tr className="text-slate-500 font-black uppercase">
+                    <th className={`${getDensityClass(density, true)} text-left`}>Entry ID</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Bill No</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Supplier</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Billed To</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Products</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Total Amount</th>
+                    <th className={`${getDensityClass(density, true)} text-left`}>Payment Mode</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -1171,20 +1298,20 @@ const Inventory = () => {
                       </td>
                     </tr>
                   ) : (
-                    bills.map((bill) => (
+                    bills.slice((page - 1) * limit, page * limit).map((bill) => (
                       <tr key={bill.id} className="hover:bg-blue-50/30 transition-colors group">
-                        <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{bill.id}</td>
-                        <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{bill.bill_number || '—'}</td>
-                        <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{bill.supplier_name}</td>
-                        <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{bill.billed_to}</td>
-                        <td className="py-4 px-6 text-[13px] text-slate-500 max-w-[200px] truncate" title={bill.products_summary}>
+                        <td className={`${getDensityClass(density)} font-mono font-bold text-primary`}>{bill.id}</td>
+                        <td className={`${getDensityClass(density)} font-bold text-slate-700`}>{bill.bill_number || '—'}</td>
+                        <td className={`${getDensityClass(density)} font-bold text-slate-700`}>{bill.supplier_name}</td>
+                        <td className={`${getDensityClass(density)} font-medium text-slate-550`}>{bill.billed_to}</td>
+                        <td className={`${getDensityClass(density)} text-slate-500 max-w-[200px] truncate`} title={bill.products_summary}>
                           {bill.products_summary || '—'}
                         </td>
-                        <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                        <td className={`${getDensityClass(density)} font-black text-slate-800`}>
                           ₹ {parseFloat(bill.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
-                        <td className="py-4 px-6 text-[13px] font-semibold text-slate-605 uppercase">{bill.payment_method}</td>
-                        <td className="py-4 px-6">
+                        <td className={`${getDensityClass(density)} font-semibold text-slate-605 uppercase`}>{bill.payment_method}</td>
+                        <td className={`${getDensityClass(density)}`}>
                           <div className="flex items-center justify-center gap-2">
                             <button 
                               onClick={() => handleOpenView(bill)}
@@ -1225,6 +1352,18 @@ const Inventory = () => {
                 </tbody>
               </table>
             </div>
+
+            {!loading && bills.length > 0 && (
+              <TablePagination
+                page={page}
+                limit={limit}
+                total={bills.length}
+                onPageChange={setPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
+            )}
           </div>
         </div>
       )}
@@ -1274,6 +1413,37 @@ const Inventory = () => {
                   <span className="text-sm text-slate-500 italic">{viewingBill.bill.remarks || '—'}</span>
                 </div>
               </div>
+
+              {/* Uploaded Bill Copy Attachment Preview */}
+              {viewingBill.bill.image_url && (
+                <div className="p-4 bg-white border border-slate-200/80 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {viewingBill.bill.image_url.toLowerCase().endsWith('.pdf') ? (
+                      <div className="w-10 h-10 rounded-lg bg-red-100 text-red-600 flex items-center justify-center font-bold text-xs">
+                        PDF
+                      </div>
+                    ) : (
+                      <img
+                        src={viewingBill.bill.image_url}
+                        alt="Bill Attachment"
+                        className="w-12 h-12 object-cover rounded-lg border border-slate-200 bg-slate-50"
+                      />
+                    )}
+                    <div>
+                      <span className="text-[10px] font-black text-slate-400 block uppercase">Bill Attachment</span>
+                      <span className="text-xs font-bold text-slate-700">Attached Invoice / Receipt Copy</span>
+                    </div>
+                  </div>
+                  <a
+                    href={viewingBill.bill.image_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-xl text-xs font-bold transition-all flex items-center gap-1"
+                  >
+                    <span>View Attachment</span> ↗
+                  </a>
+                </div>
+              )}
 
               {/* Items List */}
               <div className="border border-slate-200/80 rounded-2xl bg-white overflow-hidden shadow-sm">

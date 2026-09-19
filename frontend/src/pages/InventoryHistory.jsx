@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const InventoryHistory = () => {
   const navigate = useNavigate();
@@ -10,7 +12,8 @@ const InventoryHistory = () => {
   const [totalBills, setTotalBills] = useState(0);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Analytics states
   const [analytics, setAnalytics] = useState({
@@ -73,7 +76,7 @@ const InventoryHistory = () => {
   useEffect(() => {
     fetchInventoryHistory();
     fetchAnalyticsData();
-  }, [currentPage, searchQuery, startDate, endDate, billedTo, supplierId, paymentMethod]);
+  }, [currentPage, limit, searchQuery, startDate, endDate, billedTo, supplierId, paymentMethod]);
 
   const fetchInventoryHistory = async () => {
     try {
@@ -666,15 +669,11 @@ const InventoryHistory = () => {
       <div className="card-premium">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
           {/* Search Box */}
-          <div className="relative md:col-span-2">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              name="searchQuery"
-              placeholder="Search by ID, supplier, invoice, product..."
+          <div className="md:col-span-2">
+            <SearchInput
               value={searchQuery}
-              onChange={handleFilterChange}
-              className="input-premium pl-11 h-11 w-full"
+              onChange={(e) => handleFilterChange({ target: { name: 'searchQuery', value: e.target.value } })}
+              placeholder="Search by ID, supplier, invoice, product..."
             />
           </div>
 
@@ -818,15 +817,15 @@ const InventoryHistory = () => {
           <table className="table table-zebra w-full overflow-hidden">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr className="text-slate-505 text-[11px] font-black uppercase tracking-wider">
-                <th className="py-4 px-6 text-left">Entry ID</th>
-                <th className="py-4 px-6 text-left">Date</th>
-                <th className="py-4 px-6 text-left">Bill No</th>
-                <th className="py-4 px-6 text-left">Supplier</th>
-                <th className="py-4 px-6 text-left">Billed To</th>
-                <th className="py-4 px-6 text-left">Products</th>
-                <th className="py-4 px-6 text-left">Total Amount</th>
-                <th className="py-4 px-6 text-left">Payment Mode</th>
-                <th className="py-4 px-6 text-center">Actions</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Entry ID</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Date</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Bill No</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Supplier</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Billed To</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Products</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Total Amount</th>
+                <th className={`${getDensityClass(density, true)} text-left`}>Payment Mode</th>
+                <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -848,19 +847,19 @@ const InventoryHistory = () => {
               ) : (
                 bills.map((bill) => (
                   <tr key={bill.id} className="hover:bg-blue-50/30 transition-colors group">
-                    <td className="py-4 px-6 text-[13px] font-mono font-bold text-primary">{bill.id}</td>
-                    <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(bill.bill_date)}</td>
-                    <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{bill.bill_number || '—'}</td>
-                    <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{bill.supplier_name}</td>
-                    <td className="py-4 px-6 text-[13px] font-medium text-slate-500">{bill.billed_to}</td>
-                    <td className="py-4 px-6 text-[13px] text-slate-500 max-w-[150px] truncate" title={bill.products_summary}>
+                    <td className={`${getDensityClass(density)} font-mono font-bold text-primary`}>{bill.id}</td>
+                    <td className={`${getDensityClass(density)} font-medium text-slate-550`}>{formatDateDDMMYYYY(bill.bill_date)}</td>
+                    <td className={`${getDensityClass(density)} font-bold text-slate-700`}>{bill.bill_number || '—'}</td>
+                    <td className={`${getDensityClass(density)} font-bold text-slate-700`}>{bill.supplier_name}</td>
+                    <td className={`${getDensityClass(density)} font-medium text-slate-500`}>{bill.billed_to}</td>
+                    <td className={`${getDensityClass(density)} text-slate-500 max-w-[150px] truncate`} title={bill.products_summary}>
                       {bill.products_summary || '—'}
                     </td>
-                    <td className="py-4 px-6 text-[14px] font-black text-slate-800">
+                    <td className={`${getDensityClass(density)} font-black text-slate-800`}>
                       ₹ {parseFloat(bill.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td className="py-4 px-6 text-[13px] font-semibold text-slate-600 uppercase">{bill.payment_method}</td>
-                    <td className="py-4 px-6">
+                    <td className={`${getDensityClass(density)} font-semibold text-slate-600 uppercase`}>{bill.payment_method}</td>
+                    <td className={getDensityClass(density)}>
                       <div className="flex items-center justify-center gap-2">
                         <button 
                           onClick={() => handleOpenView(bill)}
@@ -877,29 +876,16 @@ const InventoryHistory = () => {
           </table>
         </div>
 
-        {/* PAGINATION CONTROLS */}
         {!loading && totalBills > 0 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-slate-100">
-            <div className="text-[12px] font-bold text-slate-400 uppercase">
-              Page {currentPage} of {totalPages}
-            </div>
-            <div className="flex gap-2">
-              <button
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Previous
-              </button>
-              <button
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-600 bg-white hover:bg-slate-50 disabled:opacity-50 text-[12px] font-bold shadow-sm transition-all duration-200"
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <TablePagination
+            page={currentPage}
+            limit={limit}
+            total={totalBills}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
         )}
       </div>
 

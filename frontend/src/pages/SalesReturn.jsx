@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 const SalesReturn = () => {
   // Tabs: 'new', 'history', 'reports'
@@ -50,7 +51,8 @@ const SalesReturn = () => {
   const [historyStart, setHistoryStart] = useState('');
   const [historyEnd, setHistoryEnd] = useState('');
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyLimit] = useState(10);
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [historyDensity, setHistoryDensity] = useState('medium');
   const [historyTotal, setHistoryTotal] = useState(0);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -122,7 +124,7 @@ const SalesReturn = () => {
     } else if (activeTab === 'reports') {
       fetchReports();
     }
-  }, [activeTab, historyPage, historySearch, historyStart, historyEnd]);
+  }, [activeTab, historyPage, historyLimit, historySearch, historyStart, historyEnd]);
 
   const fetchCustomers = async () => {
     try {
@@ -487,7 +489,7 @@ const SalesReturn = () => {
     : [];
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-4">
@@ -946,29 +948,16 @@ const SalesReturn = () => {
                 </tbody>
               </table>
 
-              {/* Pagination */}
-              {Math.ceil(historyTotal / historyLimit) > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 bg-slate-50/50 border-t border-slate-100 mt-4 rounded-xl">
-                  <span className="text-xs text-slate-450 font-bold">
-                    Page {historyPage} of {Math.ceil(historyTotal / historyLimit)} ({historyTotal} returns total)
-                  </span>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setHistoryPage(prev => Math.max(prev - 1, 1))}
-                      disabled={historyPage === 1}
-                      className="px-3 py-1 rounded border border-slate-200 bg-white text-xs font-bold disabled:opacity-50"
-                    >
-                      Previous
-                    </button>
-                    <button
-                      onClick={() => setHistoryPage(prev => Math.min(prev + 1, Math.ceil(historyTotal / historyLimit)))}
-                      disabled={historyPage === Math.ceil(historyTotal / historyLimit)}
-                      className="px-3 py-1 rounded border border-slate-200 bg-white text-xs font-bold disabled:opacity-50"
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+              {!loadingHistory && historyTotal > 0 && (
+                <TablePagination
+                  page={historyPage}
+                  limit={historyLimit}
+                  total={historyTotal}
+                  onPageChange={setHistoryPage}
+                  onLimitChange={setHistoryLimit}
+                  density={historyDensity}
+                  onDensityChange={setHistoryDensity}
+                />
               )}
             </div>
           )}

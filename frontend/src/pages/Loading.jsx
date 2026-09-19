@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import TablePagination from '../components/common/TablePagination';
 
 const Loading = () => {
   const navigate = useNavigate();
@@ -51,7 +52,8 @@ const Loading = () => {
   const [activeProfiles, setActiveProfiles] = useState([]);
   const [loadingActive, setLoadingActive] = useState(false);
   const [activePage, setActivePage] = useState(1);
-  const activeLimit = 10;
+  const [activeLimit, setActiveLimit] = useState(10);
+  const [activeDensity, setActiveDensity] = useState('medium');
 
   // ==========================================
   // TODAY'S HISTORY STATE (COMPLETED/BILLED TODAY)
@@ -60,7 +62,8 @@ const Loading = () => {
   const [loadingTodayHistory, setLoadingTodayHistory] = useState(false);
   const [todayHistoryCount, setTodayHistoryCount] = useState(0);
   const [todayHistoryPage, setTodayHistoryPage] = useState(1);
-  const todayHistoryLimit = 10;
+  const [todayHistoryLimit, setTodayHistoryLimit] = useState(10);
+  const [todayHistoryDensity, setTodayHistoryDensity] = useState('medium');
 
   // ==========================================
   // HISTORY STATE
@@ -69,7 +72,8 @@ const Loading = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyCount, setHistoryCount] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
-  const historyLimit = 10;
+  const [historyLimit, setHistoryLimit] = useState(10);
+  const [historyDensity, setHistoryDensity] = useState('medium');
 
   // History Filters
   const [filterSearch, setFilterSearch] = useState('');
@@ -284,7 +288,7 @@ const Loading = () => {
     } else if (activeTab === 'history') {
       fetchHistory();
     }
-  }, [activeTab, historyPage, todayHistoryPage, filterSearch, filterStartDate, filterEndDate, filterGodown]);
+  }, [activeTab, historyPage, historyLimit, todayHistoryPage, todayHistoryLimit, filterSearch, filterStartDate, filterEndDate, filterGodown]);
 
   const fetchGoodsLedgerStock = async () => {
     try {
@@ -869,7 +873,7 @@ const Loading = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {!isFormOpen ? (
         <>
@@ -1429,29 +1433,16 @@ const Loading = () => {
                 </tbody>
               </table>
             </div>
-            {/* Active Profiles Pagination */}
-            {!loadingActive && activeProfiles.length > activeLimit && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {activePage} of {Math.ceil(activeProfiles.length / activeLimit)} ({activeProfiles.length} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={activePage === 1}
-                    onClick={() => setActivePage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={activePage === Math.ceil(activeProfiles.length / activeLimit)}
-                    onClick={() => setActivePage(prev => Math.min(Math.ceil(activeProfiles.length / activeLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+            {!loadingActive && activeProfiles.length > 0 && (
+              <TablePagination
+                page={activePage}
+                limit={activeLimit}
+                total={activeProfiles.length}
+                onPageChange={setActivePage}
+                onLimitChange={setActiveLimit}
+                density={activeDensity}
+                onDensityChange={setActiveDensity}
+              />
             )}
           </div>
 
@@ -1563,29 +1554,16 @@ const Loading = () => {
                 </tbody>
               </table>
             </div>
-            {/* Today's History Pagination */}
             {!loadingTodayHistory && todayHistoryCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {todayHistoryPage} of {Math.ceil(todayHistoryCount / todayHistoryLimit) || 1} ({todayHistoryCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={todayHistoryPage === 1}
-                    onClick={() => setTodayHistoryPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={todayHistoryPage === Math.ceil(todayHistoryCount / todayHistoryLimit)}
-                    onClick={() => setTodayHistoryPage(prev => Math.min(Math.ceil(todayHistoryCount / todayHistoryLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={todayHistoryPage}
+                limit={todayHistoryLimit}
+                total={todayHistoryCount}
+                onPageChange={setTodayHistoryPage}
+                onLimitChange={setTodayHistoryLimit}
+                density={todayHistoryDensity}
+                onDensityChange={setTodayHistoryDensity}
+              />
             )}
           </div>
         </div>
@@ -1767,29 +1745,16 @@ const Loading = () => {
               </table>
             </div>
 
-            {/* Pagination */}
             {!loadingHistory && historyCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {historyPage} of {Math.ceil(historyCount / historyLimit) || 1} ({historyCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={historyPage === 1}
-                    onClick={() => setHistoryPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={historyPage === Math.ceil(historyCount / historyLimit)}
-                    onClick={() => setHistoryPage(prev => Math.min(Math.ceil(historyCount / historyLimit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold shadow-sm transition-all duration-200"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={historyPage}
+                limit={historyLimit}
+                total={historyCount}
+                onPageChange={setHistoryPage}
+                onLimitChange={setHistoryLimit}
+                density={historyDensity}
+                onDensityChange={setHistoryDensity}
+              />
             )}
           </div>
         </div>

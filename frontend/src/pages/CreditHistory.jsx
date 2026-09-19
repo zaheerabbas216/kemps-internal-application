@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 const CreditHistory = () => {
   const navigate = useNavigate();
@@ -17,9 +18,10 @@ const CreditHistory = () => {
   // Modal & Selected Payment
   const [selectedPayment, setSelectedPayment] = useState(null);
 
-  // Pagination
+  // Pagination & Density
   const [page, setPage] = useState(1);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [total, setTotal] = useState(0);
 
   // Dropdown options
@@ -257,7 +259,7 @@ const CreditHistory = () => {
   const totalPages = Math.ceil(total / limit) || 1;
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -455,29 +457,15 @@ const CreditHistory = () => {
             </div>
 
             {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between px-6 py-4 bg-slate-50/50 border-t border-slate-100">
-                <span className="text-xs text-slate-450 font-bold">
-                  Showing Page {page} of {totalPages} ({total} entries total)
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setPage(prev => Math.max(prev - 1, 1))}
-                    disabled={page === 1}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    ← Previous
-                  </button>
-                  <button
-                    onClick={() => setPage(prev => Math.min(prev + 1, totalPages))}
-                    disabled={page === totalPages}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Next →
-                  </button>
-                </div>
-              </div>
-            )}
+            <TablePagination 
+              page={page}
+              limit={limit}
+              total={total}
+              onPageChange={setPage}
+              onLimitChange={setLimit}
+              density={density}
+              onDensityChange={setDensity}
+            />
           </>
         )}
       </div>

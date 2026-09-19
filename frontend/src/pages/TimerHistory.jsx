@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 function getTodayDateStr() {
   const now = new Date();
@@ -31,6 +32,9 @@ const TimerHistory = () => {
   const [historyData, setHistoryData] = useState({ machines: [], summary: null });
   const [expandedMachineId, setExpandedMachineId] = useState(null);
   const [activeTab, setActiveTab] = useState('ALL'); // 'ALL', 'Production', 'PET Bottle'
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   useEffect(() => {
     fetchHistory(selectedDate);
@@ -64,7 +68,7 @@ const TimerHistory = () => {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 w-full space-y-6">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-base-100 p-5 rounded-2xl shadow-sm border border-base-300">
         <div className="flex items-center gap-3">
@@ -194,7 +198,7 @@ const TimerHistory = () => {
         </div>
       ) : (
         <div className="space-y-4">
-          {filteredMachines.map((m) => {
+          {filteredMachines.slice((page - 1) * limit, page * limit).map((m) => {
             const isExpanded = expandedMachineId === m.id;
             const hasSessions = m.sessions && m.sessions.length > 0;
 
@@ -349,6 +353,15 @@ const TimerHistory = () => {
               </div>
             );
           })}
+          <TablePagination
+            page={page}
+            setPage={setPage}
+            limit={limit}
+            setLimit={setLimit}
+            totalItems={filteredMachines.length}
+            density={density}
+            setDensity={setDensity}
+          />
         </div>
       )}
     </div>

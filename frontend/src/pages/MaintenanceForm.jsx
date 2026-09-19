@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import SearchInput from '../components/common/SearchInput';
 
 const MaintenanceForm = () => {
   const navigate = useNavigate();
@@ -479,14 +480,11 @@ const MaintenanceForm = () => {
         
         {/* Search header container */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search today's activities..."
+          <div className="flex-1 max-w-md">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search today's activities..."
             />
           </div>
           <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-100">

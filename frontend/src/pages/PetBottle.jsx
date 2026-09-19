@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const PetBottle = () => {
   const navigate = useNavigate();
@@ -16,6 +18,9 @@ const PetBottle = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [todayDateStr, setTodayDateStr] = useState('');
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Dropdowns
   const [bottleProducts, setBottleProducts] = useState([]);
@@ -365,14 +370,11 @@ const PetBottle = () => {
         
         {/* Search header container */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div className="relative flex-1 max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input 
-              type="text" 
-              placeholder="Search today's production batches..."
+          <div className="flex-1 max-w-md">
+            <SearchInput
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search today's production batches..."
             />
           </div>
           <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3.5 py-1.5 rounded-lg border border-slate-100">
@@ -414,7 +416,7 @@ const PetBottle = () => {
                   </td>
                 </tr>
               ) : (
-                batches.map((b) => (
+                batches.slice((page - 1) * limit, page * limit).map((b) => (
                   <tr key={b.id} className="hover:bg-blue-50/30 transition-colors">
                     <td className="py-4 px-6 text-[12px] font-mono font-bold text-primary">{b.id}</td>
                     <td className="py-4 px-6 text-[13px] font-medium text-slate-550">{formatDateDDMMYYYY(b.batch_date)}</td>
@@ -459,6 +461,18 @@ const PetBottle = () => {
             </tbody>
           </table>
         </div>
+
+        {!loading && batches.length > 0 && (
+          <TablePagination
+            page={page}
+            limit={limit}
+            total={batches.length}
+            onPageChange={setPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
+        )}
       </div>
 
       {/* ADD PRODUCTION MODAL */}

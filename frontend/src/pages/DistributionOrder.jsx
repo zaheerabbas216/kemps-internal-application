@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 const getTodayIST = () => {
   const now = new Date();
@@ -36,7 +37,8 @@ const DistributionOrder = () => {
   const [filterEndDate, setFilterEndDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Orders lists
   const [orders, setOrders] = useState([]);
@@ -99,7 +101,7 @@ const DistributionOrder = () => {
 
   useEffect(() => {
     fetchOrdersList();
-  }, [activeTab, currentPage, filterSearch, filterStartDate, filterEndDate]);
+  }, [activeTab, currentPage, limit, filterSearch, filterStartDate, filterEndDate]);
 
   const fetchDropdownMasters = async () => {
     try {
@@ -504,7 +506,7 @@ const DistributionOrder = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1027,29 +1029,16 @@ const DistributionOrder = () => {
               </table>
             </div>
 
-            {/* Pagination */}
             {!loadingList && totalCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {currentPage} of {Math.ceil(totalCount / limit) || 1} ({totalCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold transition-all"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentPage === Math.ceil(totalCount / limit)}
-                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / limit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-50 disabled:opacity-50 text-xs font-bold transition-all"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={currentPage}
+                limit={limit}
+                total={totalCount}
+                onPageChange={setCurrentPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
             )}
           </div>
         </div>

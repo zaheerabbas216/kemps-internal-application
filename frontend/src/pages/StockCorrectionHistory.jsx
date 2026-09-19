@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
 
 const StockCorrectionHistory = () => {
   const navigate = useNavigate();
+
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(25);
+  const [density, setDensity] = useState('medium');
 
   // Filters
   const [filterDate, setFilterDate] = useState('');
@@ -25,6 +31,7 @@ const StockCorrectionHistory = () => {
 
   // Fetch history when filters change
   useEffect(() => {
+    setPage(1);
     fetchHistory();
   }, [filterDate, filterCategoryId, filterRmId]);
 
@@ -82,7 +89,7 @@ const StockCorrectionHistory = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -173,15 +180,15 @@ const StockCorrectionHistory = () => {
           <table className="table table-zebra w-full overflow-hidden text-xs">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr className="text-slate-500 font-black uppercase tracking-wider text-[10px]">
-                <th className="py-4 px-5 text-left">Date</th>
-                <th className="py-4 px-5 text-left">Product</th>
-                <th className="py-4 px-5 text-left">Sub Product</th>
-                <th className="py-4 px-5 text-right">Opening Stock</th>
-                <th className="py-4 px-5 text-right">Physical Stock</th>
-                <th className="py-4 px-5 text-right">Difference</th>
-                <th className="py-4 px-5 text-center">Type</th>
-                <th className="py-4 px-5 text-left">Remark</th>
-                <th className="py-4 px-5 text-center">User</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-left`}>Date</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-left`}>Product</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-left`}>Sub Product</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-right`}>Opening Stock</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-right`}>Physical Stock</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-right`}>Difference</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-center`}>Type</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-left`}>Remark</th>
+                <th className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-5 px-5' : 'py-4 px-5'} text-center`}>User</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -201,36 +208,36 @@ const StockCorrectionHistory = () => {
                   </td>
                 </tr>
               ) : (
-                corrections.map((corr) => {
+                corrections.slice((page - 1) * limit, page * limit).map((corr) => {
                   const isPreforms = corr.category_name.toLowerCase() === 'preforms';
                   const visualDiff = corr.physical_stock - Math.abs(corr.opening_stock);
                   return (
                     <tr key={corr.id} className="hover:bg-blue-50/20 transition-colors">
-                      <td className="py-4 px-5 font-semibold text-slate-700" data-label="Date">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} font-semibold text-slate-700`} data-label="Date">
                         {formatDateDDMMYYYY(corr.correction_date)}
                       </td>
-                      <td className="py-4 px-5 font-bold text-slate-800" data-label="Product">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} font-bold text-slate-800`} data-label="Product">
                         {corr.category_name}
                       </td>
-                      <td className="py-4 px-5 font-bold text-slate-800" data-label="Sub Product">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} font-bold text-slate-800`} data-label="Sub Product">
                         {corr.sub_product_name}
                       </td>
-                      <td className="py-4 px-5 text-right font-semibold text-slate-600" data-label="Opening Stock">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} text-right font-semibold text-slate-600`} data-label="Opening Stock">
                         <div>{corr.opening_stock.toLocaleString()}</div>
                         {isPreforms && (
                           <div className="text-[10px] text-slate-400">({corr.opening_bags_box} bags)</div>
                         )}
                       </td>
-                      <td className="py-4 px-5 text-right font-black text-slate-700" data-label="Physical Stock">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} text-right font-black text-slate-700`} data-label="Physical Stock">
                         <div>{corr.physical_stock.toLocaleString()}</div>
                         {isPreforms && (
                           <div className="text-[10px] text-slate-400">({corr.physical_bags_box} bags)</div>
                         )}
                       </td>
-                      <td className={`py-4 px-5 text-right font-extrabold ${visualDiff < 0 ? 'text-red-650' : visualDiff > 0 ? 'text-emerald-600' : 'text-slate-500'}`} data-label="Difference">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} text-right font-extrabold ${visualDiff < 0 ? 'text-red-650' : visualDiff > 0 ? 'text-emerald-600' : 'text-slate-500'}`} data-label="Difference">
                         {visualDiff > 0 ? `+${visualDiff.toLocaleString()}` : visualDiff.toLocaleString()}
                       </td>
-                      <td className="py-4 px-5 text-center" data-label="Type">
+                      <td className={`${density === 'compact' ? 'py-2 px-5' : density === 'high' ? 'py-6 px-5' : 'py-4 px-5'} text-center`} data-label="Type">
                         <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
                           visualDiff > 0 
                             ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' 
@@ -241,10 +248,10 @@ const StockCorrectionHistory = () => {
                           {visualDiff > 0 ? 'EXCESS' : visualDiff < 0 ? 'WASTAGE' : 'MATCH'}
                         </span>
                       </td>
-                      <td className="py-4 px-5 text-slate-500 max-w-[200px] truncate" title={corr.remarks} data-label="Remark">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} text-slate-500 max-w-[200px] truncate`} title={corr.remarks} data-label="Remark">
                         {corr.remarks}
                       </td>
-                      <td className="py-4 px-5 text-center text-slate-500 font-semibold" data-label="User">
+                      <td className={`${density === 'compact' ? 'py-2 px-5 text-[12px]' : density === 'high' ? 'py-6 px-5 text-[14px]' : 'py-4 px-5'} text-center text-slate-500 font-semibold`} data-label="User">
                         {corr.created_by}
                       </td>
                     </tr>
@@ -254,6 +261,15 @@ const StockCorrectionHistory = () => {
             </tbody>
           </table>
         </div>
+        <TablePagination
+          page={page}
+          setPage={setPage}
+          limit={limit}
+          setLimit={setLimit}
+          totalItems={corrections.length}
+          density={density}
+          setDensity={setDensity}
+        />
       </div>
     </div>
   );

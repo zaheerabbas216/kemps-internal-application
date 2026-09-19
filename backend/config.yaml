@@ -1,0 +1,20 @@
+# Storage Configuration
+# Controls image upload destination for Inventory Bills and other media attachments.
+
+storage:
+  # Provider options: 'local' or 's3'
+  provider: local
+
+  # Local Disk Storage Configuration
+  local:
+    upload_dir: uploads
+    public_path: /uploads
+
+  # AWS S3 Bucket Storage Configuration
+  s3:
+    bucket: kemps-inventory-uploads
+    region: ap-south-1
+    access_key_id: ${AWS_ACCESS_KEY_ID}
+    secret_access_key: ${AWS_SECRET_ACCESS_KEY}
+    # Optional custom endpoint (e.g. for MinIO, Cloudflare R2, DigitalOcean Spaces)
+    endpoint: ""

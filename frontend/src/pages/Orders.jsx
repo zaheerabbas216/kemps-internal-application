@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import TablePagination, { getDensityClass } from '../components/common/TablePagination';
+import SearchableSelect from '../components/SearchableSelect';
 
 const Orders = () => {
   const navigate = useNavigate();
@@ -38,7 +40,8 @@ const Orders = () => {
   const [filterDeliveryArea, setFilterDeliveryArea] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [limit] = useState(10);
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
 
   // Orders lists
   const [orders, setOrders] = useState([]);
@@ -108,7 +111,7 @@ const Orders = () => {
 
   useEffect(() => {
     fetchOrdersList();
-  }, [statusFilterTab, currentPage, filterSearch, filterStartDate, filterEndDate, filterProductId, filterDeliveryArea, activeTab]);
+  }, [statusFilterTab, currentPage, limit, filterSearch, filterStartDate, filterEndDate, filterProductId, filterDeliveryArea, activeTab]);
 
   const fetchDropdownMasters = async () => {
     try {
@@ -548,7 +551,7 @@ const Orders = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       
       {/* HEADER BAR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -852,17 +855,13 @@ const Orders = () => {
                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/40 border border-slate-100 p-4 rounded-2xl relative group">
                   <div className="md:col-span-5 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Product Name *</label>
-                    <select
-                      value={row.finishedProductId}
-                      onChange={(e) => handleItemRowChange(row.id, 'finishedProductId', e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-semibold"
-                      required
-                    >
-                      <option value="">-- Choose Product --</option>
-                      {finishedProducts.map(fp => (
-                        <option key={fp.id} value={fp.id}>{fp.name}</option>
-                      ))}
-                    </select>
+                    <SearchableSelect
+                      options={finishedProducts.map(fp => ({ value: String(fp.id), label: fp.name }))}
+                      value={String(row.finishedProductId || '')}
+                      onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                      placeholder="-- Choose Product --"
+                      searchPlaceholder="Search product..."
+                    />
                   </div>
 
                   <div className="md:col-span-2 space-y-1.5">
@@ -1323,15 +1322,15 @@ const Orders = () => {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50/75 border-b border-slate-200/80 text-[10px] font-black text-slate-450 uppercase tracking-wider">
-                    <th className="py-4 px-4">Order No</th>
-                    <th className="py-4 px-4">Customer details</th>
-                    <th className="py-4 px-4 text-blue-600 font-black">Supply Date</th>
-                    <th className="py-4 px-4 text-blue-600 font-black">Supply Time</th>
-                    <th className="py-4 px-4">Delivery Area</th>
-                    <th className="py-4 px-4 text-right">Order Amount</th>
-                    <th className="py-4 px-4 text-center">Payment Status</th>
-                    <th className="py-4 px-4 text-center">Order Status</th>
-                    <th className="py-4 px-4 text-center">Actions</th>
+                    <th className={getDensityClass(density, true)}>Order No</th>
+                    <th className={getDensityClass(density, true)}>Customer details</th>
+                    <th className={`${getDensityClass(density, true)} text-blue-600 font-black`}>Supply Date</th>
+                    <th className={`${getDensityClass(density, true)} text-blue-600 font-black`}>Supply Time</th>
+                    <th className={getDensityClass(density, true)}>Delivery Area</th>
+                    <th className={`${getDensityClass(density, true)} text-right`}>Order Amount</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Payment Status</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Order Status</th>
+                    <th className={`${getDensityClass(density, true)} text-center`}>Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 text-xs font-semibold">
@@ -1355,31 +1354,31 @@ const Orders = () => {
                       const bal = parseFloat(order.pending_amount) || 0;
                       return (
                         <tr key={order.id} className="hover:bg-slate-50/30 transition-colors">
-                          <td className="py-4 px-4 font-bold text-slate-600">{order.id}</td>
-                          <td className="py-4 px-4">
+                          <td className={`${getDensityClass(density)} font-bold text-slate-600`}>{order.id}</td>
+                          <td className={getDensityClass(density)}>
                             <div className="font-extrabold text-slate-800">{order.customer_name}</div>
                             <div className="text-[10px] font-bold text-slate-400 mt-0.5">{order.customer_phone}</div>
                           </td>
-                          <td className="py-4 px-4 font-bold text-blue-600 whitespace-nowrap">
+                          <td className={`${getDensityClass(density)} font-bold text-blue-600 whitespace-nowrap`}>
                             📅 {formatDateDDMMYYYY(order.supply_date)}
                           </td>
-                          <td className="py-4 px-4 font-bold text-blue-600 whitespace-nowrap">
+                          <td className={`${getDensityClass(density)} font-bold text-blue-600 whitespace-nowrap`}>
                             ⏱ {formatTime12Hour(order.supply_time)}
                           </td>
-                          <td className="py-4 px-4 max-w-[150px] truncate" title={order.delivery_address}>
+                          <td className={`${getDensityClass(density)} max-w-[150px] truncate`} title={order.delivery_address}>
                             {order.delivery_address || '—'}
                           </td>
-                          <td className="py-4 px-4 text-right font-black text-slate-800">
+                          <td className={`${getDensityClass(density)} text-right font-black text-slate-800`}>
                             ₹{(parseFloat(order.grand_total) || 0).toFixed(2)}
                           </td>
-                          <td className="py-4 px-4 text-center">
+                          <td className={`${getDensityClass(density)} text-center`}>
                             {bal === 0 ? (
                               <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-emerald-50 border border-emerald-100 text-emerald-600">Cleared</span>
                             ) : (
                               <span className="px-2 py-0.5 rounded text-[9px] font-extrabold uppercase bg-amber-50 border border-amber-100 text-amber-600" title={`Pending: ₹${bal.toFixed(2)}`}>Due: ₹{bal.toFixed(0)}</span>
                             )}
                           </td>
-                          <td className="py-4 px-4 text-center">
+                          <td className={`${getDensityClass(density)} text-center`}>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase border ${
                               order.status === 'PENDING' ? 'bg-amber-50 border-amber-100 text-amber-600' :
                               order.status === 'SUPPLIED' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
@@ -1388,7 +1387,7 @@ const Orders = () => {
                               {order.status}
                             </span>
                           </td>
-                          <td className="py-4 px-4">
+                          <td className={getDensityClass(density)}>
                             <div className="flex justify-center">
                               <button 
                                 onClick={() => handleOpenOrderDetail(order.id)}
@@ -1406,29 +1405,16 @@ const Orders = () => {
               </table>
             </div>
 
-            {/* Pagination footer */}
             {!loadingList && totalCount > 0 && (
-              <div className="flex items-center justify-between p-4 border-t border-slate-100 bg-white">
-                <div className="text-xs font-bold text-slate-400 uppercase">
-                  Page {currentPage} of {Math.ceil(totalCount / limit) || 1} ({totalCount} records)
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-55 disabled:opacity-50 text-xs font-bold shadow-sm transition-all"
-                  >
-                    Previous
-                  </button>
-                  <button
-                    disabled={currentPage === Math.ceil(totalCount / limit)}
-                    onClick={() => setCurrentPage(prev => Math.min(Math.ceil(totalCount / limit), prev + 1))}
-                    className="px-3.5 py-1.5 rounded-lg border border-slate-200 text-slate-650 bg-white hover:bg-slate-55 disabled:opacity-50 text-xs font-bold shadow-sm transition-all"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                page={currentPage}
+                limit={limit}
+                total={totalCount}
+                onPageChange={setCurrentPage}
+                onLimitChange={setLimit}
+                density={density}
+                onDensityChange={setDensity}
+              />
             )}
           </div>
         </div>

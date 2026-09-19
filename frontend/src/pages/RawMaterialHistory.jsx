@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import TablePagination from '../components/common/TablePagination';
+import SearchInput from '../components/common/SearchInput';
 
 const RawMaterialHistory = () => {
   const navigate = useNavigate();
@@ -10,7 +12,8 @@ const RawMaterialHistory = () => {
   const [totalDays, setTotalDays] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const limit = 10;
+  const [limit, setLimit] = useState(10);
+  const [density, setDensity] = useState('medium');
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -177,7 +180,7 @@ const RawMaterialHistory = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-5xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in w-full pb-12">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -275,12 +278,10 @@ const RawMaterialHistory = () => {
             <label className="text-[11px] font-bold text-slate-450 block uppercase tracking-wider">
               Search Material
             </label>
-            <input
-              type="text"
+            <SearchInput
               placeholder="Search product / category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-xs font-semibold"
             />
           </div>
         </div>
@@ -481,45 +482,15 @@ const RawMaterialHistory = () => {
           })}
 
           {/* PAGINATION CONTROLS */}
-          {totalPages > 1 && (
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-6 pt-4 border-t border-slate-200">
-              <span className="text-xs text-slate-500 font-semibold">
-                Showing page {currentPage} of {totalPages} ({totalDays} closed days archived)
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                >
-                  ← Prev
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setCurrentPage(p)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
-                      currentPage === p
-                        ? 'bg-primary border-primary text-white'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                  className="px-3.5 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-                >
-                  Next →
-                </button>
-              </div>
-            </div>
-          )}
+          <TablePagination 
+            page={currentPage}
+            limit={limit}
+            total={totalDays}
+            onPageChange={setCurrentPage}
+            onLimitChange={setLimit}
+            density={density}
+            onDensityChange={setDensity}
+          />
         </div>
       )}
 

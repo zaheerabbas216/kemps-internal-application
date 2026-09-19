@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
+import SearchableSelect from '../components/SearchableSelect';
+import SearchInput from '../components/common/SearchInput';
 
 const CanSupply = () => {
   const navigate = useNavigate();
@@ -1440,7 +1442,7 @@ const CanSupply = () => {
   }) : { waterAmount: 0, subTotal: 0, gstAmount: 0, grandTotal: 0 };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12 can-supply-page">
+    <div className="space-y-6 animate-fade-in w-full pb-12 can-supply-page">
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -1755,14 +1757,11 @@ const CanSupply = () => {
           </div>
 
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-              <input
-                type="text"
-                placeholder="Search outstanding accounts..."
+            <div className="flex-1 max-w-md">
+              <SearchInput
                 value={searchBalancesQuery}
                 onChange={(e) => setSearchBalancesQuery(e.target.value)}
-                className="input-premium pl-11 h-10 w-full"
+                placeholder="Search outstanding accounts..."
               />
             </div>
             <div className="text-[11px] font-black text-slate-440 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
@@ -2034,20 +2033,14 @@ const CanSupply = () => {
                           <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50/50 p-3 border border-slate-100 rounded-xl">
                             {/* Product Select */}
                             <div className="flex-1">
-                              <select
-                                value={item.product}
-                                onChange={(e) => handleItemChange(index, 'product', e.target.value)}
-                                className="w-full bg-white border border-slate-200 rounded-xl px-3.5 h-11 text-xs font-semibold outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                              <SearchableSelect
+                                options={availableProducts.map(p => ({ value: p.name, label: p.name }))}
+                                value={item.product || ''}
+                                onChange={(val) => handleItemChange(index, 'product', val)}
+                                placeholder={availableProducts.length === 0 ? "No Active Cans/Dispensers" : "-- Select Product --"}
+                                searchPlaceholder="Search product..."
                                 disabled={availableProducts.length === 0}
-                              >
-                                {availableProducts.length === 0 ? (
-                                  <option value="">No Active Cans/Dispensers</option>
-                                ) : (
-                                  availableProducts.map(p => (
-                                    <option key={p.id} value={p.name}>{p.name}</option>
-                                  ))
-                                )}
-                              </select>
+                              />
                             </div>
 
                             {/* Quantity supplied */}
@@ -2719,14 +2712,11 @@ const CanSupply = () => {
           </div>
 
           {/* Quick search input */}
-          <div className="relative max-w-md">
-            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
-            <input
-              type="text"
-              placeholder="Search outstanding bills by customer..."
+          <div className="max-w-md">
+            <SearchInput
               value={billsSearch}
               onChange={(e) => setBillsSearch(e.target.value)}
-              className="input-premium pl-11 h-10 w-full"
+              placeholder="Search outstanding bills by customer..."
             />
           </div>
 
@@ -3578,20 +3568,14 @@ const CanSupply = () => {
 
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Product *</label>
-                      <select
-                        value={modalSupplyForm.product}
-                        onChange={(e) => setModalSupplyForm(prev => ({ ...prev, product: e.target.value }))}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3.5 h-11 text-xs font-semibold outline-none focus:border-primary transition-all"
+                      <SearchableSelect
+                        options={availableProducts.map(p => ({ value: p.name, label: p.name }))}
+                        value={modalSupplyForm.product || ''}
+                        onChange={(val) => setModalSupplyForm(prev => ({ ...prev, product: val }))}
+                        placeholder={availableProducts.length === 0 ? "No Active Cans/Dispensers" : "-- Select Product --"}
+                        searchPlaceholder="Search product..."
                         disabled={availableProducts.length === 0}
-                      >
-                        {availableProducts.length === 0 ? (
-                          <option value="">No Active Cans/Dispensers</option>
-                        ) : (
-                          availableProducts.map(p => (
-                            <option key={p.id} value={p.name}>{p.name}</option>
-                          ))
-                        )}
-                      </select>
+                      />
                     </div>
 
                     <div className="space-y-1.5">
