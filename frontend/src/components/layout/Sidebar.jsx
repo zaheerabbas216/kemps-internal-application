@@ -217,9 +217,9 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
           {(isHovered || isOpen) && (
             <div
               style={{ top: `${Math.max(10, Math.min(window.innerHeight - 300, flyoutTop))}px` }}
-              className="fixed left-[84px] z-[9999] bg-white border border-slate-200/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
+              className="fixed left-[84px] z-[9999] bg-[#0b132b] border border-slate-700/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
             >
-              <div className="px-3 py-1.5 text-xs font-black text-slate-800 uppercase tracking-wider border-b border-slate-100 mb-1 flex items-center gap-2">
+              <div className="px-3 py-1.5 text-xs font-black text-white uppercase tracking-wider border-b border-slate-800 mb-1 flex items-center gap-2">
                 <span>{item.icon}</span>
                 <span>{item.title}</span>
               </div>
@@ -235,7 +235,7 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
                     }}
                     className={({ isActive }) =>
                       `block px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
-                        isActive ? 'text-primary bg-primary/10 font-bold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                        isActive ? 'text-white bg-primary font-bold shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-800/80'
                       }`
                     }
                   >
@@ -253,18 +253,18 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
       <div className="space-y-1">
         <button
           onClick={() => setIsOpen(!isOpen)}
-          className={`sidebar-item w-full flex items-center justify-between ${isOpen || isChildActive ? 'text-slate-900 bg-slate-50/50 font-semibold' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}`}
+          className={`sidebar-item w-full flex items-center justify-between ${isOpen || isChildActive ? 'text-white bg-slate-800/90 font-bold' : 'text-white/80 hover:bg-slate-800/80 hover:text-white'}`}
         >
           <div className="flex items-center gap-3 overflow-hidden">
             <span className="text-lg opacity-80 w-6 flex items-center justify-center shrink-0">{item.icon}</span>
             <span className="truncate">{item.title}</span>
           </div>
-          <span className={`text-[10px] transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-90' : ''}`}>
+          <span className={`text-[10px] transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-90 text-white' : 'text-slate-400'}`}>
             ▶
           </span>
         </button>
         {isOpen && (
-          <div className="pl-9 space-y-1 mt-1 border-l-2 border-slate-100 ml-7">
+          <div className="pl-9 space-y-1 mt-1 border-l-2 border-slate-700/80 ml-7">
             {item.items.map((sub, idx) => (
               <NavLink
                 key={idx}
@@ -273,8 +273,8 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
                 className={({ isActive }) =>
                   `block px-4 py-2 rounded-lg text-[13px] font-medium transition-all duration-200 ${
                     isActive
-                      ? 'text-primary bg-primary/10 font-bold'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                      ? 'text-white bg-primary font-black shadow-sm'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/70'
                   }`
                 }
               >
@@ -358,18 +358,18 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   }
 
   return (
-    <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-white border-r border-slate-200/60 h-full flex flex-col shrink-0 overflow-visible transition-all duration-300 ease-in-out relative z-30`}>
-      <div className={`shrink-0 h-20 flex items-center border-b border-slate-100/60 relative ${isCollapsed ? 'justify-center px-2' : 'px-6 justify-between'}`}>
+    <aside className={`${isCollapsed ? 'w-20' : 'w-72'} bg-[#0b132b] text-white border-r border-slate-800/80 h-full flex flex-col shrink-0 overflow-visible transition-all duration-300 ease-in-out relative z-30`}>
+      <div className={`shrink-0 h-20 flex items-center border-b border-slate-800/60 relative ${isCollapsed ? 'justify-center px-2' : 'px-6 justify-between'}`}>
         <div
           onClick={() => navigate(getFirstPermittedPath ? getFirstPermittedPath() : '/dashboard')}
           className="flex items-center gap-3 cursor-pointer overflow-hidden"
         >
-          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/30 italic shrink-0">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-primary/40 italic shrink-0">
             K
           </div>
           {!isCollapsed && (
             <div className="overflow-hidden">
-              <h1 className="text-xl font-extrabold text-[#0f172a] tracking-tight leading-none italic">
+              <h1 className="text-xl font-extrabold text-white tracking-tight leading-none italic">
                 Kemp's<span className="text-primary">.</span>
               </h1>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 truncate">Inventory Management</p>
@@ -381,7 +381,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         <button
           onClick={onToggleCollapse}
           title={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          className="hidden cursor-e-resize lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-white border border-slate-200/90 text-slate-500 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 hover:shadow-md items-center justify-center transition-all duration-200 active:scale-90 z-40 shadow-sm"
+          className="hidden cursor-e-resize lg:flex absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700 hover:border-slate-600 hover:shadow-md items-center justify-center transition-all duration-200 active:scale-90 z-40 shadow-sm"
         >
           <svg className={`w-4 h-4 transition-transform duration-300 ${isCollapsed ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
@@ -392,7 +392,7 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         {/* Mobile Close Button */}
         <button
           onClick={onClose}
-          className="lg:hidden w-8 h-8 rounded-lg bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100 flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto cursor-pointer"
+          className="lg:hidden w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white flex items-center justify-center font-bold text-xs active:scale-95 transition-all ml-auto cursor-pointer"
         >
           ✕
         </button>
@@ -404,22 +404,22 @@ const Sidebar = ({ isOpen, onClose, isCollapsed, onToggleCollapse }) => {
         ))}
       </nav>
 
-      <div className={`border-t border-slate-100 shrink-0 ${isCollapsed ? 'p-3' : 'p-6'}`}>
+      <div className={`border-t border-slate-800/80 shrink-0 bg-[#080e21] ${isCollapsed ? 'p-3' : 'p-4'}`}>
         {isCollapsed ? (
           <div className="flex flex-col items-center gap-3">
-            <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0" title={fullName}>
+            <div className="w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-slate-700 shrink-0" title={fullName}>
               {userInitials}
             </div>
           </div>
         ) : (
-          <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-100">
+          <div className="bg-slate-800/80 p-3.5 rounded-2xl border border-slate-700/60">
             <div className="flex items-center gap-3 overflow-hidden">
-              <div className="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center text-primary font-bold text-xs ring-2 ring-white shrink-0">
+              <div className="w-9 h-9 bg-primary text-white rounded-full flex items-center justify-center font-bold text-xs ring-2 ring-slate-700 shrink-0">
                 {userInitials}
               </div>
               <div className="overflow-hidden flex-1">
-                <p className="text-xs font-bold text-slate-800 truncate">{fullName}</p>
-                <p className="text-[10px] text-slate-500 font-medium truncate">{roleName}</p>
+                <p className="text-xs font-bold text-white truncate">{fullName}</p>
+                <p className="text-[10px] text-slate-400 font-medium truncate">{roleName}</p>
               </div>
             </div>
           </div>

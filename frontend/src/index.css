@@ -57,7 +57,7 @@
 }
 
 .sidebar-item-inactive {
-  @apply text-white hover:bg-slate-800/80 hover:text-white font-bold;
+  @apply text-white/80 hover:bg-slate-800/80 hover:text-white font-bold;
 }
 
 @keyframes fadeIn {
