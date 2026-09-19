@@ -179,8 +179,26 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
     const [isHovered, setIsHovered] = useState(false);
     const [flyoutTop, setFlyoutTop] = useState(0);
     const buttonRef = useRef(null);
+    const wrapperRef = useRef(null);
 
     const isChildActive = item.items.some(sub => sub.path === location.pathname);
+
+    useEffect(() => {
+      const handleOutsideClick = (e) => {
+        if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+          setIsOpen(false);
+          setIsHovered(false);
+        }
+      };
+      if (isOpen || isHovered) {
+        document.addEventListener('mousedown', handleOutsideClick);
+        document.addEventListener('touchstart', handleOutsideClick);
+      }
+      return () => {
+        document.removeEventListener('mousedown', handleOutsideClick);
+        document.removeEventListener('touchstart', handleOutsideClick);
+      };
+    }, [isOpen, isHovered]);
 
     const handleMouseEnter = () => {
       if (buttonRef.current) {
@@ -190,25 +208,32 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
       setIsHovered(true);
     };
 
+    const handleMouseLeave = () => {
+      setIsHovered(false);
+      setIsOpen(false);
+    };
+
     if (isCollapsed) {
       return (
         <div
+          ref={wrapperRef}
           className="relative group/flyout"
           onMouseEnter={handleMouseEnter}
-          onMouseLeave={() => setIsHovered(false)}
+          onMouseLeave={handleMouseLeave}
         >
           <button
             ref={buttonRef}
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (buttonRef.current) {
                 const rect = buttonRef.current.getBoundingClientRect();
                 setFlyoutTop(rect.top);
               }
-              setIsOpen(!isOpen);
+              setIsOpen(prev => !prev);
             }}
             title={item.title}
             className={`sidebar-item justify-center px-0 h-11 w-11 mx-auto ${
-              isChildActive || isOpen ? 'sidebar-item-active' : 'sidebar-item-inactive'
+              isChildActive || isOpen || isHovered ? 'sidebar-item-active' : 'sidebar-item-inactive'
             }`}
           >
             <span className="text-lg opacity-80 w-6 flex items-center justify-center shrink-0">{item.icon}</span>
@@ -217,7 +242,9 @@ const SidebarItem = ({ item, onClickItem, isCollapsed }) => {
           {(isHovered || isOpen) && (
             <div
               style={{ top: `${Math.max(10, Math.min(window.innerHeight - 300, flyoutTop))}px` }}
-              className="fixed left-[84px] z-[9999] bg-[#0b132b] border border-slate-700/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
+              className="fixed left-[76px] z-[9999] bg-[#0b132b] border border-slate-700/90 rounded-2xl shadow-2xl p-2.5 min-w-[210px] animate-fade-in"
+              onMouseEnter={() => setIsHovered(true)}
+              onMouseLeave={handleMouseLeave}
             >
               <div className="px-3 py-1.5 text-xs font-black text-white uppercase tracking-wider border-b border-slate-800 mb-1 flex items-center gap-2">
                 <span>{item.icon}</span>
