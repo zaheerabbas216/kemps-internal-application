@@ -74,7 +74,8 @@ const ProtectedRoute = () => {
 // ─────────────────────────────────────────────
 const LoginRoute = () => {
   const isLoggedIn = localStorage.getItem('kemps_logged_in') === 'true';
-  return isLoggedIn ? <Navigate to="/dashboard" replace /> : <Login />;
+  const { getFirstPermittedPath } = useAuth();
+  return isLoggedIn ? <Navigate to={getFirstPermittedPath()} replace /> : <Login />;
 };
 
 // ─────────────────────────────────────────────

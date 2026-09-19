@@ -7,7 +7,7 @@ import { useSSEContext } from '../../context/SSEContext';
 const Layout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, isSuperAdmin, logout } = useAuth();
+  const { user, isSuperAdmin, logout, getFirstPermittedPath } = useAuth();
   const { status: sseStatus } = useSSEContext();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(() => {
@@ -168,7 +168,7 @@ const Layout = () => {
               ☰
             </button>
             <div 
-              onClick={() => navigate('/dashboard')}
+              onClick={() => navigate(getFirstPermittedPath())}
               className="text-sm sm:text-base font-extrabold text-[#0f172a] tracking-tight leading-none italic cursor-pointer flex items-center gap-1.5"
             >
               <div className="w-7 h-7 sm:w-8 sm:h-8 bg-primary rounded-lg flex items-center justify-center text-white font-black text-xs sm:text-sm italic shadow-md shadow-primary/30">
@@ -197,7 +197,7 @@ const Layout = () => {
           {/* Header Right — Server Status & Responsive Profile Dropdown */}
           <div className="flex items-center gap-2 sm:gap-4 shrink-0">
             {isCleanHeader ? (
-              <div className="text-xs sm:text-[13px] font-semibold text-slate-400 hidden sm:block">
+              <div className="text-xs sm:text-[13px] font-semibold text-[#0f172a] hidden sm:block font-medium">
                 {getFormattedDate()}
               </div>
             ) : (
