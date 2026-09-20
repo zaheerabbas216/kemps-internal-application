@@ -25,19 +25,22 @@ const getTodayIST = () => {
   return `${ist.getFullYear()}-${String(ist.getMonth() + 1).padStart(2, '0')}-${String(ist.getDate()).padStart(2, '0')}`;
 };
 
+const newProductRow = () => ({ productId: '', productName: '', quantity: '', rate: '' });
+const newSaleProductRow = () => ({ productId: '', productName: '', quantity: '', rateWithTax: '', taxPercent: '', basicRate: 0 });
+const TAX_OPTIONS = [0, 5, 12, 18, 28, 40];
+
 const SundayLoading = () => {
   const navigate = useNavigate();
-  const { canCreate, canUpdate, canDelete } = useAuth();
+  const { canCreate } = useAuth();
   const today = getTodayIST();
 
   // Dropdown lists
   const [customers, setCustomers] = useState([]);
   const [finishedProducts, setFinishedProducts] = useState([]);
+  const [goodsLedgerStock, setGoodsLedgerStock] = useState({});
   const [loadingDropdowns, setLoadingDropdowns] = useState(true);
 
   // Selected customer details preview
-  const [selectedCustomerObj, setSelectedCustomerObj] = useState(null);
-
   // Form State
   const [formData, setFormData] = useState({
     loadingDate: today,
@@ -55,6 +58,7 @@ const SundayLoading = () => {
     bankAmount: '',
     notes: ''
   });
+  const [productItems, setProductItems] = useState([newProductRow()]);
 
   // Today's recent records & summary
   const [todayRecords, setTodayRecords] = useState([]);
@@ -63,6 +67,40 @@ const SundayLoading = () => {
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
   const [density, setDensity] = useState('medium');
+  const [activeTab, setActiveTab] = useState('transaction');
+  const [loadingForm, setLoadingForm] = useState({
+    loadingDate: today,
+    company: '',
+    customerId: '',
+    customerName: '',
+    customerPhone: '',
+    customerAddress: '',
+    notes: ''
+  });
+  const [loadingItems, setLoadingItems] = useState([newProductRow()]);
+  const [loadingFeedback, setLoadingFeedback] = useState({ type: '', message: '' });
+  const [isSavingLoading, setIsSavingLoading] = useState(false);
+  const [isLoadingFormOpen, setIsLoadingFormOpen] = useState(false);
+  const [loadingRecords, setLoadingRecords] = useState([]);
+  const [loadingSummary, setLoadingSummary] = useState({ totalLoadings: 0, activeLoadings: 0, completedLoadings: 0, totalProductLines: 0, totalQuantity: 0 });
+  const [isLoadingRecords, setIsLoadingRecords] = useState(false);
+  const [loadingStatusTab, setLoadingStatusTab] = useState('ACTIVE');
+  const [loadingPage, setLoadingPage] = useState(1);
+  const [loadingLimit, setLoadingLimit] = useState(10);
+  const [loadingTotal, setLoadingTotal] = useState(0);
+  const [loadingDensity, setLoadingDensity] = useState('medium');
+  const [saleForm, setSaleForm] = useState({ saleDate: today, company: '', customerId: '', customerName: '', customerPhone: '', customerAddress: '', notes: '' });
+  const [saleItems, setSaleItems] = useState([newSaleProductRow()]);
+  const [saleFeedback, setSaleFeedback] = useState({ type: '', message: '' });
+  const [isSaleFormOpen, setIsSaleFormOpen] = useState(false);
+  const [isSavingSale, setIsSavingSale] = useState(false);
+  const [saleRecords, setSaleRecords] = useState([]);
+  const [saleSummary, setSaleSummary] = useState({ totalSales: 0, totalProductLines: 0, totalQuantity: 0, totalAmount: 0 });
+  const [isLoadingSales, setIsLoadingSales] = useState(false);
+  const [salePage, setSalePage] = useState(1);
+  const [saleLimit, setSaleLimit] = useState(10);
+  const [saleTotal, setSaleTotal] = useState(0);
+  const [saleDensity, setSaleDensity] = useState('medium');
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,9 +108,9 @@ const SundayLoading = () => {
   const [selectedRecordForModal, setSelectedRecordForModal] = useState(null);
 
   // Computed Values
-  const quantityNum = parseFloat(formData.quantity) || 0;
-  const rateNum = parseFloat(formData.rate) || 0;
-  const totalAmount = Math.round(quantityNum * rateNum * 100) / 100;
+  const totalAmount = Math.round(productItems.reduce((sum, item) => (
+    sum + ((parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0))
+  ), 0) * 100) / 100;
 
   const cashNum = Math.max(0, parseFloat(formData.cashAmount) || 0);
   const upiNum = Math.max(0, parseFloat(formData.upiAmount) || 0);
@@ -129,10 +167,33 @@ const SundayLoading = () => {
     fetchTodayRecords();
   }, [fetchTodayRecords]);
 
+  const stockDate = activeTab === 'sales'
+    ? saleForm.saleDate
+    : activeTab === 'loading'
+      ? loadingForm.loadingDate
+      : formData.loadingDate;
+
+  useEffect(() => {
+    const fetchProductStock = async () => {
+      if (!stockDate) return;
+      try {
+        const response = await api.get('/goods-ledger/day', { params: { date: stockDate } });
+        const stockMap = {};
+        (response.data.items || []).forEach(item => {
+          stockMap[String(item.finished_product_id)] = Number(item.closing_stock || 0);
+        });
+        setGoodsLedgerStock(stockMap);
+      } catch (error) {
+        console.error('Failed to load finished-product stock:', error);
+        setGoodsLedgerStock({});
+      }
+    };
+    fetchProductStock();
+  }, [stockDate]);
+
   // Customer selection handler
-  const handleCustomerSelect = (val, opt) => {
+  const handleCustomerSelect = (val) => {
     if (!val) {
-      setSelectedCustomerObj(null);
       setFormData(prev => ({
         ...prev,
         customerId: '',
@@ -146,7 +207,6 @@ const SundayLoading = () => {
 
     const cust = customers.find(c => String(c.id) === String(val) || c.name === val);
     if (cust) {
-      setSelectedCustomerObj(cust);
       setFormData(prev => ({
         ...prev,
         customerId: cust.id || '',
@@ -156,7 +216,6 @@ const SundayLoading = () => {
         customerType: cust.customerType || cust.customer_type || 'General Customer'
       }));
     } else {
-      setSelectedCustomerObj(null);
       setFormData(prev => ({
         ...prev,
         customerId: '',
@@ -169,31 +228,170 @@ const SundayLoading = () => {
   };
 
   // Product selection handler
-  const handleProductSelect = (val, opt) => {
-    if (!val) {
-      setFormData(prev => ({ ...prev, productId: '', productName: '' }));
+  const handleProductSelect = (index, val, opt) => {
+    setProductItems(prev => prev.map((item, rowIndex) => {
+      if (rowIndex !== index) return item;
+      if (!val) return newProductRow();
+      const prod = finishedProducts.find(p => String(p.id) === String(val));
+      return { ...item, productId: prod?.id || val, productName: prod?.name || opt?.label || val };
+    }));
+  };
+
+  const updateProductItem = (index, field, value) => setProductItems(prev =>
+    prev.map((item, rowIndex) => rowIndex === index ? { ...item, [field]: value } : item)
+  );
+  const addProductItem = () => setProductItems(prev => [...prev, newProductRow()]);
+  const removeProductItem = (index) => setProductItems(prev =>
+    prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index)
+  );
+
+  const handleLoadingCustomer = (val) => {
+    const customer = customers.find(item => String(item.id) === String(val));
+    setLoadingForm(prev => ({
+      ...prev,
+      customerId: customer?.id || '',
+      customerName: customer?.name || '',
+      customerPhone: customer?.phone || '',
+      customerAddress: customer?.address || ''
+    }));
+  };
+
+  const handleLoadingProduct = (index, val, opt) => {
+    const product = finishedProducts.find(item => String(item.id) === String(val));
+    setLoadingItems(prev => prev.map((item, rowIndex) => rowIndex === index ? {
+      ...item,
+      productId: product?.id || val || '',
+      productName: product?.name || opt?.label || ''
+    } : item));
+  };
+
+  const submitLoadingSheet = async (event) => {
+    event.preventDefault();
+    setLoadingFeedback({ type: '', message: '' });
+    const items = loadingItems.map(item => ({
+      productId: item.productId ? parseInt(item.productId, 10) : null,
+      productName: item.productName,
+      quantity: parseFloat(item.quantity)
+    }));
+    if (!loadingForm.customerId) {
+      setLoadingFeedback({ type: 'error', message: 'Please select a customer from Customer Master.' });
       return;
     }
+    if (items.some(item => !item.productId || !item.productName || !Number.isFinite(item.quantity) || item.quantity <= 0)) {
+      setLoadingFeedback({ type: 'error', message: 'Complete every product row with product and quantity.' });
+      return;
+    }
+    if (new Set(items.map(item => item.productId)).size !== items.length) {
+      setLoadingFeedback({ type: 'error', message: 'The same product cannot be added twice.' });
+      return;
+    }
+    setIsSavingLoading(true);
+    try {
+      const response = await api.post('/sunday-loading/loading', { ...loadingForm, items });
+      setLoadingFeedback({ type: 'success', message: `Loading saved successfully! (Ref: ${response.data.dispatchNumber})` });
+      setLoadingForm(prev => ({ ...prev, company: '', customerId: '', customerName: '', customerPhone: '', customerAddress: '', notes: '' }));
+      setLoadingItems([newProductRow()]);
+      setLoadingStatusTab('ACTIVE');
+      setLoadingPage(1);
+      if (loadingStatusTab === 'ACTIVE' && loadingPage === 1) await fetchLoadingRecords();
+      setIsLoadingFormOpen(false);
+    } catch (error) {
+      setLoadingFeedback({ type: 'error', message: error.response?.data?.error || 'Failed to save loading.' });
+    } finally {
+      setIsSavingLoading(false);
+    }
+  };
 
-    const prod = finishedProducts.find(p => String(p.id) === String(val));
-    if (prod) {
-      setFormData(prev => ({
-        ...prev,
-        productId: prod.id,
-        productName: prod.name
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        productId: val,
-        productName: opt?.label || val
-      }));
+  const fetchLoadingRecords = useCallback(async () => {
+    setIsLoadingRecords(true);
+    try {
+      const response = await api.get('/sunday-loading/loading', {
+        params: { page: loadingPage, limit: loadingLimit, status: loadingStatusTab }
+      });
+      setLoadingRecords(response.data.records || []);
+      setLoadingTotal(Number(response.data.total || 0));
+      setLoadingSummary(response.data.summary || { totalLoadings: 0, activeLoadings: 0, completedLoadings: 0, totalProductLines: 0, totalQuantity: 0 });
+    } catch (error) {
+      console.error('Failed to load Sunday loading sheets:', error);
+    } finally {
+      setIsLoadingRecords(false);
+    }
+  }, [loadingPage, loadingLimit, loadingStatusTab]);
+
+  const completeLoadingSheet = async (record) => {
+    if (!window.confirm(`Mark ${record.dispatch_number} as completed?`)) return;
+    try {
+      await api.put(`/sunday-loading/loading/${record.id}/complete`);
+      setLoadingFeedback({ type: 'success', message: `${record.dispatch_number} completed successfully.` });
+      if (loadingRecords.length === 1 && loadingPage > 1) setLoadingPage(prev => prev - 1);
+      else await fetchLoadingRecords();
+    } catch (error) {
+      setLoadingFeedback({ type: 'error', message: error.response?.data?.error || 'Failed to complete loading sheet.' });
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'loading') fetchLoadingRecords();
+  }, [activeTab, fetchLoadingRecords]);
+
+  const handleSaleCustomer = (val) => {
+    const customer = customers.find(item => String(item.id) === String(val));
+    setSaleForm(prev => ({ ...prev, customerId: customer?.id || '', customerName: customer?.name || '', customerPhone: customer?.phone || '', customerAddress: customer?.address || '' }));
+  };
+
+  const handleSaleProduct = (index, val, opt) => {
+    const product = finishedProducts.find(item => String(item.id) === String(val));
+    setSaleItems(prev => prev.map((item, rowIndex) => rowIndex === index ? { ...item, productId: product?.id || val || '', productName: product?.name || opt?.label || '' } : item));
+  };
+
+  const saleGrandTotal = Math.round(saleItems.reduce((sum, item) => sum + ((parseFloat(item.quantity) || 0) * (parseFloat(item.rateWithTax) || 0)), 0) * 100) / 100;
+
+  const fetchSales = useCallback(async () => {
+    setIsLoadingSales(true);
+    try {
+      const response = await api.get('/sunday-loading/sales', { params: { page: salePage, limit: saleLimit } });
+      setSaleRecords(response.data.records || []);
+      setSaleTotal(Number(response.data.total || 0));
+      setSaleSummary(response.data.summary || { totalSales: 0, totalProductLines: 0, totalQuantity: 0, totalAmount: 0 });
+    } catch (error) {
+      console.error('Failed to load Sunday sales:', error);
+    } finally {
+      setIsLoadingSales(false);
+    }
+  }, [salePage, saleLimit]);
+
+  useEffect(() => {
+    if (activeTab === 'sales') fetchSales();
+  }, [activeTab, fetchSales]);
+
+  const submitSale = async (event) => {
+    event.preventDefault();
+    setSaleFeedback({ type: '', message: '' });
+    const items = saleItems.map(item => ({ productId: item.productId ? parseInt(item.productId, 10) : null, productName: item.productName, quantity: parseFloat(item.quantity), rateWithTax: parseFloat(item.rateWithTax), taxPercent: item.taxPercent === '' ? null : parseFloat(item.taxPercent) }));
+    if (!saleForm.company) return setSaleFeedback({ type: 'error', message: 'Please select a company.' });
+    if (!saleForm.customerId) return setSaleFeedback({ type: 'error', message: 'Please select a customer from Customer Master.' });
+    if (items.some(item => !item.productId || !item.productName || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.rateWithTax) || item.rateWithTax < 0 || item.taxPercent === null || !Number.isFinite(item.taxPercent))) {
+      return setSaleFeedback({ type: 'error', message: 'Complete every product row with product, positive quantity, rate with tax, and Tax %.' });
+    }
+    if (new Set(items.map(item => item.productId)).size !== items.length) return setSaleFeedback({ type: 'error', message: 'The same product cannot be added twice.' });
+    setIsSavingSale(true);
+    try {
+      const response = await api.post('/sunday-loading/sales', { ...saleForm, items });
+      setSaleFeedback({ type: 'success', message: `Sunday sale saved successfully! (Ref: ${response.data.saleNumber})` });
+      setSaleForm(prev => ({ ...prev, company: '', customerId: '', customerName: '', customerPhone: '', customerAddress: '', notes: '' }));
+      setSaleItems([newSaleProductRow()]);
+      setSalePage(1);
+      if (salePage === 1) await fetchSales();
+      setIsSaleFormOpen(false);
+    } catch (error) {
+      setSaleFeedback({ type: 'error', message: error.response?.data?.error || 'Failed to save Sunday sale.' });
+    } finally {
+      setIsSavingSale(false);
     }
   };
 
   // Reset form
   const handleResetForm = () => {
-    setSelectedCustomerObj(null);
     setFormData({
       loadingDate: today,
       customerId: '',
@@ -210,6 +408,7 @@ const SundayLoading = () => {
       bankAmount: '',
       notes: ''
     });
+    setProductItems([newProductRow()]);
     setFeedback({ type: '', message: '' });
   };
 
@@ -223,18 +422,14 @@ const SundayLoading = () => {
       return;
     }
 
-    if (!formData.productName.trim()) {
-      setFeedback({ type: 'error', message: 'Please select a finished product.' });
-      return;
-    }
-
-    if (isNaN(quantityNum) || quantityNum <= 0) {
-      setFeedback({ type: 'error', message: 'Please enter a valid quantity greater than 0.' });
-      return;
-    }
-
-    if (isNaN(rateNum) || rateNum < 0) {
-      setFeedback({ type: 'error', message: 'Please enter a valid rate.' });
+    const normalizedItems = productItems.map(item => ({
+      productId: item.productId ? parseInt(item.productId, 10) : null,
+      productName: item.productName.trim(),
+      quantity: parseFloat(item.quantity),
+      rate: parseFloat(item.rate)
+    }));
+    if (normalizedItems.some(item => !item.productName || !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.rate) || item.rate < 0)) {
+      setFeedback({ type: 'error', message: 'Complete every product row with product, quantity, and rate.' });
       return;
     }
 
@@ -255,10 +450,7 @@ const SundayLoading = () => {
         customerPhone: formData.customerPhone || null,
         customerAddress: formData.customerAddress || null,
         customerType: formData.customerType || 'General Customer',
-        productId: formData.productId ? parseInt(formData.productId, 10) : null,
-        productName: formData.productName.trim(),
-        quantity: quantityNum,
-        rate: rateNum,
+        items: normalizedItems,
         cashAmount: cashNum,
         upiAmount: upiNum,
         bankAmount: bankNum,
@@ -295,8 +487,15 @@ const SundayLoading = () => {
 
   const productOptions = finishedProducts.map(p => ({
     value: String(p.id),
-    label: p.name,
-    rawName: p.name
+    label: `${p.name} (${goodsLedgerStock[String(p.id)] ?? 0} in stock)`,
+    rawName: p.name,
+    stock: goodsLedgerStock[String(p.id)] ?? 0,
+    badge: `${goodsLedgerStock[String(p.id)] ?? 0} in stock`,
+    badgeClassName: (goodsLedgerStock[String(p.id)] ?? 0) > 0
+      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+      : (goodsLedgerStock[String(p.id)] ?? 0) === 0
+        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+        : 'bg-red-50 text-red-600 border border-red-200'
   }));
 
   return (
@@ -338,6 +537,33 @@ const SundayLoading = () => {
           </div>
         </div>
       </div>
+
+      {/* Workspace navigation tabs — matches Orders, Loading and Sales Return */}
+      <div className="flex justify-start">
+        <div className="flex bg-slate-100 p-1 rounded-xl w-fit border border-slate-200/40 shrink-0">
+          {[
+            { key: 'transaction', label: 'Transaction', icon: '🧾' },
+            { key: 'loading', label: 'Loading', icon: '🚚' },
+            { key: 'sales', label: 'Sales', icon: '💰' }
+          ].map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2 rounded-lg text-[10px] font-black tracking-wider transition-all uppercase whitespace-nowrap ${
+                activeTab === tab.key
+                  ? 'bg-white text-slate-800 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {tab.icon} {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {activeTab === 'transaction' && (
+        <>
 
       {/* ── TODAY SUMMARY METRICS (OPTIONAL BANNER) ─────────────────────────── */}
       {todaySummary && todaySummary.totalCount > 0 && (
@@ -470,73 +696,41 @@ const SundayLoading = () => {
             </div>
           )}
 
-          {/* Row 2: Product, Quantity, Rate, Total Amount */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* Product */}
-            <div className="sm:col-span-2 lg:col-span-1">
-              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                Finished Product <span className="text-red-500">*</span>
-              </label>
-              <SearchableSelect
-                options={productOptions}
-                value={formData.productId || formData.productName}
-                onChange={handleProductSelect}
-                placeholder={loadingDropdowns ? "Loading products..." : "Select Finished Product..."}
-                searchPlaceholder="Search product name..."
-                className="w-full h-11"
-              />
+          {/* Product rows */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider">Finished Products</h3>
+              <button type="button" onClick={addProductItem} className="px-4 h-10 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black hover:bg-blue-100">
+                + Add Product
+              </button>
             </div>
-
-            {/* Quantity */}
-            <div>
-              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                Quantity <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="number"
-                step="any"
-                min="0.01"
-                required
-                placeholder="e.g. 100"
-                value={formData.quantity}
-                onWheel={(e) => e.target.blur()}
-                onChange={(e) => setFormData(prev => ({ ...prev, quantity: e.target.value }))}
-                className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-            </div>
-
-            {/* Rate */}
-            <div>
-              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                Rate (₹) <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  required
-                  placeholder="e.g. 50"
-                  value={formData.rate}
-                  onWheel={(e) => e.target.blur()}
-                  onChange={(e) => setFormData(prev => ({ ...prev, rate: e.target.value }))}
-                  className="w-full h-11 pl-8 pr-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-bold [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-            </div>
-
-            {/* Calculated Total Amount (Read-only) */}
-            <div>
-              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
-                Total Amount
-              </label>
-              <div className="h-11 px-3.5 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-400 uppercase">Qty × Rate</span>
-                <span className="text-base font-black text-slate-900 tracking-tight">
-                  {formatINR(totalAmount)}
-                </span>
-              </div>
+            {productItems.map((item, index) => {
+              const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.rate) || 0);
+              return (
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label>
+                    <SearchableSelect options={productOptions} value={item.productId || item.productName} onChange={(val, opt) => handleProductSelect(index, val, opt)} placeholder={loadingDropdowns ? 'Loading products...' : 'Select Finished Product...'} searchPlaceholder="Search product or stock..." />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label>
+                    <input type="number" step="any" min="0.01" required value={item.quantity} onWheel={(e) => e.target.blur()} onChange={(e) => updateProductItem(index, 'quantity', e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Rate (₹)</label>
+                    <input type="number" step="0.01" min="0" required value={item.rate} onWheel={(e) => e.target.blur()} onChange={(e) => updateProductItem(index, 'rate', e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Total</label>
+                    <div className="h-11 px-3 rounded-xl bg-white border border-slate-200 flex items-center font-black">{formatINR(lineTotal)}</div>
+                  </div>
+                  <button type="button" disabled={productItems.length === 1} onClick={() => removeProductItem(index)} className="h-11 w-11 rounded-xl border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-30" title="Remove product">✕</button>
+                </div>
+              );
+            })}
+            <div className="flex justify-end items-center gap-6 p-3 rounded-xl bg-slate-900 text-white">
+              <span className="text-xs font-black uppercase tracking-wider">Total Amount</span>
+              <span className="text-lg font-black">{formatINR(totalAmount)}</span>
             </div>
           </div>
 
@@ -938,6 +1132,200 @@ const SundayLoading = () => {
           </div>
         </div>
       )}
+        </>
+      )}
+
+      {activeTab === 'loading' && (isLoadingFormOpen ? (
+        <form onSubmit={submitLoadingSheet} className="card-premium bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center border-b border-slate-100 pb-4 gap-3">
+            <button type="button" onClick={() => setIsLoadingFormOpen(false)} className="px-4 h-10 rounded-xl border border-slate-200 text-slate-600 text-xs font-black hover:bg-slate-50">← Back</button>
+            <div>
+              <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">🚚 New Sunday Loading</h2>
+              <p className="text-xs font-medium text-slate-400 mt-1">Select company, customer, and products for the loading sheet.</p>
+            </div>
+          </div>
+
+          {loadingFeedback.message && (
+            <div className={`p-4 rounded-2xl border text-sm font-semibold ${loadingFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
+              {loadingFeedback.message}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div>
+              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Loading Date *</label>
+              <input type="date" required value={loadingForm.loadingDate} onChange={(e) => setLoadingForm(prev => ({ ...prev, loadingDate: e.target.value }))} className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+            </div>
+            <div>
+              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Company *</label>
+              <select required value={loadingForm.company} onChange={(e) => setLoadingForm(prev => ({ ...prev, company: e.target.value }))} className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-bold">
+                <option value="">Select Company</option>
+                <option value="Kempannavar Industries">KEMPANNAVAR INDUSTRIES</option>
+                <option value="Kemps Pet Industries">KEMPS PET INDUSTRIES</option>
+              </select>
+            </div>
+            <div className="md:col-span-2">
+              <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Customer *</label>
+              <SearchableSelect options={customerOptions} value={loadingForm.customerId} onChange={handleLoadingCustomer} placeholder="Select Customer from Master..." searchPlaceholder="Search customer..." />
+            </div>
+          </div>
+
+          {loadingForm.customerName && (
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div><span className="text-[10px] font-black uppercase text-slate-400 block">Customer</span><span className="font-bold text-slate-800">{loadingForm.customerName}</span></div>
+              <div><span className="text-[10px] font-black uppercase text-slate-400 block">Phone</span><span className="font-semibold text-slate-700">{loadingForm.customerPhone || '—'}</span></div>
+              <div><span className="text-[10px] font-black uppercase text-slate-400 block">Address</span><span className="font-semibold text-slate-700">{loadingForm.customerAddress || '—'}</span></div>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-black text-slate-600 uppercase tracking-wider">Products</h3>
+              <button type="button" onClick={() => setLoadingItems(prev => [...prev, newProductRow()])} className="px-4 h-10 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black">+ Add Product</button>
+            </div>
+            {loadingItems.map((item, index) => (
+              <div key={index} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label>
+                  <SearchableSelect options={productOptions} value={item.productId} onChange={(val, opt) => handleLoadingProduct(index, val, opt)} placeholder="Select Product from Master..." searchPlaceholder="Search product or stock..." />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label>
+                  <input type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setLoadingItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+                </div>
+                <button type="button" disabled={loadingItems.length === 1} onClick={() => setLoadingItems(prev => prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index))} className="h-11 w-11 rounded-xl border border-red-200 text-red-600 disabled:opacity-30">✕</button>
+              </div>
+            ))}
+          </div>
+
+          <div>
+            <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Notes (Optional)</label>
+            <textarea rows="2" value={loadingForm.notes} onChange={(e) => setLoadingForm(prev => ({ ...prev, notes: e.target.value }))} className="w-full p-3.5 rounded-xl border border-slate-200 bg-white text-sm" placeholder="Vehicle, driver, or loading notes..." />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+            <button type="button" onClick={() => setIsLoadingFormOpen(false)} className="px-5 h-12 rounded-xl border border-slate-200 text-slate-600 text-xs font-black">Cancel</button>
+            <button type="submit" disabled={isSavingLoading} className="px-8 h-12 rounded-xl bg-primary text-white text-xs font-black disabled:opacity-50">
+              {isSavingLoading ? 'Saving Loading...' : 'Save Loading'}
+            </button>
+          </div>
+        </form>
+      ) : (
+        <div className="space-y-6">
+          {loadingFeedback.message && (
+            <div className={`p-4 rounded-2xl border text-sm font-semibold ${loadingFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>
+              {loadingFeedback.message}
+            </div>
+          )}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Sunday Loading Sheets</h2>
+              <p className="text-slate-500 text-sm font-medium mt-1">Create and review independent Sunday customer loading sheets</p>
+            </div>
+            {canCreate('sunday-loading') && <button type="button" onClick={() => { setLoadingFeedback({ type: '', message: '' }); setIsLoadingFormOpen(true); }} className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-2">
+              🚚 New Sunday Loading
+            </button>}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Loadings</p><p className="text-2xl font-black text-slate-800 mt-1">{loadingSummary.totalLoadings}</p></div>
+            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Product Lines</p><p className="text-2xl font-black text-blue-700 mt-1">{loadingSummary.totalProductLines}</p></div>
+            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Quantity</p><p className="text-2xl font-black text-amber-700 mt-1">{loadingSummary.totalQuantity.toLocaleString('en-IN')}</p></div>
+          </div>
+
+          <div className="border border-slate-200/60 bg-white rounded-2xl shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <div className="text-[11px] font-black text-slate-500 uppercase tracking-widest">📋 Loading Sheets</div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center rounded-xl bg-slate-100 p-1">
+                  {[
+                    { value: 'ACTIVE', label: 'Active', count: loadingSummary.activeLoadings },
+                    { value: 'COMPLETED', label: 'Completed', count: loadingSummary.completedLoadings }
+                  ].map(tab => (
+                    <button key={tab.value} type="button" onClick={() => { setLoadingStatusTab(tab.value); setLoadingPage(1); }} className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${loadingStatusTab === tab.value ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                      {tab.label} ({tab.count})
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={fetchLoadingRecords} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">Refresh</button>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500"><th className={getDensityClass(loadingDensity, true)}>Reference</th><th className={getDensityClass(loadingDensity, true)}>Date</th><th className={getDensityClass(loadingDensity, true)}>Company</th><th className={getDensityClass(loadingDensity, true)}>Customer</th><th className={getDensityClass(loadingDensity, true)}>Products</th><th className={`${getDensityClass(loadingDensity, true)} text-right`}>Quantity</th><th className={`${getDensityClass(loadingDensity, true)} text-center`}>Status / Action</th></tr></thead>
+                <tbody className="divide-y divide-slate-100">
+                  {isLoadingRecords ? (
+                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400 font-semibold">Loading sheets...</td></tr>
+                  ) : loadingRecords.length === 0 ? (
+                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400 font-semibold">No {loadingStatusTab.toLowerCase()} Sunday loading sheets.</td></tr>
+                  ) : loadingRecords.map(record => (
+                    <tr key={record.id} className="hover:bg-slate-50/70">
+                      <td className={`${getDensityClass(loadingDensity)} font-black text-blue-700`}>{record.dispatch_number}</td>
+                      <td className={`${getDensityClass(loadingDensity)} font-semibold text-slate-600`}>{fmtDate(record.loading_date)}</td>
+                      <td className={`${getDensityClass(loadingDensity)} font-bold text-slate-700`}>{record.company}</td>
+                      <td className={getDensityClass(loadingDensity)}><div className="font-bold text-slate-800">{record.customer_name}</div><div className="text-[10px] text-slate-400">{record.customer_phone || '—'}</div></td>
+                      <td className={`${getDensityClass(loadingDensity)} text-slate-600 max-w-md`}>{record.products || '—'}</td>
+                      <td className={`${getDensityClass(loadingDensity)} text-right font-black text-slate-800`}>{record.total_quantity.toLocaleString('en-IN')}</td>
+                      <td className={`${getDensityClass(loadingDensity)} text-center`}>
+                        {record.status === 'ACTIVE' ? (
+                          <button type="button" onClick={() => completeLoadingSheet(record)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700">Complete</button>
+                        ) : (
+                          <div><span className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">Completed</span><div className="mt-1 text-[9px] text-slate-400">{record.completed_by || ''}</div></div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <TablePagination page={loadingPage} setPage={setLoadingPage} limit={loadingLimit} setLimit={setLoadingLimit} total={loadingTotal} density={loadingDensity} setDensity={setLoadingDensity} />
+          </div>
+        </div>
+      ))}
+
+      {activeTab === 'sales' && (isSaleFormOpen ? (
+        <form onSubmit={submitSale} className="card-premium bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <div className="flex items-center border-b border-slate-100 pb-4 gap-3">
+            <button type="button" onClick={() => setIsSaleFormOpen(false)} className="px-4 h-10 rounded-xl border border-slate-200 text-slate-600 text-xs font-black hover:bg-slate-50">← Back</button>
+            <div><h2 className="text-lg font-black text-slate-800">💰 New Sunday Sale</h2><p className="text-xs font-medium text-slate-400 mt-1">Select company, customer, and one or more products.</p></div>
+          </div>
+          {saleFeedback.message && <div className={`p-4 rounded-2xl border text-sm font-semibold ${saleFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{saleFeedback.message}</div>}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <div><label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Sale Date *</label><input type="date" required value={saleForm.saleDate} onChange={(e) => setSaleForm(prev => ({ ...prev, saleDate: e.target.value }))} className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
+            <div><label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Company *</label><select required value={saleForm.company} onChange={(e) => setSaleForm(prev => ({ ...prev, company: e.target.value }))} className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-sm font-bold"><option value="">Select Company</option><option value="Kempannavar Industries">KEMPANNAVAR INDUSTRIES</option><option value="Kemps Pet Industries">KEMPS PET INDUSTRIES</option></select></div>
+            <div className="md:col-span-2"><label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Customer *</label><SearchableSelect options={customerOptions} value={saleForm.customerId} onChange={handleSaleCustomer} placeholder="Select Customer from Master..." searchPlaceholder="Search customer..." /></div>
+          </div>
+          {saleForm.customerName && <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs"><div><span className="text-[10px] font-black uppercase text-slate-400 block">Customer</span><span className="font-bold text-slate-800">{saleForm.customerName}</span></div><div><span className="text-[10px] font-black uppercase text-slate-400 block">Phone</span><span className="font-semibold text-slate-700">{saleForm.customerPhone || '—'}</span></div><div><span className="text-[10px] font-black uppercase text-slate-400 block">Address</span><span className="font-semibold text-slate-700">{saleForm.customerAddress || '—'}</span></div></div>}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between"><h3 className="text-xs font-black text-slate-600 uppercase tracking-wider">Products</h3><button type="button" onClick={() => setSaleItems(prev => [...prev, newSaleProductRow()])} className="px-4 h-10 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 text-xs font-black">+ Add Product</button></div>
+            {saleItems.map((item, index) => {
+              const rateWithTax = parseFloat(item.rateWithTax) || 0;
+              const taxPercent = item.taxPercent === '' ? null : parseFloat(item.taxPercent);
+              const basicRate = taxPercent === null || !Number.isFinite(taxPercent) ? 0 : rateWithTax / (1 + taxPercent / 100);
+              const lineTotal = (parseFloat(item.quantity) || 0) * rateWithTax;
+              return <div key={index} className="grid grid-cols-1 md:grid-cols-[2fr_0.7fr_1fr_0.75fr_1fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label><SearchableSelect options={productOptions} value={item.productId} onChange={(val, opt) => handleSaleProduct(index, val, opt)} placeholder="Select Product from Master..." searchPlaceholder="Search product or stock..." /></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label><input type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Rate With Tax (₹)</label><input type="number" step="0.01" min="0" required value={item.rateWithTax} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, rateWithTax: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tax (%) *</label><select required value={item.taxPercent} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, taxPercent: e.target.value } : row))} className="w-full h-11 px-2 rounded-xl border border-slate-200 bg-white text-sm font-bold"><option value="">-- Tax % --</option>{TAX_OPTIONS.map(tax => <option key={tax} value={tax}>{tax}%</option>)}</select><div className="text-[9px] text-center font-bold text-slate-400 mt-1">{taxPercent !== null && taxPercent > 0 ? `${taxPercent / 2}% + ${taxPercent / 2}%` : taxPercent === 0 ? '0%' : 'Required'}</div></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Basic Rate (No Tax)</label><div className="h-11 px-3 rounded-xl border border-slate-200 bg-slate-100 flex items-center font-black text-slate-600">{formatINR(basicRate)}</div></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Total</label><div className="h-11 px-3 rounded-xl border border-slate-200 bg-white flex items-center font-black text-slate-800">{formatINR(lineTotal)}</div></div>
+                <button type="button" disabled={saleItems.length === 1} onClick={() => setSaleItems(prev => prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index))} className="h-11 w-11 rounded-xl border border-red-200 text-red-600 disabled:opacity-30">✕</button>
+              </div>;
+            })}
+          </div>
+          <div className="flex justify-end"><div className="w-full sm:w-80 rounded-2xl bg-slate-900 text-white p-5 flex items-center justify-between"><span className="text-xs font-black uppercase tracking-widest text-slate-300">Grand Total</span><span className="text-2xl font-black">{formatINR(saleGrandTotal)}</span></div></div>
+          <div><label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Notes (Optional)</label><textarea rows="2" value={saleForm.notes} onChange={(e) => setSaleForm(prev => ({ ...prev, notes: e.target.value }))} className="w-full p-3.5 rounded-xl border border-slate-200 bg-white text-sm" /></div>
+          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100"><button type="button" onClick={() => setIsSaleFormOpen(false)} className="px-5 h-12 rounded-xl border border-slate-200 text-slate-600 text-xs font-black">Cancel</button><button type="submit" disabled={isSavingSale} className="px-8 h-12 rounded-xl bg-primary text-white text-xs font-black disabled:opacity-50">{isSavingSale ? 'Saving Sale...' : 'Save Sale'}</button></div>
+        </form>
+      ) : (
+        <div className="space-y-6">
+          {saleFeedback.message && <div className={`p-4 rounded-2xl border text-sm font-semibold ${saleFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{saleFeedback.message}</div>}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4"><div><h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Sunday Sales</h2><p className="text-slate-500 text-sm font-medium mt-1">Independent Sunday sales linked only to Customer and Product Masters</p></div>{canCreate('sunday-loading') && <button type="button" onClick={() => { setSaleFeedback({ type: '', message: '' }); setIsSaleFormOpen(true); }} className="btn-premium btn-primary-premium h-12 text-xs">💰 New Sunday Sale</button>}</div>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4"><div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">Total Sales</p><p className="text-2xl font-black text-slate-800 mt-1">{saleSummary.totalSales}</p></div><div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">Product Lines</p><p className="text-2xl font-black text-blue-700 mt-1">{saleSummary.totalProductLines}</p></div><div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">Quantity</p><p className="text-2xl font-black text-amber-700 mt-1">{saleSummary.totalQuantity.toLocaleString('en-IN')}</p></div><div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400">Sales Amount</p><p className="text-2xl font-black text-emerald-700 mt-1">{formatINR(saleSummary.totalAmount)}</p></div></div>
+          <div className="border border-slate-200/60 bg-white rounded-2xl shadow-sm overflow-hidden"><div className="p-4 border-b border-slate-100 flex items-center justify-between"><div className="text-[11px] font-black text-slate-500 uppercase tracking-widest">📋 Sales Records</div><button type="button" onClick={fetchSales} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600">Refresh</button></div><div className="overflow-x-auto"><table className="w-full text-left text-xs"><thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-500"><th className={getDensityClass(saleDensity, true)}>Reference</th><th className={getDensityClass(saleDensity, true)}>Date</th><th className={getDensityClass(saleDensity, true)}>Company</th><th className={getDensityClass(saleDensity, true)}>Customer</th><th className={getDensityClass(saleDensity, true)}>Products</th><th className={`${getDensityClass(saleDensity, true)} text-right`}>Quantity</th><th className={`${getDensityClass(saleDensity, true)} text-right`}>Total</th></tr></thead><tbody className="divide-y divide-slate-100">{isLoadingSales ? <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400">Loading sales...</td></tr> : saleRecords.length === 0 ? <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400">No Sunday sales recorded.</td></tr> : saleRecords.map(record => <tr key={record.id} className="hover:bg-slate-50"><td className={`${getDensityClass(saleDensity)} font-black text-blue-700`}>{record.sale_number}</td><td className={getDensityClass(saleDensity)}>{fmtDate(record.sale_date)}</td><td className={`${getDensityClass(saleDensity)} font-bold`}>{record.company}</td><td className={getDensityClass(saleDensity)}><div className="font-bold">{record.customer_name}</div><div className="text-[10px] text-slate-400">{record.customer_phone || '—'}</div></td><td className={`${getDensityClass(saleDensity)} text-slate-600`}>{record.products || '—'}</td><td className={`${getDensityClass(saleDensity)} text-right font-black`}>{record.total_quantity.toLocaleString('en-IN')}</td><td className={`${getDensityClass(saleDensity)} text-right font-black text-emerald-700`}>{formatINR(record.total_amount)}</td></tr>)}</tbody></table></div><TablePagination page={salePage} setPage={setSalePage} limit={saleLimit} setLimit={setSaleLimit} total={saleTotal} density={saleDensity} setDensity={setSaleDensity} /></div>
+        </div>
+      ))}
     </div>
   );
 };

@@ -263,6 +263,95 @@ async function initDB() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sunday_loading_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        sunday_loading_id INT NOT NULL,
+        product_id INT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_sli_loading (sunday_loading_id),
+        INDEX idx_sli_product (product_id),
+        CONSTRAINT fk_sli_loading FOREIGN KEY (sunday_loading_id) REFERENCES sunday_loading(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sunday_loading_dispatches (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        dispatch_number VARCHAR(50) UNIQUE NOT NULL,
+        loading_date DATE NOT NULL,
+        company VARCHAR(200) NOT NULL,
+        customer_id VARCHAR(50) NULL,
+        customer_name VARCHAR(200) NOT NULL,
+        customer_phone VARCHAR(50) NULL,
+        customer_address TEXT NULL,
+        notes TEXT NULL,
+        status ENUM('ACTIVE','COMPLETED') NOT NULL DEFAULT 'ACTIVE',
+        completed_by VARCHAR(100) NULL,
+        completed_at DATETIME NULL,
+        created_by VARCHAR(100) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_sld_date (loading_date),
+        INDEX idx_sld_customer (customer_name),
+        INDEX idx_sld_status (status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_loading_dispatch_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        dispatch_id INT NOT NULL,
+        product_id INT NULL,
+        product_name VARCHAR(255) NOT NULL,
+        quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_sldi_dispatch (dispatch_id),
+        CONSTRAINT fk_sldi_dispatch FOREIGN KEY (dispatch_id) REFERENCES sunday_loading_dispatches(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_sales (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      sale_number VARCHAR(50) UNIQUE NOT NULL,
+      sale_date DATE NOT NULL,
+      company VARCHAR(200) NOT NULL,
+      customer_id VARCHAR(50) NULL,
+      customer_name VARCHAR(200) NOT NULL,
+      customer_phone VARCHAR(50) NULL,
+      customer_address TEXT NULL,
+      total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      notes TEXT NULL,
+      created_by VARCHAR(100) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_ss_date (sale_date),
+      INDEX idx_ss_customer (customer_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_sale_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      sale_id INT NOT NULL,
+      product_id INT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      rate_with_tax DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      tax_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+      basic_rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_ssi_sale (sale_id),
+      CONSTRAINT fk_ssi_sale FOREIGN KEY (sale_id) REFERENCES sunday_sales(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
 
 
     console.log('Creating bank_accounts table...');

@@ -14,6 +14,8 @@ const initTable = async () => {
         upi_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         bank_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         remarks VARCHAR(255) NULL,
+        source_type ENUM('MANUAL','CARRY_FORWARD') NOT NULL DEFAULT 'MANUAL',
+        carried_from_date DATE NULL,
         created_by VARCHAR(100) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -80,6 +82,12 @@ const initTable = async () => {
     } catch (e) { /* ignore if column exists */ }
     try {
       await pool.query(`ALTER TABLE daily_cash_ledger_history ADD COLUMN credit_adjusted DECIMAL(12, 2) NOT NULL DEFAULT 0.00`);
+    } catch (e) { /* ignore if column exists */ }
+    try {
+      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN source_type ENUM('MANUAL','CARRY_FORWARD') NOT NULL DEFAULT 'MANUAL' AFTER remarks`);
+    } catch (e) { /* ignore if column exists */ }
+    try {
+      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN carried_from_date DATE NULL AFTER source_type`);
     } catch (e) { /* ignore if column exists */ }
 
     // Ensure customer_id column exists on customer_payments
@@ -600,13 +608,15 @@ router.post('/opening', async (req, res) => {
     const bankVal = Math.max(0, parseFloat(bankAmount) || 0);
 
     await pool.query(
-      `INSERT INTO cash_ledger_opening (entry_date, cash_amount, upi_amount, bank_amount, remarks, created_by)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO cash_ledger_opening (entry_date, cash_amount, upi_amount, bank_amount, remarks, source_type, carried_from_date, created_by)
+       VALUES (?, ?, ?, ?, ?, 'MANUAL', NULL, ?)
        ON DUPLICATE KEY UPDATE
          cash_amount = VALUES(cash_amount),
          upi_amount  = VALUES(upi_amount),
          bank_amount = VALUES(bank_amount),
          remarks     = VALUES(remarks),
+         source_type = 'MANUAL',
+         carried_from_date = NULL,
          created_by  = VALUES(created_by)`,
       [entryDate, cashVal, upiVal, bankVal, String(remarks || '').trim(), String(createdBy || 'admin').trim()]
     );
@@ -705,6 +715,26 @@ const autoCloseDay = async (ledgerDate, closedBy = 'System (Auto-Close)') => {
       ]
     );
 
+    // Only unsubmitted physical cash remains at the counter. Carry that amount
+    // into the next day's opening; manual openings always take precedence.
+    const [nextDateRows] = await pool.query(`SELECT DATE_FORMAT(DATE_ADD(?, INTERVAL 1 DAY), '%Y-%m-%d') AS next_date`, [ledgerDate]);
+    const nextDate = nextDateRows[0]?.next_date;
+    if (nextDate) {
+      await pool.query(
+        `INSERT INTO cash_ledger_opening
+           (entry_date, cash_amount, upi_amount, bank_amount, remarks, source_type, carried_from_date, created_by)
+         VALUES (?, ?, 0, 0, ?, 'CARRY_FORWARD', ?, ?)
+         ON DUPLICATE KEY UPDATE
+           cash_amount = IF(source_type = 'CARRY_FORWARD', VALUES(cash_amount), cash_amount),
+           upi_amount = IF(source_type = 'CARRY_FORWARD', 0, upi_amount),
+           bank_amount = IF(source_type = 'CARRY_FORWARD', 0, bank_amount),
+           remarks = IF(source_type = 'CARRY_FORWARD', VALUES(remarks), remarks),
+           carried_from_date = IF(source_type = 'CARRY_FORWARD', VALUES(carried_from_date), carried_from_date),
+           created_by = IF(source_type = 'CARRY_FORWARD', VALUES(created_by), created_by)`,
+        [nextDate, report.counterCash, `Counter cash carried forward from ${ledgerDate}`, ledgerDate, String(closedBy || 'System (Auto-Close)').trim()]
+      );
+    }
+
     return report;
   } catch (err) {
     console.error(`Auto-close failed for ${ledgerDate}:`, err);
@@ -715,15 +745,16 @@ const autoCloseDay = async (ledgerDate, closedBy = 'System (Auto-Close)') => {
 // Automatic Day-Reset & History Auto-Save Runner
 const checkAndAutoClosePastDays = async () => {
   try {
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
 
     // Auto-save yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterday = new Date(`${todayStr}T00:00:00Z`);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
-    await autoCloseDay(yesterdayStr, 'System (Auto-Close)');
-
-    // Also auto-close any past unclosed dates
+    // Close older missing dates first so each day's remaining counter cash is
+    // available as the following day's opening before that day is calculated.
     const [pastDates] = await pool.query(`
       SELECT DISTINCT d FROM (
         SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS d FROM customer_payments WHERE payment_status = 'Approved' AND payment_date < ?
@@ -743,6 +774,7 @@ const checkAndAutoClosePastDays = async () => {
         await autoCloseDay(row.d, 'System (Auto-Close)');
       }
     }
+    await autoCloseDay(yesterdayStr, 'System (Auto-Close)');
   } catch (e) {
     console.error('Error in checkAndAutoClosePastDays:', e);
   }

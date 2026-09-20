@@ -241,6 +241,145 @@ async function ensureCoreTables(connection) {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_loading_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      sunday_loading_id INT NOT NULL,
+      product_id INT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_sli_loading (sunday_loading_id),
+      INDEX idx_sli_product (product_id),
+      CONSTRAINT fk_sli_loading FOREIGN KEY (sunday_loading_id) REFERENCES sunday_loading(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_loading_dispatches (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      dispatch_number VARCHAR(50) UNIQUE NOT NULL,
+      loading_date DATE NOT NULL,
+      company VARCHAR(200) NOT NULL,
+      customer_id VARCHAR(50) NULL,
+      customer_name VARCHAR(200) NOT NULL,
+      customer_phone VARCHAR(50) NULL,
+      customer_address TEXT NULL,
+      notes TEXT NULL,
+      status ENUM('ACTIVE','COMPLETED') NOT NULL DEFAULT 'ACTIVE',
+      completed_by VARCHAR(100) NULL,
+      completed_at DATETIME NULL,
+      created_by VARCHAR(100) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_sld_date (loading_date),
+      INDEX idx_sld_customer (customer_name),
+      INDEX idx_sld_status (status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  const [dispatchColumns] = await connection.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sunday_loading_dispatches'`
+  );
+  const dispatchColumnNames = new Set(dispatchColumns.map(row => row.COLUMN_NAME));
+  if (!dispatchColumnNames.has('status')) {
+    await connection.query(`ALTER TABLE sunday_loading_dispatches ADD COLUMN status ENUM('ACTIVE','COMPLETED') NOT NULL DEFAULT 'ACTIVE' AFTER notes`);
+  }
+  if (!dispatchColumnNames.has('completed_by')) {
+    await connection.query(`ALTER TABLE sunday_loading_dispatches ADD COLUMN completed_by VARCHAR(100) NULL AFTER status`);
+  }
+  if (!dispatchColumnNames.has('completed_at')) {
+    await connection.query(`ALTER TABLE sunday_loading_dispatches ADD COLUMN completed_at DATETIME NULL AFTER completed_by`);
+  }
+  const [dispatchStatusIndexes] = await connection.query(
+    `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sunday_loading_dispatches' AND INDEX_NAME = 'idx_sld_status'`
+  );
+  if (!dispatchStatusIndexes.length) {
+    await connection.query(`ALTER TABLE sunday_loading_dispatches ADD INDEX idx_sld_status (status)`);
+  }
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_loading_dispatch_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      dispatch_id INT NOT NULL,
+      product_id INT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_sldi_dispatch (dispatch_id),
+      CONSTRAINT fk_sldi_dispatch FOREIGN KEY (dispatch_id) REFERENCES sunday_loading_dispatches(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_sales (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      sale_number VARCHAR(50) UNIQUE NOT NULL,
+      sale_date DATE NOT NULL,
+      company VARCHAR(200) NOT NULL,
+      customer_id VARCHAR(50) NULL,
+      customer_name VARCHAR(200) NOT NULL,
+      customer_phone VARCHAR(50) NULL,
+      customer_address TEXT NULL,
+      total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      notes TEXT NULL,
+      created_by VARCHAR(100) NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_ss_date (sale_date),
+      INDEX idx_ss_customer (customer_name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS sunday_sale_items (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      sale_id INT NOT NULL,
+      product_id INT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      quantity DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      rate_with_tax DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      tax_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00,
+      basic_rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_ssi_sale (sale_id),
+      CONSTRAINT fk_ssi_sale FOREIGN KEY (sale_id) REFERENCES sunday_sales(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  const [saleItemColumns] = await connection.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'sunday_sale_items'`
+  );
+  const saleItemColumnNames = new Set(saleItemColumns.map(row => row.COLUMN_NAME));
+  if (!saleItemColumnNames.has('rate_with_tax')) {
+    await connection.query(`ALTER TABLE sunday_sale_items ADD COLUMN rate_with_tax DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER quantity`);
+    if (saleItemColumnNames.has('rate')) await connection.query(`UPDATE sunday_sale_items SET rate_with_tax = rate`);
+  }
+  if (!saleItemColumnNames.has('tax_percent')) {
+    await connection.query(`ALTER TABLE sunday_sale_items ADD COLUMN tax_percent DECIMAL(5, 2) NOT NULL DEFAULT 0.00 AFTER rate_with_tax`);
+  }
+  if (!saleItemColumnNames.has('basic_rate')) {
+    await connection.query(`ALTER TABLE sunday_sale_items ADD COLUMN basic_rate DECIMAL(12, 2) NOT NULL DEFAULT 0.00 AFTER tax_percent`);
+    await connection.query(`UPDATE sunday_sale_items SET basic_rate = rate_with_tax WHERE tax_percent = 0`);
+  }
+
+  // Preserve existing single-product transactions as one item each.
+  await connection.query(`
+    INSERT INTO sunday_loading_items
+      (sunday_loading_id, product_id, product_name, quantity, rate, total_amount)
+    SELECT sl.id, sl.product_id, sl.product_name, sl.quantity, sl.rate, sl.total_amount
+    FROM sunday_loading sl
+    WHERE NOT EXISTS (
+      SELECT 1 FROM sunday_loading_items sli WHERE sli.sunday_loading_id = sl.id
+    )
+  `);
+
   console.log('Core tables verified.');
 }
 
