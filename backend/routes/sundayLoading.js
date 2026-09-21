@@ -263,17 +263,31 @@ router.get('/', async (req, res) => {
 // GET /api/sunday-loading/loading - Independent Sunday loading sheets.
 router.get('/loading', async (req, res) => {
   try {
-    let { page = 1, limit = 10, search = '', status = 'ACTIVE' } = req.query;
+    let { page = 1, limit = 10, search = '', status = 'ACTIVE', scope = 'all', date = '' } = req.query;
     page = Math.max(1, parseInt(page, 10) || 1);
     limit = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
     status = String(status).toUpperCase();
     if (!['ACTIVE', 'COMPLETED'].includes(status)) {
       return res.status(400).json({ ok: false, error: 'Status must be ACTIVE or COMPLETED.' });
     }
+    scope = String(scope).toLowerCase();
+    if (!['all', 'today', 'past'].includes(scope)) {
+      return res.status(400).json({ ok: false, error: 'Scope must be all, today, or past.' });
+    }
+    if (scope !== 'all' && !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+      return res.status(400).json({ ok: false, error: 'A valid date is required for today or past scope.' });
+    }
     const offset = (page - 1) * limit;
     const searchValue = `%${String(search).trim()}%`;
     const conditions = ['d.status = ?'];
     const params = [status];
+    if (scope === 'today') {
+      conditions.push('d.loading_date = ?');
+      params.push(date);
+    } else if (scope === 'past') {
+      conditions.push('d.loading_date < ?');
+      params.push(date);
+    }
     if (String(search).trim()) {
       conditions.push('(d.dispatch_number LIKE ? OR d.customer_name LIKE ? OR d.company LIKE ? OR EXISTS (SELECT 1 FROM sunday_loading_dispatch_items si WHERE si.dispatch_id = d.id AND si.product_name LIKE ?))');
       params.push(searchValue, searchValue, searchValue, searchValue);

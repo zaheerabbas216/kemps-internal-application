@@ -81,14 +81,20 @@ const SundayLoading = () => {
   const [loadingFeedback, setLoadingFeedback] = useState({ type: '', message: '' });
   const [isSavingLoading, setIsSavingLoading] = useState(false);
   const [isLoadingFormOpen, setIsLoadingFormOpen] = useState(false);
-  const [loadingRecords, setLoadingRecords] = useState([]);
-  const [loadingSummary, setLoadingSummary] = useState({ totalLoadings: 0, activeLoadings: 0, completedLoadings: 0, totalProductLines: 0, totalQuantity: 0 });
+  const [loadingActiveToday, setLoadingActiveToday] = useState([]);
+  const [loadingCompletedToday, setLoadingCompletedToday] = useState([]);
+  const [loadingPastPending, setLoadingPastPending] = useState([]);
+  const [loadingHistoryRecords, setLoadingHistoryRecords] = useState([]);
   const [isLoadingRecords, setIsLoadingRecords] = useState(false);
-  const [loadingStatusTab, setLoadingStatusTab] = useState('ACTIVE');
-  const [loadingPage, setLoadingPage] = useState(1);
+  const [loadingWorkspaceView, setLoadingWorkspaceView] = useState('ACTIVE');
+  const [loadingActivePage, setLoadingActivePage] = useState(1);
+  const [loadingCompletedPage, setLoadingCompletedPage] = useState(1);
+  const [loadingPastPage, setLoadingPastPage] = useState(1);
+  const [loadingHistoryPage, setLoadingHistoryPage] = useState(1);
   const [loadingLimit, setLoadingLimit] = useState(10);
-  const [loadingTotal, setLoadingTotal] = useState(0);
+  const [loadingTotals, setLoadingTotals] = useState({ activeToday: 0, completedToday: 0, pastPending: 0, history: 0 });
   const [loadingDensity, setLoadingDensity] = useState('medium');
+  const [selectedLoadingRecord, setSelectedLoadingRecord] = useState(null);
   const [saleForm, setSaleForm] = useState({ saleDate: today, company: '', customerId: '', customerName: '', customerPhone: '', customerAddress: '', notes: '' });
   const [saleItems, setSaleItems] = useState([newSaleProductRow()]);
   const [saleFeedback, setSaleFeedback] = useState({ type: '', message: '' });
@@ -291,9 +297,9 @@ const SundayLoading = () => {
       setLoadingFeedback({ type: 'success', message: `Loading saved successfully! (Ref: ${response.data.dispatchNumber})` });
       setLoadingForm(prev => ({ ...prev, company: '', customerId: '', customerName: '', customerPhone: '', customerAddress: '', notes: '' }));
       setLoadingItems([newProductRow()]);
-      setLoadingStatusTab('ACTIVE');
-      setLoadingPage(1);
-      if (loadingStatusTab === 'ACTIVE' && loadingPage === 1) await fetchLoadingRecords();
+      setLoadingWorkspaceView('ACTIVE');
+      setLoadingActivePage(1);
+      await fetchLoadingRecords();
       setIsLoadingFormOpen(false);
     } catch (error) {
       setLoadingFeedback({ type: 'error', message: error.response?.data?.error || 'Failed to save loading.' });
@@ -305,26 +311,35 @@ const SundayLoading = () => {
   const fetchLoadingRecords = useCallback(async () => {
     setIsLoadingRecords(true);
     try {
-      const response = await api.get('/sunday-loading/loading', {
-        params: { page: loadingPage, limit: loadingLimit, status: loadingStatusTab }
+      const [activeResponse, completedResponse, pastResponse, historyResponse] = await Promise.all([
+        api.get('/sunday-loading/loading', { params: { page: loadingActivePage, limit: loadingLimit, status: 'ACTIVE', scope: 'today', date: today } }),
+        api.get('/sunday-loading/loading', { params: { page: loadingCompletedPage, limit: loadingLimit, status: 'COMPLETED', scope: 'today', date: today } }),
+        api.get('/sunday-loading/loading', { params: { page: loadingPastPage, limit: loadingLimit, status: 'ACTIVE', scope: 'past', date: today } }),
+        api.get('/sunday-loading/loading', { params: { page: loadingHistoryPage, limit: loadingLimit, status: 'COMPLETED', scope: 'all' } })
+      ]);
+      setLoadingActiveToday(activeResponse.data.records || []);
+      setLoadingCompletedToday(completedResponse.data.records || []);
+      setLoadingPastPending(pastResponse.data.records || []);
+      setLoadingHistoryRecords(historyResponse.data.records || []);
+      setLoadingTotals({
+        activeToday: Number(activeResponse.data.total || 0),
+        completedToday: Number(completedResponse.data.total || 0),
+        pastPending: Number(pastResponse.data.total || 0),
+        history: Number(historyResponse.data.total || 0)
       });
-      setLoadingRecords(response.data.records || []);
-      setLoadingTotal(Number(response.data.total || 0));
-      setLoadingSummary(response.data.summary || { totalLoadings: 0, activeLoadings: 0, completedLoadings: 0, totalProductLines: 0, totalQuantity: 0 });
     } catch (error) {
       console.error('Failed to load Sunday loading sheets:', error);
     } finally {
       setIsLoadingRecords(false);
     }
-  }, [loadingPage, loadingLimit, loadingStatusTab]);
+  }, [loadingActivePage, loadingCompletedPage, loadingPastPage, loadingHistoryPage, loadingLimit, today]);
 
   const completeLoadingSheet = async (record) => {
     if (!window.confirm(`Mark ${record.dispatch_number} as completed?`)) return;
     try {
       await api.put(`/sunday-loading/loading/${record.id}/complete`);
       setLoadingFeedback({ type: 'success', message: `${record.dispatch_number} completed successfully.` });
-      if (loadingRecords.length === 1 && loadingPage > 1) setLoadingPage(prev => prev - 1);
-      else await fetchLoadingRecords();
+      await fetchLoadingRecords();
     } catch (error) {
       setLoadingFeedback({ type: 'error', message: error.response?.data?.error || 'Failed to complete loading sheet.' });
     }
@@ -497,6 +512,34 @@ const SundayLoading = () => {
         ? 'bg-amber-50 text-amber-700 border border-amber-200'
         : 'bg-red-50 text-red-600 border border-red-200'
   }));
+
+  const renderLoadingWorkspaceTable = ({ title, records, total, pageValue, setPageValue, statusType = 'ACTIVE', tone = 'default', emptyText, allowComplete = false }) => (
+    <section className={`rounded-2xl border bg-white shadow-sm overflow-hidden ${tone === 'warning' ? 'border-amber-300' : 'border-slate-200'}`}>
+      <div className={`px-5 py-4 border-b flex items-center justify-between ${tone === 'warning' ? 'bg-amber-50/60 border-amber-200' : 'border-slate-100'}`}>
+        <h3 className={`text-sm font-black uppercase tracking-tight ${tone === 'warning' ? 'text-amber-900' : 'text-slate-800'}`}>{title}</h3>
+        <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase border ${tone === 'warning' ? 'bg-amber-50 text-amber-700 border-amber-200' : statusType === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>{total} {statusType === 'COMPLETED' ? 'Completed' : 'Active'}</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead><tr className="bg-slate-50/80 border-b border-slate-200 text-slate-500 uppercase"><th className={getDensityClass(loadingDensity, true)}>Loading ID</th><th className={getDensityClass(loadingDensity, true)}>Date</th><th className={getDensityClass(loadingDensity, true)}>Customer Details</th><th className={getDensityClass(loadingDensity, true)}>Company / Godown</th><th className={getDensityClass(loadingDensity, true)}>Consolidated Loadings</th><th className={getDensityClass(loadingDensity, true)}>Status</th><th className={`${getDensityClass(loadingDensity, true)} text-center`}>Actions</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {isLoadingRecords ? <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400 font-semibold">Loading sheets...</td></tr> : records.length === 0 ? <tr><td colSpan="7" className="px-5 py-10 text-center text-slate-400 font-semibold">{emptyText}</td></tr> : records.map(record => (
+              <tr key={record.id} className="hover:bg-slate-50/70">
+                <td className={`${getDensityClass(loadingDensity)} font-black text-slate-700`}>{record.dispatch_number}</td>
+                <td className={`${getDensityClass(loadingDensity)} font-bold ${tone === 'warning' ? 'text-amber-700' : 'text-slate-600'}`}>{fmtDate(record.loading_date)}</td>
+                <td className={getDensityClass(loadingDensity)}><div className="font-black text-slate-800">{record.customer_name}</div><div className="text-[10px] text-slate-400 mt-0.5">{record.customer_phone || '—'}</div></td>
+                <td className={getDensityClass(loadingDensity)}><span className="inline-flex px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 text-[10px] font-black">{record.company}</span></td>
+                <td className={`${getDensityClass(loadingDensity)} text-slate-700 font-semibold max-w-md`}>{record.products || '—'}</td>
+                <td className={getDensityClass(loadingDensity)}><span className={`inline-flex px-2.5 py-1 rounded-full text-[10px] font-black uppercase border ${record.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>{record.status === 'COMPLETED' ? 'Completed' : 'Active (Unbilled)'}</span></td>
+                <td className={`${getDensityClass(loadingDensity)} text-center whitespace-nowrap`}><div className="flex justify-center gap-2"><button type="button" onClick={() => setSelectedLoadingRecord(record)} className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-[10px] font-black hover:bg-slate-50">👁 View Details</button>{allowComplete && <button type="button" onClick={() => completeLoadingSheet(record)} className="px-3 py-2 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-[10px] font-black hover:bg-blue-100">✅ Completed</button>}</div></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {total > 0 && <TablePagination page={pageValue} setPage={setPageValue} limit={loadingLimit} setLimit={(value) => { setLoadingLimit(value); setLoadingActivePage(1); setLoadingCompletedPage(1); setLoadingPastPage(1); setLoadingHistoryPage(1); }} total={total} density={loadingDensity} setDensity={setLoadingDensity} />}
+    </section>
+  );
 
   return (
     <div className="space-y-6 animate-fade-in pb-12">
@@ -1217,71 +1260,46 @@ const SundayLoading = () => {
               {loadingFeedback.message}
             </div>
           )}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-2">
             <div>
-              <h2 className="text-2xl font-black text-slate-800 tracking-tight uppercase">Sunday Loading Sheets</h2>
-              <p className="text-slate-500 text-sm font-medium mt-1">Create and review independent Sunday customer loading sheets</p>
+              <h2 className="text-3xl font-black text-slate-800 tracking-tight uppercase">Sunday Loading Workspace</h2>
+              <p className="text-slate-500 text-sm font-medium mt-1">Manage Sunday loading sheets and log independent customer trips</p>
             </div>
-            {canCreate('sunday-loading') && <button type="button" onClick={() => { setLoadingFeedback({ type: '', message: '' }); setIsLoadingFormOpen(true); }} className="btn-premium btn-primary-premium h-12 text-xs flex items-center gap-2">
+            {canCreate('sunday-loading') && <button type="button" onClick={() => { setLoadingFeedback({ type: '', message: '' }); setIsLoadingFormOpen(true); }} className="h-14 px-7 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black shadow-lg shadow-blue-200 flex items-center gap-2">
               🚚 New Sunday Loading
             </button>}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Loadings</p><p className="text-2xl font-black text-slate-800 mt-1">{loadingSummary.totalLoadings}</p></div>
-            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Product Lines</p><p className="text-2xl font-black text-blue-700 mt-1">{loadingSummary.totalProductLines}</p></div>
-            <div className="border border-slate-200/60 bg-white rounded-2xl p-4 shadow-sm"><p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Total Quantity</p><p className="text-2xl font-black text-amber-700 mt-1">{loadingSummary.totalQuantity.toLocaleString('en-IN')}</p></div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="px-4 py-3 text-xs font-black text-slate-700 uppercase tracking-widest">📋 View Loading Sheets</div>
+            <div className="flex bg-slate-100 p-1.5 rounded-2xl">
+              <button type="button" onClick={() => setLoadingWorkspaceView('ACTIVE')} className={`px-5 py-3 rounded-xl text-[11px] font-black uppercase transition-all ${loadingWorkspaceView === 'ACTIVE' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>⚡ Active Today ({loadingTotals.activeToday}) {loadingTotals.pastPending > 0 && <span className="ml-2 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200">{loadingTotals.pastPending} Past Pending</span>}</button>
+              <button type="button" onClick={() => setLoadingWorkspaceView('HISTORY')} className={`px-5 py-3 rounded-xl text-[11px] font-black uppercase transition-all ${loadingWorkspaceView === 'HISTORY' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>⌛ Completed / History</button>
+            </div>
           </div>
 
-          <div className="border border-slate-200/60 bg-white rounded-2xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <div className="text-[11px] font-black text-slate-500 uppercase tracking-widest">📋 Loading Sheets</div>
-              <div className="flex items-center gap-2">
-                <div className="flex items-center rounded-xl bg-slate-100 p-1">
-                  {[
-                    { value: 'ACTIVE', label: 'Active', count: loadingSummary.activeLoadings },
-                    { value: 'COMPLETED', label: 'Completed', count: loadingSummary.completedLoadings }
-                  ].map(tab => (
-                    <button key={tab.value} type="button" onClick={() => { setLoadingStatusTab(tab.value); setLoadingPage(1); }} className={`h-8 px-3 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${loadingStatusTab === tab.value ? 'bg-white text-primary shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-                      {tab.label} ({tab.count})
-                    </button>
-                  ))}
-                </div>
-                <button type="button" onClick={fetchLoadingRecords} className="px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50">Refresh</button>
-              </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead><tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider text-slate-500"><th className={getDensityClass(loadingDensity, true)}>Reference</th><th className={getDensityClass(loadingDensity, true)}>Date</th><th className={getDensityClass(loadingDensity, true)}>Company</th><th className={getDensityClass(loadingDensity, true)}>Customer</th><th className={getDensityClass(loadingDensity, true)}>Products</th><th className={`${getDensityClass(loadingDensity, true)} text-right`}>Quantity</th><th className={`${getDensityClass(loadingDensity, true)} text-center`}>Status / Action</th></tr></thead>
-                <tbody className="divide-y divide-slate-100">
-                  {isLoadingRecords ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400 font-semibold">Loading sheets...</td></tr>
-                  ) : loadingRecords.length === 0 ? (
-                    <tr><td colSpan="7" className="px-4 py-10 text-center text-slate-400 font-semibold">No {loadingStatusTab.toLowerCase()} Sunday loading sheets.</td></tr>
-                  ) : loadingRecords.map(record => (
-                    <tr key={record.id} className="hover:bg-slate-50/70">
-                      <td className={`${getDensityClass(loadingDensity)} font-black text-blue-700`}>{record.dispatch_number}</td>
-                      <td className={`${getDensityClass(loadingDensity)} font-semibold text-slate-600`}>{fmtDate(record.loading_date)}</td>
-                      <td className={`${getDensityClass(loadingDensity)} font-bold text-slate-700`}>{record.company}</td>
-                      <td className={getDensityClass(loadingDensity)}><div className="font-bold text-slate-800">{record.customer_name}</div><div className="text-[10px] text-slate-400">{record.customer_phone || '—'}</div></td>
-                      <td className={`${getDensityClass(loadingDensity)} text-slate-600 max-w-md`}>{record.products || '—'}</td>
-                      <td className={`${getDensityClass(loadingDensity)} text-right font-black text-slate-800`}>{record.total_quantity.toLocaleString('en-IN')}</td>
-                      <td className={`${getDensityClass(loadingDensity)} text-center`}>
-                        {record.status === 'ACTIVE' ? (
-                          <button type="button" onClick={() => completeLoadingSheet(record)} className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase hover:bg-emerald-700">Complete</button>
-                        ) : (
-                          <div><span className="inline-flex px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-black uppercase">Completed</span><div className="mt-1 text-[9px] text-slate-400">{record.completed_by || ''}</div></div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <TablePagination page={loadingPage} setPage={setLoadingPage} limit={loadingLimit} setLimit={setLoadingLimit} total={loadingTotal} density={loadingDensity} setDensity={setLoadingDensity} />
-          </div>
+          {loadingWorkspaceView === 'ACTIVE' ? <>
+            {renderLoadingWorkspaceTable({ title: 'Active Loading Sheets Today', records: loadingActiveToday, total: loadingTotals.activeToday, pageValue: loadingActivePage, setPageValue: setLoadingActivePage, emptyText: 'No active loading sheets found for today.', allowComplete: true })}
+            {renderLoadingWorkspaceTable({ title: "Today’s Completed Loading History", records: loadingCompletedToday, total: loadingTotals.completedToday, pageValue: loadingCompletedPage, setPageValue: setLoadingCompletedPage, statusType: 'COMPLETED', emptyText: 'No loading history completed today yet.' })}
+            {renderLoadingWorkspaceTable({ title: '⌛ Uncompleted / Pending Past Loading Entries', records: loadingPastPending, total: loadingTotals.pastPending, pageValue: loadingPastPage, setPageValue: setLoadingPastPage, tone: 'warning', emptyText: 'No uncompleted past loading entries.', allowComplete: true })}
+          </> : renderLoadingWorkspaceTable({ title: 'Completed Loading History', records: loadingHistoryRecords, total: loadingTotals.history, pageValue: loadingHistoryPage, setPageValue: setLoadingHistoryPage, statusType: 'COMPLETED', emptyText: 'No completed loading history found.' })}
         </div>
       ))}
+
+      {selectedLoadingRecord && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-3xl bg-white shadow-2xl overflow-hidden">
+            <div className="bg-slate-900 text-white px-6 py-5 flex items-center justify-between"><div><p className="text-[10px] font-black uppercase tracking-widest text-blue-300">Sunday Loading Details</p><h3 className="text-xl font-black mt-1">{selectedLoadingRecord.dispatch_number}</h3></div><button type="button" onClick={() => setSelectedLoadingRecord(null)} className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20">✕</button></div>
+            <div className="p-6 space-y-5">
+              <div className="grid grid-cols-2 gap-4"><div className="rounded-2xl border border-slate-200 p-4"><span className="text-[10px] font-black uppercase text-slate-400">Loading Date</span><p className="font-black text-slate-800 mt-1">{fmtDate(selectedLoadingRecord.loading_date)}</p></div><div className="rounded-2xl border border-slate-200 p-4"><span className="text-[10px] font-black uppercase text-slate-400">Company / Godown</span><p className="font-black text-slate-800 mt-1">{selectedLoadingRecord.company}</p></div></div>
+              <div className="rounded-2xl border border-slate-200 p-4"><span className="text-[10px] font-black uppercase text-slate-400">Customer Details</span><p className="font-black text-slate-800 mt-1">{selectedLoadingRecord.customer_name}</p><p className="text-xs text-slate-500 mt-1">{selectedLoadingRecord.customer_phone || '—'} · {selectedLoadingRecord.customer_address || 'No address'}</p></div>
+              <div className="rounded-2xl border border-slate-200 p-4"><span className="text-[10px] font-black uppercase text-slate-400">Consolidated Loadings</span><p className="font-bold text-slate-700 mt-2">{selectedLoadingRecord.products || '—'}</p><p className="text-xs font-black text-blue-700 mt-2">Total quantity: {selectedLoadingRecord.total_quantity.toLocaleString('en-IN')}</p></div>
+              {selectedLoadingRecord.notes && <div className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">{selectedLoadingRecord.notes}</div>}
+            </div>
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end"><button type="button" onClick={() => setSelectedLoadingRecord(null)} className="px-6 h-10 rounded-xl bg-slate-900 text-white text-xs font-black">Close</button></div>
+          </div>
+        </div>
+      )}
 
       {activeTab === 'sales' && (isSaleFormOpen ? (
         <form onSubmit={submitSale} className="card-premium bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
