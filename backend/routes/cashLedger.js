@@ -95,6 +95,65 @@ const initTable = async () => {
       )
     `);
 
+    // Reconcile legacy daily history columns and derive the aggregate fields
+    // from the preserved component balances.
+    const [historyColumnRows] = await pool.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'daily_cash_ledger_history'
+    `);
+    const historyColumns = new Set(historyColumnRows.map(row => row.COLUMN_NAME));
+    if (!historyColumns.has('ledger_date') && historyColumns.has('business_date')) {
+      await pool.query(`ALTER TABLE daily_cash_ledger_history CHANGE COLUMN business_date ledger_date DATE NOT NULL`);
+      historyColumns.delete('business_date');
+      historyColumns.add('ledger_date');
+    }
+
+    const historyAggregateColumns = [
+      ['total_opening', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
+      ['total_in', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
+      ['total_out', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
+      ['net_closing', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
+      ['total_transactions', 'INT NOT NULL DEFAULT 0']
+    ];
+    let historyAggregatesAdded = false;
+    for (const [columnName, definition] of historyAggregateColumns) {
+      if (!historyColumns.has(columnName)) {
+        await pool.query(`ALTER TABLE daily_cash_ledger_history ADD COLUMN \`${columnName}\` ${definition}`);
+        historyColumns.add(columnName);
+        historyAggregatesAdded = true;
+      }
+    }
+    if (historyAggregatesAdded) {
+      await pool.query(`
+        UPDATE daily_cash_ledger_history
+        SET total_opening = COALESCE(opening_cash, 0) + COALESCE(opening_upi, 0) + COALESCE(opening_bank, 0),
+            total_in = COALESCE(cash_in, 0) + COALESCE(upi_in, 0) + COALESCE(bank_in, 0),
+            total_out = COALESCE(cash_out, 0) + COALESCE(upi_out, 0) + COALESCE(bank_out, 0),
+            net_closing = COALESCE(closing_cash, 0) + COALESCE(closing_upi, 0) + COALESCE(closing_bank, 0)
+      `);
+    }
+
+    // Preserve legacy cash submissions while adopting the current names.
+    const [submittedColumnRows] = await pool.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'cash_submitted_records'
+    `);
+    const submittedColumns = new Set(submittedColumnRows.map(row => row.COLUMN_NAME));
+    if (!submittedColumns.has('ledger_date') && submittedColumns.has('business_date')) {
+      await pool.query(`ALTER TABLE cash_submitted_records CHANGE COLUMN business_date ledger_date DATE NOT NULL`);
+      submittedColumns.delete('business_date');
+      submittedColumns.add('ledger_date');
+    }
+    if (!submittedColumns.has('cash_submitted') && submittedColumns.has('cash_amount')) {
+      await pool.query(`ALTER TABLE cash_submitted_records CHANGE COLUMN cash_amount cash_submitted DECIMAL(12, 2) NOT NULL DEFAULT 0.00`);
+      submittedColumns.delete('cash_amount');
+      submittedColumns.add('cash_submitted');
+    }
+
     // Drop unique index on ledger_date if exists so multiple submissions per day can be recorded individually
     try {
       await pool.query(`ALTER TABLE cash_submitted_records DROP INDEX ledger_date`);
