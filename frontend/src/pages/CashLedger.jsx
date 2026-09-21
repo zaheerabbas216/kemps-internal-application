@@ -66,6 +66,7 @@ const CashLedger = () => {
   const [total, setTotal]       = useState(0);
   const [summary, setSummary]   = useState(null);
   const [loading, setLoading]   = useState(false);
+  const [ledgerError, setLedgerError] = useState('');
 
   // Counter Cash Submitted input & feedback state
   const [cashSubmittedInput, setCashSubmittedInput] = useState('');
@@ -132,6 +133,7 @@ const CashLedger = () => {
   // ── Fetch Daily Ledger ────────────────────────────────────────────────────
   const fetchLedger = useCallback(async () => {
     setLoading(true);
+    setLedgerError('');
     try {
       const res = await api.get('/cash-ledger', {
         params: { startDate, endDate, search, method, type: flowType, page: currentPage, limit }
@@ -144,6 +146,7 @@ const CashLedger = () => {
       }
     } catch (err) {
       console.error('Cash ledger fetch failed:', err);
+      setLedgerError(err.response?.data?.error || 'Unable to load Cash Ledger data.');
     } finally {
       setLoading(false);
     }
@@ -436,6 +439,11 @@ const CashLedger = () => {
       {/* ── TAB 1: DAILY CASH LEDGER ──────────────────────────────────────── */}
       {activeTab === 'ledger' && (
         <>
+          {ledgerError && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-bold text-red-700">
+              Cash Ledger could not be loaded: {ledgerError}
+            </div>
+          )}
           {/* TOP 5 SUMMARY CARDS */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 

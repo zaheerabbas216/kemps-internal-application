@@ -23,6 +23,36 @@ const initTable = async () => {
       )
     `);
 
+    // Reconcile the legacy production schema without dropping or recreating
+    // the table. CHANGE COLUMN preserves every existing value and index.
+    const [openingColumnRows] = await pool.query(`
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND TABLE_NAME = 'cash_ledger_opening'
+    `);
+    const openingColumns = new Set(openingColumnRows.map(row => row.COLUMN_NAME));
+
+    const renameLegacyOpeningColumn = async (legacyName, currentName, definition) => {
+      if (!openingColumns.has(currentName) && openingColumns.has(legacyName)) {
+        await pool.query(
+          `ALTER TABLE cash_ledger_opening CHANGE COLUMN \`${legacyName}\` \`${currentName}\` ${definition}`
+        );
+        openingColumns.delete(legacyName);
+        openingColumns.add(currentName);
+      }
+    };
+
+    await renameLegacyOpeningColumn('business_date', 'entry_date', 'DATE NOT NULL');
+    await renameLegacyOpeningColumn('opening_cash', 'cash_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
+    await renameLegacyOpeningColumn('opening_upi', 'upi_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
+    await renameLegacyOpeningColumn('opening_bank', 'bank_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
+
+    if (!openingColumns.has('remarks')) {
+      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN remarks VARCHAR(255) NULL AFTER bank_amount`);
+      openingColumns.add('remarks');
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS daily_cash_ledger_history (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -112,7 +142,13 @@ const initTable = async () => {
     console.error('Failed to init cash ledger tables:', err);
   }
 };
-initTable();
+const initTablePromise = initTable();
+
+// Do not serve ledger requests until compatibility migrations are complete.
+router.use(async (req, res, next) => {
+  await initTablePromise;
+  next();
+});
 
 // Helper to compute itemized daily ledger summary for any target date
 export const computeDailyLedger = async (targetDate) => {
