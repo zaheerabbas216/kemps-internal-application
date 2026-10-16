@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 
 const Orders = () => {
   const navigate = useNavigate();
@@ -548,7 +549,7 @@ const Orders = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12">
       
       {/* HEADER BAR */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -858,22 +859,24 @@ const Orders = () => {
                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/40 border border-slate-100 p-4 rounded-2xl relative group">
                   <div className="md:col-span-5 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Product Name *</label>
-                    <select
+                    <ProductSelectWithCode
+                      products={finishedProducts}
                       value={row.finishedProductId}
-                      onChange={(e) => handleItemRowChange(row.id, 'finishedProductId', e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-semibold"
-                      required
-                    >
-                      <option value="">-- Choose Product --</option>
-                      {finishedProducts.map(fp => (
-                        <option key={fp.id} value={fp.id}>{fp.name}</option>
-                      ))}
-                    </select>
+                      onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                      onNextFocus={() => {
+                        const qtyEl = document.getElementById(`order-qty-${row.id}`);
+                        qtyEl?.focus();
+                        qtyEl?.select?.();
+                      }}
+                      placeholder="-- Choose Product --"
+                      searchPlaceholder="Search product name or code..."
+                    />
                   </div>
 
                   <div className="md:col-span-2 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Quantity (Boxes) *</label>
                     <input 
+                      id={`order-qty-${row.id}`}
                       type="number"
                       min="1"
                       placeholder="0"
@@ -1277,7 +1280,9 @@ const Orders = () => {
               >
                 <option value="">All Products</option>
                 {finishedProducts.map(fp => (
-                  <option key={fp.id} value={fp.id}>{fp.name}</option>
+                  <option key={fp.id} value={fp.id}>
+                    {fp.code ? `[${fp.code}] ` : ''}{fp.name}
+                  </option>
                 ))}
               </select>
             </div>
@@ -1443,7 +1448,7 @@ const Orders = () => {
       {/* ORDER DETAILS MODAL USING PORTAL */}
       {isDetailModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div className="modal-box w-11/12 max-w-6xl xl:max-w-7xl bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 relative shadow-2xl z-10 max-h-[92vh] overflow-y-auto">
             <button 
               onClick={() => { setIsDetailModalOpen(false); setOrderDetail(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -1496,36 +1501,41 @@ const Orders = () => {
                 </div>
 
                 {/* Items & Payment values */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Products table */}
-                  <div className="md:col-span-7 space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest border-b border-slate-100 pb-1.5">📦 Order Products List</h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                  <div className="lg:col-span-7 space-y-3">
+                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-1.5">📦 Order Products List</h4>
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-sm">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Product</th>
-                            <th className="py-2.5 px-3 text-center">Quantity</th>
-                            <th className="py-2.5 px-3 text-right">Rate</th>
-                            <th className="py-2.5 px-3 text-right">Total Amt</th>
+                          <tr className="bg-slate-100/90 border-b border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                            <th className="py-3 px-4 min-w-[160px]">Product</th>
+                            <th className="py-3 px-3 text-center min-w-[90px] whitespace-nowrap">Quantity</th>
+                            <th className="py-3 px-3 text-right min-w-[100px] whitespace-nowrap">Rate</th>
+                            <th className="py-3 px-4 text-right min-w-[110px] whitespace-nowrap">Total Amt</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
                           {orderDetail.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{item.productName}</td>
-                              <td className="py-2.5 px-3 text-center">{item.quantity}</td>
-                              <td className="py-2.5 px-3 text-right">₹{(parseFloat(item.rate) || 0).toFixed(2)}</td>
-                              <td className="py-2.5 px-3 text-right text-slate-800">₹{(parseFloat(item.amount) || 0).toFixed(2)}</td>
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 text-slate-800 font-extrabold">{item.productName}</td>
+                              <td className="py-3 px-3 text-center text-slate-600 font-bold">{item.quantity}</td>
+                              <td className="py-3 px-3 text-right font-medium text-slate-600 whitespace-nowrap">₹{(parseFloat(item.rate) || 0).toFixed(2)}</td>
+                              <td className="py-3 px-4 text-right text-slate-800 font-black whitespace-nowrap">₹{(parseFloat(item.amount) || 0).toFixed(2)}</td>
                             </tr>
                           ))}
+                          {orderDetail.items.length === 0 && (
+                            <tr>
+                              <td colSpan="4" className="py-6 text-center text-slate-400 italic font-semibold">No products in order</td>
+                            </tr>
+                          )}
                         </tbody>
                       </table>
                     </div>
                   </div>
 
                   {/* Payment Breakdown totals */}
-                  <div className="md:col-span-5 space-y-3">
+                  <div className="lg:col-span-5 space-y-3">
                     <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest border-b border-slate-100 pb-1.5">💵 Pricing & Payment</h4>
                     <div className="bg-slate-50/50 border border-slate-200 p-4 rounded-xl space-y-3 text-xs font-semibold text-slate-600">
                       <div className="flex justify-between">

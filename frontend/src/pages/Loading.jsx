@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 
 const Loading = () => {
   const navigate = useNavigate();
@@ -940,7 +941,7 @@ const Loading = () => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-6xl mx-auto pb-12">
+    <div className="space-y-6 animate-fade-in max-w-7xl mx-auto pb-12">
       
       {!isFormOpen ? (
         <>
@@ -1254,27 +1255,18 @@ const Loading = () => {
                           </span>
                         )}
                       </div>
-                      <SearchableSelect
-                        options={finishedProducts.map(fp => {
-                          const stockVal = goodsLedgerStock[fp.id];
-                          const hasStock = stockVal !== undefined;
-                          return {
-                            value: fp.id,
-                            label: `${fp.name}${hasStock ? ` (${stockVal} in stock)` : ''}`,
-                            rawName: fp.name,
-                            stock: hasStock ? stockVal : null,
-                            badge: hasStock ? `${stockVal} in stock` : null,
-                            badgeClassName: (stockVal > 0)
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : (stockVal === 0 
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                  : 'bg-rose-50 text-rose-600 border border-rose-200')
-                          };
-                        })}
+                      <ProductSelectWithCode
+                        products={finishedProducts}
                         value={row.finishedProductId}
                         onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                        onNextFocus={() => {
+                          const qtyEl = document.getElementById(`loading-qty-${row.id}`);
+                          qtyEl?.focus();
+                          qtyEl?.select?.();
+                        }}
+                        stockMap={goodsLedgerStock}
                         placeholder="-- Select Product --"
-                        searchPlaceholder="Type product name or stock..."
+                        searchPlaceholder="Type product name, code or stock..."
                         className="!h-11 font-semibold text-slate-750"
                       />
                     </div>
@@ -1285,6 +1277,7 @@ const Loading = () => {
                         Qty (Boxes)
                       </label>
                       <input 
+                        id={`loading-qty-${row.id}`}
                         type="number"
                         min="0"
                         value={row.quantity}
@@ -2058,7 +2051,7 @@ const Loading = () => {
       {/* RENDER MODALS USING PORTALS */}
       {isSessionModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div className="modal-box w-11/12 max-w-6xl xl:max-w-7xl bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 relative shadow-2xl z-10 max-h-[92vh] overflow-y-auto">
             <button 
               onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -2120,35 +2113,35 @@ const Loading = () => {
                 </div>
 
                 {/* Grid: Consolidated Left, Trips Right */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   
                   {/* Consolidated quantities */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
+                  <div className="lg:col-span-7 space-y-3">
+                    <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                       📊 Consolidated Loading Total
                     </h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white shadow-sm">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Product Name</th>
-                            <th className="py-2.5 px-3 text-center">Total Qty</th>
-                            <th className="py-2.5 px-3 text-center">Return</th>
-                            <th className="py-2.5 px-3 text-right">Net Loading</th>
+                          <tr className="bg-slate-100/90 border-b border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                            <th className="py-3 px-4 min-w-[150px]">Product Name</th>
+                            <th className="py-3 px-3 text-center min-w-[85px] whitespace-nowrap">Total Qty</th>
+                            <th className="py-3 px-3 text-center min-w-[80px] whitespace-nowrap">Return</th>
+                            <th className="py-3 px-4 text-right min-w-[100px] whitespace-nowrap">Net Loading</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
                           {sessionDetail.consolidatedItems.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/20">
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{item.productName}</td>
-                              <td className="py-2.5 px-3 text-center text-slate-500">{item.quantity}</td>
-                              <td className="py-2.5 px-3 text-center text-rose-500">{item.returnQty}</td>
-                              <td className="py-2.5 px-3 text-right text-primary font-black">{item.netLoadingQty}</td>
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 text-slate-800 font-extrabold">{item.productName}</td>
+                              <td className="py-3 px-3 text-center text-slate-600 font-bold">{item.quantity}</td>
+                              <td className="py-3 px-3 text-center text-rose-500 font-bold">{item.returnQty > 0 ? item.returnQty : '0'}</td>
+                              <td className="py-3 px-4 text-right text-primary font-black whitespace-nowrap">{item.netLoadingQty}</td>
                             </tr>
                           ))}
                           {sessionDetail.consolidatedItems.length === 0 && (
                             <tr>
-                              <td colSpan="4" className="py-6 text-center text-slate-400 italic">No products loaded</td>
+                              <td colSpan="4" className="py-6 text-center text-slate-400 italic font-semibold">No products loaded</td>
                             </tr>
                           )}
                         </tbody>
@@ -2157,7 +2150,7 @@ const Loading = () => {
                   </div>
 
                   {/* Individual Trips */}
-                  <div className="space-y-3">
+                  <div className="lg:col-span-5 space-y-3">
                     <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                       ⏱ Individual Trip Logs
                     </h4>
@@ -2222,27 +2215,27 @@ const Loading = () => {
                     <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
                       🔄 Active Loading Returns (Audit Trail)
                     </h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white max-h-48 overflow-y-auto">
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white max-h-56 overflow-y-auto shadow-sm">
                       <table className="w-full text-left border-collapse text-xs">
                         <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Date & Time</th>
-                            <th className="py-2.5 px-3">Product Name</th>
-                            <th className="py-2.5 px-3 text-center">Returned Qty</th>
-                            <th className="py-2.5 px-3">Reason</th>
-                            <th className="py-2.5 px-3 text-right">User Name</th>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-600 uppercase tracking-wider">
+                            <th className="py-3 px-4 min-w-[160px] whitespace-nowrap">Date & Time</th>
+                            <th className="py-3 px-4 min-w-[160px]">Product Name</th>
+                            <th className="py-3 px-3 text-center min-w-[110px] whitespace-nowrap">Returned Qty</th>
+                            <th className="py-3 px-4 min-w-[140px]">Reason</th>
+                            <th className="py-3 px-4 text-right min-w-[120px] whitespace-nowrap">User Name</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
                           {sessionDetail.returns.map((ret, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
-                              <td className="py-2.5 px-3 text-slate-500">
+                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-3 px-4 text-slate-500 whitespace-nowrap font-medium">
                                 {new Date(ret.createdAt).toLocaleString()}
                               </td>
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{ret.productName}</td>
-                              <td className="py-2.5 px-3 text-center text-rose-600 font-black">{ret.quantity}</td>
-                              <td className="py-2.5 px-3 text-slate-650 font-semibold">{ret.reason}</td>
-                              <td className="py-2.5 px-3 text-right text-slate-500">{ret.userName}</td>
+                              <td className="py-3 px-4 text-slate-800 font-extrabold">{ret.productName}</td>
+                              <td className="py-3 px-3 text-center text-rose-600 font-black">{ret.quantity}</td>
+                              <td className="py-3 px-4 text-slate-650 font-semibold">{ret.reason}</td>
+                              <td className="py-3 px-4 text-right text-slate-500 whitespace-nowrap font-medium">{ret.userName}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2448,7 +2441,7 @@ const Loading = () => {
       {/* RETURN GOODS MODAL USING PORTAL */}
       {isReturnModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-[60]">
-          <div className="modal-box max-w-2xl bg-white border border-slate-200/80 rounded-3xl p-6 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div className="modal-box w-11/12 max-w-3xl bg-white border border-slate-200/80 rounded-3xl p-6 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
             <button 
               onClick={() => { setIsReturnModalOpen(false); setReturnSession(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -2491,14 +2484,24 @@ const Loading = () => {
                           <SearchableSelect
                             options={(returnSession?.items || returnSession?.consolidatedItems || [])
                               .filter(loadedItem => loadedItem.quantity > 0)
-                              .map(loadedItem => ({
-                                value: loadedItem.finishedProductId,
-                                label: loadedItem.productName
-                              }))}
+                              .map(loadedItem => {
+                                const fp = finishedProducts.find(p => p.id === loadedItem.finishedProductId);
+                                return {
+                                  value: loadedItem.finishedProductId,
+                                  label: loadedItem.productName,
+                                  rawName: loadedItem.productName,
+                                  code: fp?.code || null
+                                };
+                              })}
                             value={item.finishedProductId}
                             onChange={(val) => handleReturnItemRowChange(item.id, 'finishedProductId', val)}
+                            onNextFocus={() => {
+                              const rQtyEl = document.getElementById(`return-qty-${item.id}`);
+                              rQtyEl?.focus();
+                              rQtyEl?.select?.();
+                            }}
                             placeholder="-- Choose Product --"
-                            searchPlaceholder="Type product name or number..."
+                            searchPlaceholder="Type product name, code or number..."
                             className="!h-11 font-semibold text-slate-755"
                           />
                         </div>
@@ -2509,6 +2512,7 @@ const Loading = () => {
                             Return Qty
                           </label>
                           <input
+                            id={`return-qty-${item.id}`}
                             type="number"
                             min="1"
                             placeholder="Qty"

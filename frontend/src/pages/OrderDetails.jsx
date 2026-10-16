@@ -1072,7 +1072,7 @@ const OrderDetails = () => {
       {/* ========================================================================= */}
       {isDetailOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-11/12 max-w-6xl xl:max-w-7xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             {/* Modal Header */}
             <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -1221,7 +1221,7 @@ const OrderDetails = () => {
                   </div>
 
                   {/* Line Items Table */}
-                  <div className="border border-slate-200 rounded-2xl overflow-hidden">
+                  <div className="border border-slate-200 rounded-2xl overflow-x-auto shadow-sm">
                     <div className="px-5 py-3 bg-slate-100/80 border-b border-slate-200 flex items-center justify-between">
                       <h3 className="text-xs font-black uppercase tracking-wider text-slate-600">
                         Ordered Items ({(orderDetail.items || []).length})
@@ -1230,21 +1230,21 @@ const OrderDetails = () => {
                     <table className="w-full text-left text-xs">
                       <thead className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase border-b border-slate-200">
                         <tr>
-                          <th className="py-2.5 px-4">#</th>
-                          <th className="py-2.5 px-4">Product Name</th>
-                          <th className="py-2.5 px-4 text-center">Quantity</th>
-                          <th className="py-2.5 px-4 text-right">Unit Rate (₹)</th>
-                          <th className="py-2.5 px-4 text-right">Amount (₹)</th>
+                          <th className="py-3 px-4 min-w-[50px]">#</th>
+                          <th className="py-3 px-4 min-w-[160px]">Product Name</th>
+                          <th className="py-3 px-4 text-center min-w-[90px] whitespace-nowrap">Quantity</th>
+                          <th className="py-3 px-4 text-right min-w-[110px] whitespace-nowrap">Unit Rate (₹)</th>
+                          <th className="py-3 px-4 text-right min-w-[110px] whitespace-nowrap">Amount (₹)</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100">
+                      <tbody className="divide-y divide-slate-100 font-semibold">
                         {(orderDetail.items || []).map((it, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50">
-                            <td className="py-2.5 px-4 text-slate-400 font-bold">{idx + 1}</td>
-                            <td className="py-2.5 px-4 font-bold text-slate-800">{it.productName}</td>
-                            <td className="py-2.5 px-4 text-center font-extrabold text-slate-900">{it.quantity}</td>
-                            <td className="py-2.5 px-4 text-right text-slate-600">{parseFloat(it.rate || 0).toFixed(2)}</td>
-                            <td className="py-2.5 px-4 text-right font-bold text-slate-900">
+                          <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                            <td className="py-3 px-4 text-slate-400 font-bold">{idx + 1}</td>
+                            <td className="py-3 px-4 font-bold text-slate-800">{it.productName}</td>
+                            <td className="py-3 px-4 text-center font-extrabold text-slate-900">{it.quantity}</td>
+                            <td className="py-3 px-4 text-right text-slate-600 whitespace-nowrap">{parseFloat(it.rate || 0).toFixed(2)}</td>
+                            <td className="py-3 px-4 text-right font-black text-slate-900 whitespace-nowrap">
                               {parseFloat(it.amount || it.quantity * it.rate || 0).toFixed(2)}
                             </td>
                           </tr>

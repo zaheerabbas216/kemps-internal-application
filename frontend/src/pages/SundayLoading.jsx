@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 
 // Currency formatting helper
 const formatINR = (val) =>
@@ -290,7 +291,8 @@ const SundayLoading = () => {
   const productOptions = finishedProducts.map(p => ({
     value: String(p.id),
     label: p.name,
-    rawName: p.name
+    rawName: p.name,
+    code: p.code ? String(p.code).toUpperCase() : null
   }));
 
   return (
@@ -466,18 +468,23 @@ const SundayLoading = () => {
 
           {/* Row 2: Product, Quantity, Rate, Total Amount */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {/* Product */}
+            {/* Product with Quick Code */}
             <div className="sm:col-span-2 lg:col-span-1">
               <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">
                 Finished Product <span className="text-red-500">*</span>
               </label>
-              <SearchableSelect
-                options={productOptions}
+              <ProductSelectWithCode
+                products={finishedProducts}
                 value={formData.productId || formData.productName}
                 onChange={handleProductSelect}
+                onNextFocus={() => {
+                  const qtyEl = document.getElementById('sunday-loading-qty');
+                  qtyEl?.focus();
+                  qtyEl?.select?.();
+                }}
                 placeholder={loadingDropdowns ? "Loading products..." : "Select Finished Product..."}
-                searchPlaceholder="Search product name..."
-                className="w-full h-11"
+                searchPlaceholder="Search product name or code..."
+                className="w-full"
               />
             </div>
 
@@ -487,6 +494,7 @@ const SundayLoading = () => {
                 Quantity <span className="text-red-500">*</span>
               </label>
               <input
+                id="sunday-loading-qty"
                 type="number"
                 step="any"
                 min="0.01"

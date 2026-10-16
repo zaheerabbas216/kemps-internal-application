@@ -47,6 +47,29 @@ router.post('/categories', async (req, res) => {
   }
 });
 
+// GET /api/finished-products/next-code
+// Returns the lowest unused positive integer code (e.g. '1', '2', etc.)
+router.get('/next-code', async (req, res) => {
+  try {
+    const [rows] = await pool.query('SELECT code FROM finished_products WHERE code IS NOT NULL');
+    const usedNums = new Set();
+    for (const row of rows) {
+      const c = String(row.code || '').trim();
+      if (/^\d+$/.test(c)) {
+        const n = parseInt(c, 10);
+        if (n > 0) usedNums.add(n);
+      }
+    }
+    let nextCode = 1;
+    while (usedNums.has(nextCode)) {
+      nextCode++;
+    }
+    res.json({ ok: true, nextCode: String(nextCode) });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
 // GET /api/finished-products
 // Fetch finished products with pagination and search.
 // Pass ?activeOnly=true to return only active (status=1) products (used by all operational modules).
@@ -72,10 +95,10 @@ router.get('/', async (req, res) => {
       whereParts.push('fp.status = 1');
     }
     if (search.trim()) {
-      whereParts.push('(fp.name LIKE ? OR fpc.name LIKE ?)');
+      whereParts.push('(fp.code LIKE ? OR fp.name LIKE ? OR fpc.name LIKE ?)');
       const wildSearch = `%${search.trim()}%`;
-      queryParams.push(wildSearch, wildSearch);
-      countParams.push(wildSearch, wildSearch);
+      queryParams.push(wildSearch, wildSearch, wildSearch);
+      countParams.push(wildSearch, wildSearch, wildSearch);
     }
     const baseWhere = whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : '';
     
@@ -92,7 +115,7 @@ router.get('/', async (req, res) => {
     // Get paginated products
     queryParams.push(limit, offset);
     const [rows] = await pool.query(
-      `SELECT fp.id, fp.name, fp.category_id, fpc.name AS category_name, fp.status, fp.created_at
+      `SELECT fp.id, fp.code, fp.name, fp.category_id, fpc.name AS category_name, fp.status, fp.created_at
        FROM finished_products fp
        LEFT JOIN finished_product_categories fpc ON fp.category_id = fpc.id
        ${baseWhere}
@@ -117,11 +140,29 @@ router.get('/', async (req, res) => {
 // Create a new finished product
 router.post('/', async (req, res) => {
   try {
-    const { name, categoryId } = req.body;
+    const { name, code, categoryId } = req.body;
     const nameTrimmed = String(name || '').trim();
     
     if (!nameTrimmed) {
       throw new Error('Product name is required.');
+    }
+
+    const codeTrimmed = code !== undefined && code !== null && String(code).trim() !== '' 
+      ? String(code).trim().toUpperCase() 
+      : null;
+
+    if (codeTrimmed) {
+      // Check duplicate code across all products
+      const [existingCode] = await pool.query(
+        'SELECT id, name, code FROM finished_products WHERE UPPER(code) = ?',
+        [codeTrimmed]
+      );
+      if (existingCode && existingCode.length > 0) {
+        return res.status(400).json({
+          ok: false,
+          error: `Code "${codeTrimmed}" is already assigned to "${existingCode[0].name}".`
+        });
+      }
     }
     
     let catId = categoryId ? parseInt(categoryId, 10) : null;
@@ -137,16 +178,20 @@ router.post('/', async (req, res) => {
     }
     
     const [result] = await pool.query(
-      'INSERT INTO finished_products (name, category_id, status) VALUES (?, ?, 1)',
-      [nameTrimmed, catId]
+      'INSERT INTO finished_products (name, code, category_id, status) VALUES (?, ?, ?, 1)',
+      [nameTrimmed, codeTrimmed, catId]
     );
     
     res.json({
       ok: true,
       id: result.insertId,
+      code: codeTrimmed,
       message: 'Finished product added successfully!'
     });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'A product with this code already exists.' });
+    }
     res.status(400).json({ ok: false, error: error.message });
   }
 });
@@ -156,7 +201,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, categoryId, status } = req.body;
+    const { name, code, categoryId, status } = req.body;
     
     // Check if finished product exists
     const [existing] = await pool.query('SELECT * FROM finished_products WHERE id = ?', [id]);
@@ -174,6 +219,27 @@ router.put('/:id', async (req, res) => {
       }
       updates.push('name = ?');
       values.push(nameTrimmed);
+    }
+
+    if (code !== undefined) {
+      const codeTrimmed = code !== null && String(code).trim() !== '' 
+        ? String(code).trim().toUpperCase() 
+        : null;
+
+      if (codeTrimmed) {
+        const [existingCode] = await pool.query(
+          'SELECT id, name, code FROM finished_products WHERE UPPER(code) = ? AND id != ?',
+          [codeTrimmed, id]
+        );
+        if (existingCode && existingCode.length > 0) {
+          return res.status(400).json({
+            ok: false,
+            error: `Code "${codeTrimmed}" is already assigned to "${existingCode[0].name}".`
+          });
+        }
+      }
+      updates.push('code = ?');
+      values.push(codeTrimmed);
     }
     
     if (categoryId !== undefined) {
@@ -208,6 +274,9 @@ router.put('/:id', async (req, res) => {
     
     res.json({ ok: true, message: 'Finished product updated successfully!' });
   } catch (error) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ ok: false, error: 'A product with this code already exists.' });
+    }
     res.status(400).json({ ok: false, error: error.message });
   }
 });

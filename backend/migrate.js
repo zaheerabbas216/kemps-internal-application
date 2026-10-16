@@ -2157,6 +2157,34 @@ export async function runMigration(shouldExit = false) {
         AND sr.quantity != bi.qty_in_pcs
     `);
 
+    // Step 67. Add code column and unique index to finished_products if not exists
+    console.log('Adding code column and unique index to finished_products if not exists...');
+    const [fpCodeCols] = await connection.query(
+      `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'finished_products' AND COLUMN_NAME = 'code'`
+    );
+    if (fpCodeCols.length === 0) {
+      await connection.query(
+        `ALTER TABLE finished_products ADD COLUMN code VARCHAR(50) NULL AFTER name`
+      );
+      console.log('code column added to finished_products.');
+    } else {
+      console.log('code column already exists in finished_products.');
+    }
+
+    const [fpCodeIdx] = await connection.query(
+      `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS 
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'finished_products' AND INDEX_NAME = 'idx_finished_products_code'`
+    );
+    if (fpCodeIdx.length === 0) {
+      await connection.query(
+        `ALTER TABLE finished_products ADD UNIQUE INDEX idx_finished_products_code (code)`
+      );
+      console.log('Unique index idx_finished_products_code added to finished_products.');
+    } else {
+      console.log('Unique index idx_finished_products_code already exists on finished_products.');
+    }
+
     console.log('Migration complete!');
     await connection.end();
     if (shouldExit) {

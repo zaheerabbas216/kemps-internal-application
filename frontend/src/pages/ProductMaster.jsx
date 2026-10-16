@@ -76,6 +76,7 @@ const ProductMaster = () => {
   const [editingFpProduct, setEditingFpProduct] = useState(null);
   const [fpEditFormData, setFpEditFormData] = useState({
     name: '',
+    code: '',
     categoryId: ''
   });
   const [fpEditModalError, setFpEditModalError] = useState('');
@@ -83,8 +84,12 @@ const ProductMaster = () => {
 
   const [fpFormData, setFpFormData] = useState({
     name: '',
+    code: '',
     categoryId: ''
   });
+  const [suggestedFpCode, setSuggestedFpCode] = useState('');
+  const [fpSortField, setFpSortField] = useState('code');
+  const [fpSortOrder, setFpSortOrder] = useState('asc');
   const [fpFormError, setFpFormError] = useState('');
   const [fpFormSuccess, setFpFormSuccess] = useState('');
   const [isAddingFp, setIsAddingFp] = useState(false);
@@ -95,6 +100,7 @@ const ProductMaster = () => {
   useEffect(() => {
     fetchRmCategories();
     fetchFpCategories();
+    fetchNextFpCode();
   }, []);
 
   useEffect(() => {
@@ -189,6 +195,17 @@ const ProductMaster = () => {
       console.error('Failed to fetch finished products:', err);
     } finally {
       setLoadingFp(false);
+    }
+  };
+
+  const fetchNextFpCode = async () => {
+    try {
+      const res = await api.get('/finished-products/next-code');
+      if (res.data.ok) {
+        setSuggestedFpCode(res.data.nextCode || '');
+      }
+    } catch (err) {
+      console.error('Failed to fetch next FP code:', err);
     }
   };
 
@@ -446,16 +463,19 @@ const ProductMaster = () => {
 
     setIsAddingFp(true);
     try {
+      const codeTrimmed = fpFormData.code ? fpFormData.code.trim().toUpperCase() : null;
       const res = await api.post('/finished-products', {
-        name: fpFormData.name,
+        name: fpFormData.name.trim(),
+        code: codeTrimmed || null,
         categoryId: fpFormData.categoryId || null
       });
 
       if (res.data.ok) {
         setFpFormSuccess('Finished product added successfully!');
-        setFpFormData(prev => ({ ...prev, name: '' }));
+        setFpFormData(prev => ({ ...prev, name: '', code: '' }));
         fetchFinishedProducts();
-        setTimeout(() => setFpFormSuccess(''), 2000);
+        fetchNextFpCode();
+        setTimeout(() => setFpFormSuccess(''), 2500);
       } else {
         setFpFormError(res.data.error || 'Failed to add finished product.');
       }
@@ -493,6 +513,7 @@ const ProductMaster = () => {
         setIsFpDeleteModalOpen(false);
         setDeletingFpProduct(null);
         fetchFinishedProducts();
+        fetchNextFpCode();
       } else {
         alert(res.data.error || 'Failed to delete finished product.');
       }
@@ -505,6 +526,7 @@ const ProductMaster = () => {
     setEditingFpProduct(item);
     setFpEditFormData({
       name: item.name || '',
+      code: item.code ? String(item.code).toUpperCase() : '',
       categoryId: item.category_id ? String(item.category_id) : ''
     });
     setFpEditModalError('');
@@ -520,10 +542,21 @@ const ProductMaster = () => {
       return;
     }
 
+    const oldCode = editingFpProduct?.code ? String(editingFpProduct.code).trim().toUpperCase() : '';
+    const newCode = fpEditFormData.code ? String(fpEditFormData.code).trim().toUpperCase() : '';
+
+    if (oldCode && oldCode !== newCode) {
+      const confirmed = window.confirm(
+        `⚠️ Warning: Changing product code from [${oldCode}] to [${newCode || 'None'}] may affect quick-entry keyboard habits for users across billing and loading screens.\n\nAre you sure you want to proceed with this change?`
+      );
+      if (!confirmed) return;
+    }
+
     setIsSavingFpEdit(true);
     try {
       const res = await api.put(`/finished-products/${editingFpProduct.id}`, {
         name: fpEditFormData.name.trim(),
+        code: newCode || null,
         categoryId: fpEditFormData.categoryId || null
       });
 
@@ -531,6 +564,7 @@ const ProductMaster = () => {
         setIsFpEditModalOpen(false);
         setEditingFpProduct(null);
         fetchFinishedProducts();
+        fetchNextFpCode();
       } else {
         setFpEditModalError(res.data.error || 'Failed to update finished product.');
       }
@@ -539,6 +573,48 @@ const ProductMaster = () => {
     } finally {
       setIsSavingFpEdit(false);
     }
+  };
+
+  const handleFpSort = (field) => {
+    if (fpSortField === field) {
+      setFpSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setFpSortField(field);
+      setFpSortOrder('asc');
+    }
+  };
+
+  const getSortedFinishedProducts = () => {
+    const list = [...finishedProducts];
+    list.sort((a, b) => {
+      let valA = a[fpSortField];
+      let valB = b[fpSortField];
+
+      if (fpSortField === 'code') {
+        const numA = parseInt(valA, 10);
+        const numB = parseInt(valB, 10);
+        const isNumA = !isNaN(numA) && String(numA) === String(valA || '').trim();
+        const isNumB = !isNaN(numB) && String(numB) === String(valB || '').trim();
+
+        if (!valA && !valB) return 0;
+        if (!valA) return 1;
+        if (!valB) return -1;
+
+        if (isNumA && isNumB) {
+          return fpSortOrder === 'asc' ? numA - numB : numB - numA;
+        }
+        return fpSortOrder === 'asc'
+          ? String(valA).localeCompare(String(valB))
+          : String(valB).localeCompare(String(valA));
+      }
+
+      valA = String(valA || '').toLowerCase();
+      valB = String(valB || '').toLowerCase();
+      return fpSortOrder === 'asc'
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+    return list;
   };
 
   const getGroupedRawMaterials = () => {
@@ -647,10 +723,40 @@ const ProductMaster = () => {
               <span>➕</span> ADD NEW FINISHED PRODUCT
             </h3>
             
-            <form onSubmit={handleAddFpProduct} className="flex flex-wrap items-center gap-4">
+            <form onSubmit={handleAddFpProduct} className="flex flex-wrap items-end gap-4">
               
+              {/* Quick Code Input */}
+              <div className="w-36 min-w-[130px]">
+                <div className="flex items-center justify-between mb-1 px-1">
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                    Code
+                  </span>
+                  {suggestedFpCode && !fpFormData.code && (
+                    <button
+                      type="button"
+                      onClick={() => setFpFormData(prev => ({ ...prev, code: suggestedFpCode }))}
+                      className="text-[9px] font-black text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-1.5 py-0.5 rounded cursor-pointer transition-colors"
+                      title="Click to auto-fill next free code"
+                    >
+                      #{suggestedFpCode}
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  name="code"
+                  value={fpFormData.code}
+                  onChange={handleFpInputChange}
+                  placeholder={suggestedFpCode ? `e.g. ${suggestedFpCode}` : 'Code (opt)'}
+                  className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400/80 uppercase font-mono font-bold focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm"
+                />
+              </div>
+
               {/* Product Name Input */}
               <div className="flex-1 min-w-[250px]">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 px-1">
+                  Product Name *
+                </div>
                 <input
                   type="text"
                   name="name"
@@ -662,14 +768,17 @@ const ProductMaster = () => {
               </div>
 
               {/* Category Dropdown with modal trigger */}
-              <div className="flex-1 min-w-[250px]">
+              <div className="flex-1 min-w-[220px]">
+                <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1 px-1">
+                  Category (Optional)
+                </div>
                 <select
                   name="categoryId"
                   value={fpFormData.categoryId}
                   onChange={handleFpCategorySelectChange}
                   className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-medium"
                 >
-                  <option value="">Category e.g. Water Bottles (optional)</option>
+                  <option value="">Category e.g. Water Bottles</option>
                   {fpCategories.map(cat => (
                     <option key={cat.id} value={cat.id}>{cat.name}</option>
                   ))}
@@ -715,7 +824,7 @@ const ProductMaster = () => {
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
                 <input 
                   type="text" 
-                  placeholder="Search products..."
+                  placeholder="Search code, product name, or category..."
                   value={searchFpQuery}
                   onChange={handleFpSearchChange}
                   className="input-premium pl-11 h-10 w-full"
@@ -731,7 +840,30 @@ const ProductMaster = () => {
               <table className="table table-zebra w-full overflow-hidden">
                 <thead className="bg-[#0b1324] text-white border-b border-slate-100">
                   <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                    <th className="py-4 px-6 text-left">Product Name</th>
+                    <th 
+                      onClick={() => handleFpSort('code')}
+                      className="py-4 px-4 text-left cursor-pointer hover:text-white select-none transition-colors w-24"
+                      title="Click to sort by Code"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Code</span>
+                        {fpSortField === 'code' && (
+                          <span className="text-xs text-primary">{fpSortOrder === 'asc' ? '▲' : '▼'}</span>
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => handleFpSort('name')}
+                      className="py-4 px-6 text-left cursor-pointer hover:text-white select-none transition-colors"
+                      title="Click to sort by Name"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span>Product Name</span>
+                        {fpSortField === 'name' && (
+                          <span className="text-xs text-primary">{fpSortOrder === 'asc' ? '▲' : '▼'}</span>
+                        )}
+                      </div>
+                    </th>
                     <th className="py-4 px-6 text-left">Category</th>
                     <th className="py-4 px-6 text-left">Status</th>
                     <th className="py-4 px-6 text-center">Actions</th>
@@ -740,7 +872,7 @@ const ProductMaster = () => {
                 <tbody className="divide-y divide-slate-50">
                   {loadingFp ? (
                     <tr>
-                      <td colSpan="4" className="py-20 text-center">
+                      <td colSpan="5" className="py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
                            <span className="loading loading-spinner text-primary"></span>
                            <span className="text-slate-400 text-sm font-medium">Fetching products...</span>
@@ -749,13 +881,22 @@ const ProductMaster = () => {
                     </tr>
                   ) : finishedProducts.length === 0 ? (
                     <tr>
-                      <td colSpan="4" className="py-20 text-center text-slate-400 font-medium italic">
+                      <td colSpan="5" className="py-20 text-center text-slate-400 font-medium italic">
                         {searchFpQuery ? 'No products found matching your search.' : 'No products added yet.'}
                       </td>
                     </tr>
                   ) : (
-                    finishedProducts.map((item) => (
+                    getSortedFinishedProducts().map((item) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
+                        <td className="py-4 px-4">
+                          {item.code ? (
+                            <span className="font-mono font-bold text-xs bg-blue-50 text-blue-750 px-2 py-1 rounded-md border border-blue-200/80 shadow-xs">
+                              [{item.code}]
+                            </span>
+                          ) : (
+                            <span className="text-slate-350 text-xs italic font-semibold">—</span>
+                          )}
+                        </td>
                         <td className="py-4 px-6 text-[14px] font-bold text-slate-700">{item.name}</td>
                         <td className="py-4 px-6">
                           {item.category_name ? (
@@ -1550,10 +1691,42 @@ const ProductMaster = () => {
             </div>
 
             <form onSubmit={handleSaveFpEdit} className="space-y-4">
+              {/* Quick Code */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                    Quick Code
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Optional</span>
+                </div>
+                <input
+                  type="text"
+                  value={fpEditFormData.code}
+                  onChange={(e) => setFpEditFormData(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                  placeholder="e.g. 1, 2, K1"
+                  className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 uppercase font-mono font-bold focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm"
+                />
+              </div>
+
+              {/* Warning when changing existing code */}
+              {editingFpProduct?.code && fpEditFormData.code.trim().toUpperCase() !== String(editingFpProduct.code).trim().toUpperCase() && (
+                <div className="bg-amber-50 text-amber-800 p-3.5 rounded-xl border border-amber-200/90 text-xs font-semibold animate-fade-in flex items-start gap-2.5">
+                  <span className="text-base leading-none">⚠️</span>
+                  <div>
+                    <p className="font-bold">
+                      Changing code from [{editingFpProduct.code}] to [{fpEditFormData.code.trim().toUpperCase() || 'None'}]
+                    </p>
+                    <p className="text-[11px] text-amber-700/90 mt-0.5 leading-relaxed font-medium">
+                      Changing this code may affect keyboard quick-entry habits for staff across billing and loading screens.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Product Name */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
-                  Product Name
+                  Product Name *
                 </label>
                 <input
                   type="text"

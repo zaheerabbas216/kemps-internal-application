@@ -21,11 +21,13 @@ const SearchableSelect = ({
   searchPlaceholder = 'Search...',
   className = '',
   disabled = false,
-  emptyMessage = 'No options found'
+  emptyMessage = 'No options found',
+  onNextFocus = null
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [searchError, setSearchError] = useState('');
 
   const containerRef = useRef(null);
   const searchRef = useRef(null);
@@ -33,14 +35,29 @@ const SearchableSelect = ({
 
   // Derive the selected label for display
   const selectedOption = options.find(opt => String(opt.value) === String(value));
-  const displayLabel = selectedOption ? selectedOption.label : placeholder;
+  const displayLabel = selectedOption ? (selectedOption.rawName || selectedOption.label) : placeholder;
 
-  // Filter options based on search
+  // Filter options based on search (prioritizing exact code matches to the top)
   const filtered = search.trim()
-    ? options.filter(opt =>
-        String(opt.label || opt.rawName || '').toLowerCase().includes(search.trim().toLowerCase()) ||
-        (opt.badge && String(opt.badge).toLowerCase().includes(search.trim().toLowerCase()))
-      )
+    ? options
+        .filter(opt => {
+          const qLower = search.trim().toLowerCase();
+          const qUpper = search.trim().toUpperCase();
+          const optCode = opt.code ? String(opt.code).toUpperCase() : '';
+          const optName = String(opt.rawName || opt.label || '').toLowerCase();
+          const optBadge = opt.badge ? String(opt.badge).toLowerCase() : '';
+          return optCode.includes(qUpper) || optName.includes(qLower) || optBadge.includes(qLower);
+        })
+        .sort((a, b) => {
+          const qUpper = search.trim().toUpperCase();
+          const aCode = a.code ? String(a.code).toUpperCase() : '';
+          const bCode = b.code ? String(b.code).toUpperCase() : '';
+          const aExact = aCode === qUpper;
+          const bExact = bCode === qUpper;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          return 0;
+        })
     : options;
 
   // Open dropdown and focus search input
@@ -48,7 +65,8 @@ const SearchableSelect = ({
     if (disabled) return;
     setIsOpen(true);
     setSearch('');
-    setHighlightIndex(-1);
+    setSearchError('');
+    setHighlightIndex(0);
     setTimeout(() => searchRef.current?.focus(), 50);
   }, [disabled]);
 
@@ -56,33 +74,75 @@ const SearchableSelect = ({
   const closeDropdown = useCallback(() => {
     setIsOpen(false);
     setSearch('');
+    setSearchError('');
     setHighlightIndex(-1);
   }, []);
 
   // Select an option
-  const handleSelect = useCallback((opt) => {
+  const handleSelect = useCallback((opt, triggerAdvance = false) => {
     onChange?.(opt.value, opt);
     closeDropdown();
-  }, [onChange, closeDropdown]);
+    if (triggerAdvance && onNextFocus) {
+      setTimeout(() => onNextFocus(), 50);
+    }
+  }, [onChange, closeDropdown, onNextFocus]);
 
   // Keyboard navigation
   const handleKeyDown = useCallback((e) => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      // If closed and user presses alphanumeric key or Enter, open and handle
+      if (e.key === 'Enter' || e.key === ' ' || (e.key.length === 1 && !e.ctrlKey && !e.metaKey)) {
+        e.preventDefault();
+        openDropdown();
+        if (e.key.length === 1) {
+          setSearch(e.key);
+        }
+      }
+      return;
+    }
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightIndex(prev => Math.min(prev + 1, filtered.length - 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightIndex(prev => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (highlightIndex >= 0 && filtered[highlightIndex]) {
-        handleSelect(filtered[highlightIndex]);
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      const trimmed = search.trim();
+      if (trimmed) {
+        // 1. Check exact code match
+        const exactCodeMatch = options.find(
+          opt => opt.code && String(opt.code).toUpperCase() === trimmed.toUpperCase()
+        );
+        if (exactCodeMatch) {
+          e.preventDefault();
+          handleSelect(exactCodeMatch, true);
+          return;
+        }
+
+        // 2. Highlighted item or single filtered item
+        if (highlightIndex >= 0 && filtered[highlightIndex]) {
+          e.preventDefault();
+          handleSelect(filtered[highlightIndex], true);
+          return;
+        } else if (filtered.length === 1) {
+          e.preventDefault();
+          handleSelect(filtered[0], true);
+          return;
+        } else if (filtered.length === 0) {
+          e.preventDefault();
+          setSearchError(`No product with code "${trimmed}"`);
+          return;
+        }
+      } else if (highlightIndex >= 0 && filtered[highlightIndex]) {
+        e.preventDefault();
+        handleSelect(filtered[highlightIndex], true);
+        return;
       }
     } else if (e.key === 'Escape') {
       closeDropdown();
     }
-  }, [isOpen, filtered, highlightIndex, handleSelect, closeDropdown]);
+  }, [isOpen, filtered, highlightIndex, handleSelect, closeDropdown, openDropdown, search, options]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -125,9 +185,16 @@ const SearchableSelect = ({
         aria-haspopup="listbox"
         aria-expanded={isOpen}
       >
-        <span className={`truncate font-medium flex-1 ${selectedOption ? 'text-slate-800 font-semibold' : 'text-slate-400'}`}>
-          {selectedOption ? (selectedOption.rawName || selectedOption.label) : displayLabel}
-        </span>
+        <div className="flex items-center gap-1.5 truncate flex-1 min-w-0">
+          {selectedOption?.code && (
+            <span className="font-mono text-[11px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-750 border border-blue-200 shrink-0">
+              [{selectedOption.code}]
+            </span>
+          )}
+          <span className={`truncate ${selectedOption ? 'text-slate-800 font-semibold' : 'text-slate-400 font-medium'}`}>
+            {selectedOption ? (selectedOption.rawName || selectedOption.label) : displayLabel}
+          </span>
+        </div>
         {selectedOption?.badge && (
           <span className={`text-[10px] font-black px-2 py-0.5 rounded-md shrink-0 ${selectedOption.badgeClassName || 'bg-slate-100 text-slate-600'}`}>
             {selectedOption.badge}
@@ -159,6 +226,7 @@ const SearchableSelect = ({
                 value={search}
                 onChange={e => {
                   setSearch(e.target.value);
+                  setSearchError('');
                   setHighlightIndex(0);
                 }}
                 placeholder={searchPlaceholder}
@@ -167,13 +235,18 @@ const SearchableSelect = ({
               {search && (
                 <button
                   type="button"
-                  onClick={() => { setSearch(''); setHighlightIndex(-1); searchRef.current?.focus(); }}
+                  onClick={() => { setSearch(''); setSearchError(''); setHighlightIndex(-1); searchRef.current?.focus(); }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-bold"
                 >
                   ✕
                 </button>
               )}
             </div>
+            {searchError && (
+              <div className="mt-1 text-[11px] font-bold text-red-600 bg-red-50 px-2 py-1 rounded border border-red-100 animate-fade-in">
+                ⚠️ {searchError}
+              </div>
+            )}
           </div>
 
           {/* Options list */}
@@ -196,7 +269,7 @@ const SearchableSelect = ({
                     data-option
                     role="option"
                     aria-selected={isSelected}
-                    onClick={() => handleSelect(opt)}
+                    onClick={() => handleSelect(opt, true)}
                     onMouseEnter={() => setHighlightIndex(idx)}
                     className={[
                       'px-3 py-2 text-xs cursor-pointer flex items-center justify-between gap-2 transition-colors',
@@ -205,7 +278,14 @@ const SearchableSelect = ({
                       !isSelected && !isHighlighted ? 'hover:bg-slate-50' : ''
                     ].join(' ')}
                   >
-                    <span className="truncate flex-1 font-semibold">{opt.rawName || opt.label}</span>
+                    <div className="flex items-center gap-2 truncate flex-1 min-w-0">
+                      {opt.code && (
+                        <span className="font-mono text-[10px] font-black px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
+                          [{opt.code}]
+                        </span>
+                      )}
+                      <span className="truncate font-semibold">{opt.rawName || opt.label}</span>
+                    </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       {opt.badge && (
                         <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-md ${opt.badgeClassName || 'bg-slate-100 text-slate-600'}`}>

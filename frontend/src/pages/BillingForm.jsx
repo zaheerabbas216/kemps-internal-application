@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 
 
 const BillingForm = () => {
@@ -1014,184 +1015,220 @@ const BillingForm = () => {
         </div>
 
         {/* 4. BILL LINE ITEMS (ADD PRODUCTS) */}
-        <div className="border border-slate-200/80 rounded-2xl bg-white p-5 space-y-4 shadow-sm">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-2.5">
-            <div className="text-[11px] font-black text-slate-450 uppercase tracking-widest flex items-center gap-1.5">
-              <span>🛒</span> PRODUCTS BILLING LIST
+        <div className="border border-slate-200/80 rounded-3xl bg-white p-5 sm:p-6 space-y-5 shadow-sm">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-black text-sm">
+                🛒
+              </div>
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wide">
+                  Products
+                </h3>
+                <span className="text-xs font-semibold text-slate-400">
+                  {items.length} {items.length === 1 ? 'product' : 'products'}
+                </span>
+              </div>
             </div>
             {!preloadLoading && (
               <button
                 type="button"
                 onClick={handleAddProductRow}
-                className="px-3.5 py-1.5 rounded-lg border border-primary/20 text-primary bg-primary/5 hover:bg-primary hover:text-white transition-all text-xs font-bold"
+                className="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary-dark transition-all text-xs font-bold shadow-sm shadow-primary/20 flex items-center gap-1.5"
               >
-                + Add Product
+                <span>+</span> Add Product
               </button>
             )}
           </div>
 
-          {/* Lines Table */}
-          <div className="space-y-3">
+          {/* Product Cards */}
+          <div className="space-y-4">
             {items.map((row, index) => (
               <div 
                 key={row.id} 
-                className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/40 border border-slate-100 p-4 rounded-2xl relative group"
+                className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-xs relative space-y-4 hover:border-slate-300 transition-all group"
               >
-                
-                {/* Finished Product Selector */}
-                <div className="md:col-span-3 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                      Product #{index + 1}
-                    </label>
-                    {row.finishedProductId && goodsLedgerStock[row.finishedProductId] !== undefined && (
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-md ${
-                        goodsLedgerStock[row.finishedProductId] > 0
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : (goodsLedgerStock[row.finishedProductId] === 0
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-rose-50 text-rose-600 border border-rose-200')
-                      }`}>
-                        Stock: {goodsLedgerStock[row.finishedProductId]} Pcs
-                      </span>
+                {/* TOP ROW: Number Badge + Full-Width Product Selector + Delete Button */}
+                <div className="flex items-start gap-3">
+                  {/* Index Circle Badge */}
+                  <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white font-black text-xs flex items-center justify-center shrink-0 mt-6 shadow-sm">
+                    {index + 1}
+                  </div>
+
+                  {/* Product Input with Quick Code */}
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block">
+                        Product
+                      </label>
+                      {row.finishedProductId && goodsLedgerStock[row.finishedProductId] !== undefined && (
+                        <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full ${
+                          goodsLedgerStock[row.finishedProductId] > 0
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : (goodsLedgerStock[row.finishedProductId] === 0
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-rose-50 text-rose-600 border border-rose-200')
+                        }`}>
+                          Stock: {goodsLedgerStock[row.finishedProductId]} Pcs
+                        </span>
+                      )}
+                    </div>
+
+                    {preloadLoading ? (
+                      <input 
+                        type="text"
+                        value={finishedProducts.find(fp => String(fp.id) === String(row.finishedProductId))?.name || row.productName || 'Product'}
+                        readOnly
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-750 font-bold outline-none text-sm cursor-not-allowed"
+                      />
+                    ) : (
+                      <ProductSelectWithCode
+                        products={finishedProducts}
+                        value={row.finishedProductId}
+                        onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                        onNextFocus={() => {
+                          const qtyEl = document.getElementById(`billing-qty-${row.id}`);
+                          qtyEl?.focus();
+                          qtyEl?.select?.();
+                        }}
+                        stockMap={goodsLedgerStock}
+                        placeholder="Search or pick a product"
+                        searchPlaceholder="Search product by name or quick code..."
+                        className="w-full"
+                      />
                     )}
                   </div>
-                  {preloadLoading ? (
-                    <input 
-                      type="text"
-                      value={finishedProducts.find(fp => String(fp.id) === String(row.finishedProductId))?.name || row.productName || 'Product'}
-                      readOnly
-                      className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-slate-50 text-slate-750 font-bold outline-none text-xs cursor-not-allowed"
-                    />
-                  ) : (
-                    <SearchableSelect
-                      options={finishedProducts.map(fp => {
-                        const stockVal = goodsLedgerStock[fp.id];
-                        const hasStock = stockVal !== undefined;
-                        return {
-                          value: fp.id,
-                          label: `${fp.name}${hasStock ? ` (${stockVal} in stock)` : ''}`,
-                          rawName: fp.name,
-                          stock: hasStock ? stockVal : null,
-                          badge: hasStock ? `${stockVal} in stock` : null,
-                          badgeClassName: (stockVal > 0)
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            : (stockVal === 0 
-                                ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                : 'bg-rose-50 text-rose-600 border border-rose-200')
-                        };
-                      })}
-                      value={row.finishedProductId}
-                      onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
-                      placeholder="Select Finished Product"
-                      searchPlaceholder="Search product or stock..."
-                    />
-                  )}
-                </div>
 
-                {/* Qty */}
-                <div className="md:col-span-1 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Qty (Pcs)
-                  </label>
-                  <input 
-                    type="number"
-                    value={row.quantity}
-                    onChange={(e) => handleItemRowChange(row.id, 'quantity', e.target.value)}
-                    placeholder="0"
-                    readOnly={!!preloadLoading}
-                    className={`w-full h-11 px-3.5 rounded-xl border outline-none text-sm font-medium ${
-                      preloadLoading 
-                        ? 'bg-slate-50 text-slate-500 font-bold border-slate-200 cursor-not-allowed' 
-                        : 'bg-white text-slate-700 border-slate-200 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all'
-                    }`}
-                    required
-                  />
-                </div>
-
-                {/* Rate with Tax */}
-                <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Rate with Tax (₹)
-                  </label>
-                  <input 
-                    type="number"
-                    step="0.01"
-                    value={row.rateWithTax}
-                    onChange={(e) => handleItemRowChange(row.id, 'rateWithTax', e.target.value)}
-                    placeholder="0.00"
-                    className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                    required
-                  />
-                </div>
-
-                {/* Tax Percent */}
-                <div className="md:col-span-1 space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                      Tax (%)
-                    </label>
-                  </div>
-                  <select
-                    value={row.taxPercent}
-                    onChange={(e) => handleItemRowChange(row.id, 'taxPercent', e.target.value)}
-                    className="w-full h-11 px-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
-                  >
-                    {TAX_OPTIONS.map(tax => (
-                      <option key={tax} value={tax}>{tax}%</option>
-                    ))}
-                  </select>
-                  <div className="text-[9px] font-bold text-slate-400 text-center">
-                    {parseFloat(row.taxPercent) > 0 
-                      ? `${(parseFloat(row.taxPercent) / 2)}% + ${(parseFloat(row.taxPercent) / 2)}%`
-                      : '0%'}
-                  </div>
-                </div>
-
-                {/* Basic Rate (Readonly) */}
-                <div className="md:col-span-2 space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                    Basic Rate (No Tax)
-                  </label>
-                  <input 
-                    type="text"
-                    value={`₹ ${row.basicRate.toFixed(2)}`}
-                    readOnly
-                    className="w-full h-11 px-3 bg-slate-50 text-slate-450 border border-slate-200 rounded-xl font-bold text-xs outline-none cursor-not-allowed"
-                  />
-                </div>
-
-                {/* Row Total Amount (Readonly) */}
-                <div className={`${preloadLoading ? 'md:col-span-3' : 'md:col-span-3 flex gap-2 items-end'}`}>
-                  <div className="flex-1">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                      Total
-                    </label>
-                    <input 
-                      type="text"
-                      value={`₹ ${row.totalAmount.toFixed(2)}`}
-                      readOnly
-                      className="w-full h-11 px-3.5 bg-slate-50 text-slate-700 border border-slate-200 rounded-xl font-black text-sm outline-none cursor-not-allowed"
-                    />
-                  </div>
+                  {/* Delete Button */}
                   {!preloadLoading && (
                     <button
                       type="button"
                       onClick={() => handleRemoveProductRow(row.id)}
-                      className="w-11 h-11 rounded-xl bg-white border border-slate-200 hover:border-red-200 hover:bg-red-50 hover:text-red-500 text-slate-450 transition-all flex items-center justify-center font-bold text-xs shrink-0"
-                      title="Remove Item"
+                      className="w-8 h-8 rounded-lg border border-slate-200 hover:border-rose-200 hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-all flex items-center justify-center font-bold text-sm shrink-0 mt-6"
+                      title="Remove product"
                     >
                       ✕
                     </button>
                   )}
                 </div>
 
+                {/* BOTTOM ROW: Quantity | Rate (with tax) | Tax % | Basic Rate | Line Total */}
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3.5 pt-2 border-t border-slate-100 items-start">
+                  
+                  {/* Quantity Stepper */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 block">
+                      Quantity
+                    </label>
+                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-white focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/10 transition-all h-11">
+                      <button
+                        type="button"
+                        disabled={row.quantity <= 1 || !!preloadLoading}
+                        onClick={() => handleItemRowChange(row.id, 'quantity', Math.max(1, (parseInt(row.quantity, 10) || 1) - 1))}
+                        className="w-9 h-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 font-bold text-base disabled:opacity-30 disabled:cursor-not-allowed border-r border-slate-100 select-none transition-colors"
+                      >
+                        −
+                      </button>
+                      <input 
+                        id={`billing-qty-${row.id}`}
+                        type="number"
+                        min="1"
+                        value={row.quantity}
+                        onChange={(e) => handleItemRowChange(row.id, 'quantity', e.target.value)}
+                        placeholder="1"
+                        readOnly={!!preloadLoading}
+                        className="w-full h-full text-center font-bold text-slate-800 text-sm outline-none bg-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        required
+                      />
+                      <button
+                        type="button"
+                        disabled={!!preloadLoading}
+                        onClick={() => handleItemRowChange(row.id, 'quantity', (parseInt(row.quantity, 10) || 0) + 1)}
+                        className="w-9 h-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-50 font-bold text-base disabled:opacity-30 disabled:cursor-not-allowed border-l border-slate-100 select-none transition-colors"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Rate (with tax) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 block">
+                      Rate (with tax)
+                    </label>
+                    <input 
+                      type="number"
+                      step="0.01"
+                      value={row.rateWithTax}
+                      onChange={(e) => handleItemRowChange(row.id, 'rateWithTax', e.target.value)}
+                      placeholder="0.00"
+                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-800 font-bold focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all outline-none text-sm"
+                      required
+                    />
+                  </div>
+
+                  {/* Tax */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 block">
+                      Tax
+                    </label>
+                    <select
+                      value={row.taxPercent}
+                      onChange={(e) => handleItemRowChange(row.id, 'taxPercent', e.target.value)}
+                      className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-800 font-bold focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all outline-none text-sm cursor-pointer"
+                    >
+                      {TAX_OPTIONS.map(tax => (
+                        <option key={tax} value={tax}>{tax}%</option>
+                      ))}
+                    </select>
+                    <div className="text-[10px] font-semibold text-slate-400 text-center">
+                      {parseFloat(row.taxPercent) > 0 
+                        ? `${(parseFloat(row.taxPercent) / 2)}% + ${(parseFloat(row.taxPercent) / 2)}%`
+                        : '0%'}
+                    </div>
+                  </div>
+
+                  {/* Basic Rate (No Tax) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold text-slate-500 block">
+                      Basic rate
+                    </label>
+                    <input 
+                      type="text"
+                      value={`₹ ${row.basicRate.toFixed(2)}`}
+                      readOnly
+                      className="w-full h-11 px-3.5 bg-slate-50 text-slate-600 border border-slate-200 rounded-xl font-bold text-sm outline-none cursor-not-allowed"
+                    />
+                  </div>
+
+                  {/* Line Total */}
+                  <div className="space-y-1.5 col-span-2 sm:col-span-1">
+                    <label className="text-xs font-semibold text-slate-500 block">
+                      Line total
+                    </label>
+                    <div className="h-11 px-3.5 bg-emerald-50/60 border border-emerald-100 rounded-xl flex items-center justify-between">
+                      <span className="text-xs font-black text-emerald-700">Total</span>
+                      <span className="font-black text-emerald-750 text-base">
+                        ₹ {row.totalAmount.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                </div>
               </div>
             ))}
 
             {items.length === 0 && (
-              <div className="py-12 border border-dashed border-slate-250 rounded-2xl bg-slate-50/20 text-center text-slate-400 font-bold text-xs">
-                No items added. Click "+ Add Product" to log item billing lines.
+              <div className="py-12 border border-dashed border-slate-250 rounded-2xl bg-slate-50/30 text-center text-slate-400 font-bold text-xs space-y-2">
+                <div className="text-2xl">📦</div>
+                <p>No products added yet.</p>
+                <button
+                  type="button"
+                  onClick={handleAddProductRow}
+                  className="text-xs text-primary font-bold hover:underline"
+                >
+                  Click here to add your first product
+                </button>
               </div>
             )}
           </div>

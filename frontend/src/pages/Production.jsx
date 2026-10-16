@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 
 
 const SearchableRawMaterialDropdown = ({ selectedId, onChange, rawMaterials, ledgerStocks = {} }) => {
@@ -611,17 +612,22 @@ const Production = () => {
                   />
                 </div>
 
-                {/* Product */}
+                {/* Product with Quick Code */}
                 <div className="space-y-1.5">
                   <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                     Product *
                   </label>
-                  <SearchableSelect
-                    options={finishedProducts.map(fp => ({ value: fp.id, label: fp.name }))}
+                  <ProductSelectWithCode
+                    products={finishedProducts}
                     value={batchInfo.productId}
                     onChange={(val) => setBatchInfo(prev => ({ ...prev, productId: val }))}
+                    onNextFocus={() => {
+                      const boxesEl = document.getElementById('prod-boxes-input');
+                      boxesEl?.focus();
+                      boxesEl?.select?.();
+                    }}
                     placeholder="Select Product"
-                    searchPlaceholder="Search product..."
+                    searchPlaceholder="Search product or code..."
                   />
                 </div>
 
@@ -631,6 +637,7 @@ const Production = () => {
                     Production Boxes *
                   </label>
                   <input 
+                    id="prod-boxes-input"
                     type="number"
                     name="productionBoxes"
                     value={batchInfo.productionBoxes}

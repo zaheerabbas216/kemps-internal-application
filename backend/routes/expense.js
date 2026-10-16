@@ -253,7 +253,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/expenses/:id
-// Update expense
+// Update expense (admin can update any record regardless of approval status)
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -262,16 +262,6 @@ router.put('/:id', async (req, res) => {
     const [existing] = await pool.query('SELECT * FROM expenses WHERE id = ?', [id]);
     if (existing.length === 0) throw new Error('Expense record not found.');
     const expense = existing[0];
-
-    // Lock check
-    if (expense.approval_id) {
-      const [appRows] = await pool.query('SELECT status FROM payment_approvals WHERE approval_id = ?', [expense.approval_id]);
-      if (appRows.length > 0 && appRows[0].status !== 'Pending') {
-        throw new Error('This expense has already been approved and posted to accounts. Please create an adjustment or reversal entry.');
-      }
-    } else if (expense.payment_status !== 'Pending Approval') {
-      throw new Error('This expense has already been approved or rejected and cannot be modified.');
-    }
 
     const updates = [];
     const values = [];
@@ -365,7 +355,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/expenses/:id
-// Delete expense
+// Delete expense (admin can delete any record regardless of approval status)
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -374,17 +364,7 @@ router.delete('/:id', async (req, res) => {
     if (existing.length === 0) throw new Error('Expense record not found.');
     const expense = existing[0];
 
-    // Lock check
-    if (expense.approval_id) {
-      const [appRows] = await pool.query('SELECT status FROM payment_approvals WHERE approval_id = ?', [expense.approval_id]);
-      if (appRows.length > 0 && appRows[0].status !== 'Pending') {
-        throw new Error('This expense has already been approved or rejected and cannot be deleted.');
-      }
-    } else if (expense.payment_status !== 'Pending Approval') {
-      throw new Error('This expense has already been approved or rejected and cannot be deleted.');
-    }
-    
-    // Clean up associated payment approval if pending
+    // Clean up associated payment approval if it exists
     await pool.query(
       `DELETE FROM payment_approvals WHERE transaction_id = ? AND source_module = 'Expense' AND status = 'Pending'`,
       [id]
