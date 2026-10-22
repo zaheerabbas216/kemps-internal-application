@@ -20,8 +20,8 @@ const Layout = () => {
   const [avatarOpen, setAvatarOpen] = useState(false);
   const avatarRef = useRef(null);
 
-  const fullName = user.name || user.username || 'User';
-  const roleName = isSuperAdmin ? 'Superadmin' : (user.role_name || 'User');
+  const fullName = user?.name || user?.username || 'User';
+  const roleName = isSuperAdmin ? 'Superadmin' : (user?.role_name || 'User');
   const userInitials = fullName
     .split(' ')
     .map(w => w.charAt(0))

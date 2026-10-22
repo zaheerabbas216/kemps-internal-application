@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
@@ -75,6 +75,9 @@ const ProductMaster = () => {
   const [currentFpPage, setCurrentFpPage] = useState(1);
   const [fpPageLimit, setFpPageLimit] = useState(10);
   const [fpDensity, setFpDensity] = useState('medium');
+  const [nextFreeCode, setNextFreeCode] = useState('');
+  const [fpSortField, setFpSortField] = useState('name');
+  const [fpSortOrder, setFpSortOrder] = useState('asc');
 
   const [isFpCategoryModalOpen, setIsFpCategoryModalOpen] = useState(false);
   const [newFpCategoryName, setNewFpCategoryName] = useState('');
@@ -89,14 +92,16 @@ const ProductMaster = () => {
   const [editingFpProduct, setEditingFpProduct] = useState(null);
   const [fpEditFormData, setFpEditFormData] = useState({
     name: '',
-    categoryId: ''
+    categoryId: '',
+    code: ''
   });
   const [fpEditModalError, setFpEditModalError] = useState('');
   const [isSavingFpEdit, setIsSavingFpEdit] = useState(false);
 
   const [fpFormData, setFpFormData] = useState({
     name: '',
-    categoryId: ''
+    categoryId: '',
+    code: ''
   });
   const [fpFormError, setFpFormError] = useState('');
   const [fpFormSuccess, setFpFormSuccess] = useState('');
@@ -108,6 +113,7 @@ const ProductMaster = () => {
   useEffect(() => {
     fetchRmCategories();
     fetchFpCategories();
+    fetchNextFreeCode();
   }, []);
 
   useEffect(() => {
@@ -172,6 +178,26 @@ const ProductMaster = () => {
   };
 
   // --- FP Fetching ---
+  const fetchNextFreeCode = async () => {
+    try {
+      const res = await api.get('/finished-products/next-code');
+      if (res.data.ok) {
+        setNextFreeCode(res.data.nextCode || '');
+      }
+    } catch (err) {
+      console.error('Failed to fetch next free code:', err);
+    }
+  };
+
+  const toggleFpSort = (field) => {
+    if (fpSortField === field) {
+      setFpSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setFpSortField(field);
+      setFpSortOrder('asc');
+    }
+  };
+
   const fetchFpCategories = async () => {
     try {
       const res = await api.get('/finished-products/categories');
@@ -204,6 +230,29 @@ const ProductMaster = () => {
       setLoadingFp(false);
     }
   };
+
+  const sortedFinishedProducts = useMemo(() => {
+    if (!finishedProducts || finishedProducts.length === 0) return [];
+    const list = [...finishedProducts];
+    list.sort((a, b) => {
+      const aVal = a[fpSortField] ?? '';
+      const bVal = b[fpSortField] ?? '';
+      if (fpSortField === 'code') {
+        const aNum = Number(aVal);
+        const bNum = Number(bVal);
+        if (!isNaN(aNum) && !isNaN(bNum) && aVal !== '' && bVal !== '') {
+          return fpSortOrder === 'asc' ? aNum - bNum : bNum - aNum;
+        }
+        return fpSortOrder === 'asc'
+          ? String(aVal).localeCompare(String(bVal))
+          : String(bVal).localeCompare(String(aVal));
+      }
+      return fpSortOrder === 'asc'
+        ? String(aVal).localeCompare(String(bVal))
+        : String(bVal).localeCompare(String(aVal));
+    });
+    return list;
+  }, [finishedProducts, fpSortField, fpSortOrder]);
 
   // ==========================================
   // RM HANDLERS
@@ -459,15 +508,18 @@ const ProductMaster = () => {
 
     setIsAddingFp(true);
     try {
+      const codeTrimmed = fpFormData.code ? fpFormData.code.trim().toUpperCase() : null;
       const res = await api.post('/finished-products', {
-        name: fpFormData.name,
-        categoryId: fpFormData.categoryId || null
+        name: fpFormData.name.trim(),
+        categoryId: fpFormData.categoryId || null,
+        code: codeTrimmed || null
       });
 
       if (res.data.ok) {
         setFpFormSuccess('Finished product added successfully!');
-        setFpFormData(prev => ({ ...prev, name: '' }));
+        setFpFormData(prev => ({ ...prev, name: '', code: '' }));
         fetchFinishedProducts();
+        fetchNextFreeCode();
         setTimeout(() => setFpFormSuccess(''), 2000);
       } else {
         setFpFormError(res.data.error || 'Failed to add finished product.');
@@ -518,7 +570,8 @@ const ProductMaster = () => {
     setEditingFpProduct(item);
     setFpEditFormData({
       name: item.name || '',
-      categoryId: item.category_id ? String(item.category_id) : ''
+      categoryId: item.category_id ? String(item.category_id) : '',
+      code: item.code || ''
     });
     setFpEditModalError('');
     setIsFpEditModalOpen(true);
@@ -535,15 +588,18 @@ const ProductMaster = () => {
 
     setIsSavingFpEdit(true);
     try {
+      const codeTrimmed = fpEditFormData.code ? fpEditFormData.code.trim().toUpperCase() : null;
       const res = await api.put(`/finished-products/${editingFpProduct.id}`, {
         name: fpEditFormData.name.trim(),
-        categoryId: fpEditFormData.categoryId || null
+        categoryId: fpEditFormData.categoryId || null,
+        code: codeTrimmed !== undefined ? codeTrimmed : null
       });
 
       if (res.data.ok) {
         setIsFpEditModalOpen(false);
         setEditingFpProduct(null);
         fetchFinishedProducts();
+        fetchNextFreeCode();
       } else {
         setFpEditModalError(res.data.error || 'Failed to update finished product.');
       }
@@ -666,6 +722,33 @@ const ProductMaster = () => {
             
             <form onSubmit={handleAddFpProduct} className="flex flex-wrap items-center gap-4">
               
+              {/* Product Code Input */}
+              <div className="w-36 sm:w-44 relative">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs font-black pointer-events-none select-none">
+                    #
+                  </span>
+                  <input
+                    type="text"
+                    name="code"
+                    value={fpFormData.code}
+                    onChange={(e) => setFpFormData(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    placeholder="Code (opt)"
+                    className="w-full h-11 pl-7 pr-3 rounded-xl border border-slate-200 bg-white text-slate-800 placeholder-slate-400 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none text-sm font-mono font-bold uppercase tracking-wider"
+                    title="Short quick code e.g. 1, 2, CAN (optional)"
+                  />
+                </div>
+                {nextFreeCode && !fpFormData.code && (
+                  <span 
+                    onClick={() => setFpFormData(prev => ({ ...prev, code: nextFreeCode }))}
+                    className="absolute -bottom-4 left-1 text-[10px] text-emerald-600 font-bold cursor-pointer hover:underline whitespace-nowrap"
+                    title="Click to apply next free code"
+                  >
+                    Next suggested: #{nextFreeCode}
+                  </span>
+                )}
+              </div>
+
               {/* Product Name Input */}
               <div className="flex-1 min-w-[250px]">
                 <input
@@ -679,7 +762,7 @@ const ProductMaster = () => {
               </div>
 
               {/* Category Dropdown with modal trigger */}
-              <div className="flex-1 min-w-[250px]">
+              <div className="flex-1 min-w-[220px]">
                 <select
                   name="categoryId"
                   value={fpFormData.categoryId}
@@ -745,7 +828,28 @@ const ProductMaster = () => {
               <table className="table table-zebra w-full overflow-hidden">
                 <thead className="bg-[#0b1324] text-white border-b border-slate-100">
                   <tr className="text-slate-300 text-[11px] font-black uppercase tracking-wider">
-                    <th className={`${getDensityClass(fpDensity, true)} text-left`}>Product Name</th>
+                    <th 
+                      onClick={() => toggleFpSort('code')}
+                      className={`${getDensityClass(fpDensity, true)} text-left cursor-pointer hover:text-white select-none w-28`}
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Code</span>
+                        {fpSortField === 'code' && (
+                          <span className="text-xs text-primary">{fpSortOrder === 'asc' ? '▲' : '▼'}</span>
+                        )}
+                      </div>
+                    </th>
+                    <th 
+                      onClick={() => toggleFpSort('name')}
+                      className={`${getDensityClass(fpDensity, true)} text-left cursor-pointer hover:text-white select-none`}
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Product Name</span>
+                        {fpSortField === 'name' && (
+                          <span className="text-xs text-primary">{fpSortOrder === 'asc' ? '▲' : '▼'}</span>
+                        )}
+                      </div>
+                    </th>
                     <th className={`${getDensityClass(fpDensity, true)} text-left`}>Category</th>
                     <th className={`${getDensityClass(fpDensity, true)} text-left`}>Status</th>
                     <th className={`${getDensityClass(fpDensity, true)} text-center`}>Actions</th>
@@ -754,22 +858,31 @@ const ProductMaster = () => {
                 <tbody className="divide-y divide-slate-50">
                   {loadingFp ? (
                     <tr>
-                      <td colSpan="4" className="py-20 text-center">
+                      <td colSpan="5" className="py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
                            <span className="loading loading-spinner text-primary"></span>
                            <span className="text-slate-400 text-sm font-medium">Fetching products...</span>
                         </div>
                       </td>
                     </tr>
-                  ) : finishedProducts.length === 0 ? (
+                  ) : sortedFinishedProducts.length === 0 ? (
                     <tr>
-                      <td colSpan="4" className="py-20 text-center text-slate-400 font-medium italic">
+                      <td colSpan="5" className="py-20 text-center text-slate-400 font-medium italic">
                         {searchFpQuery ? 'No products found matching your search.' : 'No products added yet.'}
                       </td>
                     </tr>
                   ) : (
-                    finishedProducts.map((item) => (
+                    sortedFinishedProducts.map((item) => (
                       <tr key={item.id} className="hover:bg-blue-50/30 transition-colors group">
+                        <td className={`${getDensityClass(fpDensity)} font-black text-slate-800`}>
+                          {item.code ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 font-mono text-xs font-bold border border-slate-200">
+                              #{item.code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-mono text-xs">—</span>
+                          )}
+                        </td>
                         <td className={`${getDensityClass(fpDensity)} font-bold text-slate-700`}>{item.name}</td>
                         <td className={`${getDensityClass(fpDensity)}`}>
                           {item.category_name ? (
@@ -1548,6 +1661,33 @@ const ProductMaster = () => {
             </div>
 
             <form onSubmit={handleSaveFpEdit} className="space-y-4">
+              {/* Product Code */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">
+                    Product Code (Quick Code)
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Optional • Unique</span>
+                </div>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono font-bold text-xs select-none">
+                    #
+                  </span>
+                  <input
+                    type="text"
+                    value={fpEditFormData.code || ''}
+                    onChange={(e) => setFpEditFormData(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+                    placeholder="e.g. 1, 2, 10"
+                    className="w-full h-11 pl-8 pr-4 rounded-xl border border-slate-200 bg-white text-slate-800 font-mono text-sm font-bold focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all duration-200 outline-none"
+                  />
+                </div>
+                {editingFpProduct?.code && fpEditFormData.code !== editingFpProduct.code && (
+                  <p className="text-[11px] text-amber-600 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200/60 font-medium">
+                    ⚠️ Changing code from <strong>#{editingFpProduct.code}</strong> to <strong>#{fpEditFormData.code || '(blank)'}</strong>. Existing records will remain linked to this product.
+                  </p>
+                )}
+              </div>
+
               {/* Product Name */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-slate-500 block uppercase tracking-wider">

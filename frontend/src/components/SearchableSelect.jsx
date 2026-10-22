@@ -36,12 +36,25 @@ const SearchableSelect = ({
   const selectedOption = options.find(opt => String(opt.value) === String(value));
   const displayLabel = selectedOption ? selectedOption.label : placeholder;
 
-  // Filter options based on search
+  // Filter options based on search (with code matching and prioritizing exact code match)
   const filtered = search.trim()
-    ? options.filter(opt =>
-        String(opt.label || opt.rawName || '').toLowerCase().includes(search.trim().toLowerCase()) ||
-        (opt.badge && String(opt.badge).toLowerCase().includes(search.trim().toLowerCase()))
-      )
+    ? (() => {
+        const query = search.trim().toLowerCase();
+        const matches = options.filter(opt =>
+          String(opt.label || opt.rawName || '').toLowerCase().includes(query) ||
+          (opt.code && String(opt.code).toLowerCase() === query) ||
+          (opt.code && String(opt.code).toLowerCase().includes(query)) ||
+          (opt.badge && String(opt.badge).toLowerCase().includes(query))
+        );
+        matches.sort((a, b) => {
+          const aExact = a.code && String(a.code).toLowerCase() === query;
+          const bExact = b.code && String(b.code).toLowerCase() === query;
+          if (aExact && !bExact) return -1;
+          if (!aExact && bExact) return 1;
+          return 0;
+        });
+        return matches;
+      })()
     : options;
 
   // Open dropdown and focus search input

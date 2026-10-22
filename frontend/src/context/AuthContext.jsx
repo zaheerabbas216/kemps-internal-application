@@ -37,12 +37,20 @@ function readAuth() {
     ? tokenClaims.isSuperAdmin
     : storedSuperAdmin;
   localStorage.setItem(KEYS.isSuperAdmin, String(isSuperAdmin));
+
   let permissions = {};
   try {
-    permissions = JSON.parse(localStorage.getItem(KEYS.permissions) || '{}');
+    const rawPerms = localStorage.getItem(KEYS.permissions);
+    if (rawPerms && rawPerms !== 'null' && rawPerms !== 'undefined') {
+      const parsed = JSON.parse(rawPerms);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        permissions = parsed;
+      }
+    }
   } catch {
     permissions = {};
   }
+
   return {
     user: {
       username:    localStorage.getItem(KEYS.username) || '',
@@ -52,7 +60,7 @@ function readAuth() {
       isSuperAdmin,
     },
     isSuperAdmin,
-    permissions, // { [module]: { read, create, update, delete } }
+    permissions: (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) ? permissions : {},
   };
 }
 
@@ -176,14 +184,17 @@ export function AuthProvider({ children }) {
 
   // Called on successful login
   const login = useCallback((userData, permissions) => {
+    const safePerms = (permissions && typeof permissions === 'object' && !Array.isArray(permissions))
+      ? permissions
+      : {};
     localStorage.setItem(KEYS.loggedIn,     'true');
-    localStorage.setItem(KEYS.username,     userData.username   || '');
-    localStorage.setItem(KEYS.name,         userData.name       || '');
-    localStorage.setItem(KEYS.token,        userData.token      || '');
-    localStorage.setItem(KEYS.roleId,       userData.role_id    ?? '');
-    localStorage.setItem(KEYS.roleName,     userData.role_name  || '');
-    localStorage.setItem(KEYS.isSuperAdmin, String(!!userData.isSuperAdmin));
-    localStorage.setItem(KEYS.permissions,  JSON.stringify(permissions || {}));
+    localStorage.setItem(KEYS.username,     userData?.username   || '');
+    localStorage.setItem(KEYS.name,         userData?.name       || '');
+    localStorage.setItem(KEYS.token,        userData?.token      || '');
+    localStorage.setItem(KEYS.roleId,       userData?.role_id    ?? '');
+    localStorage.setItem(KEYS.roleName,     userData?.role_name  || '');
+    localStorage.setItem(KEYS.isSuperAdmin, String(!!userData?.isSuperAdmin));
+    localStorage.setItem(KEYS.permissions,  JSON.stringify(safePerms));
     setAuthState(readAuth());
     window.dispatchEvent(new Event('kemps_auth_change'));
   }, []);
@@ -199,12 +210,15 @@ export function AuthProvider({ children }) {
   // ── Permission helpers ──
   // Superadmin bypasses ALL checks
   const checkPerm = useCallback((module, action) => {
-    if (authState.isSuperAdmin) return true;
-    if (authState.permissions[module]?.[action]) return true;
+    if (!module) return false;
+    if (authState?.isSuperAdmin) return true;
+    const perms = authState?.permissions;
+    if (!perms || typeof perms !== 'object') return false;
+    if (perms[module]?.[action]) return true;
     const parent = MODULE_PARENT_MAP[module];
-    if (parent && authState.permissions[parent]?.[action]) return true;
+    if (parent && perms[parent]?.[action]) return true;
     const children = PARENT_CHILDREN_MAP[module];
-    if (children && children.some(c => authState.permissions[c]?.[action])) return true;
+    if (children && children.some(c => perms[c]?.[action])) return true;
     return false;
   }, [authState]);
 
@@ -216,9 +230,11 @@ export function AuthProvider({ children }) {
   const getFirstPermittedPath = useCallback((customPerms = null, customIsSuperAdmin = null) => {
     const isLoggedIn = localStorage.getItem(KEYS.loggedIn) === 'true';
     if (!isLoggedIn) return '/login';
-    const isSuper = customIsSuperAdmin !== null ? customIsSuperAdmin : authState.isSuperAdmin;
+    const isSuper = customIsSuperAdmin !== null ? customIsSuperAdmin : authState?.isSuperAdmin;
     if (isSuper) return '/dashboard';
-    const perms = customPerms || authState.permissions || {};
+    const perms = (customPerms && typeof customPerms === 'object' && !Array.isArray(customPerms))
+      ? customPerms
+      : ((authState?.permissions && typeof authState.permissions === 'object' && !Array.isArray(authState.permissions)) ? authState.permissions : {});
     for (const item of ROUTE_MODULE_MAP) {
       if (perms[item.module]?.read) return item.path;
       const parent = MODULE_PARENT_MAP[item.module];
@@ -227,7 +243,7 @@ export function AuthProvider({ children }) {
       if (children && children.some(c => perms[c]?.read)) return item.path;
     }
     return '/access-denied';
-  }, [authState.isSuperAdmin, authState.permissions]);
+  }, [authState?.isSuperAdmin, authState?.permissions]);
 
   const value = {
     user:        authState.user,

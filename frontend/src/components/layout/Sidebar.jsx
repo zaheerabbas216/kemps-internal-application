@@ -21,7 +21,7 @@ const navGroups = [
     items: [
       { name: 'Billing',                    path: '/billing',          module: 'billing' },
       { name: 'Credit Balance',             path: '/credit-balance',   module: 'credit-balance' },
-      { name: 'Order Management',           path: '/orders',           module: 'orders' },
+      { name: 'Function Order',             path: '/orders',           module: 'orders' },
       { name: 'Order Details',              path: '/order-details',    module: 'order-details' },
       { name: 'Total Sales',                path: '/total-sales',      module: 'total-sales' },
       { name: 'Sales Return / Credit Note', path: '/sales-return',     module: 'sales-return' },
@@ -322,8 +322,8 @@ const Sidebar = ({ onClose, isCollapsed, onToggleCollapse }) => {
   const navigate = useNavigate();
   const { user, isSuperAdmin, canRead, getFirstPermittedPath } = useAuth();
 
-  const fullName = user.name || user.username || 'User';
-  const roleName = isSuperAdmin ? 'Superadmin' : (user.role_name || 'User');
+  const fullName = user?.name || user?.username || 'User';
+  const roleName = isSuperAdmin ? 'Superadmin' : (user?.role_name || 'User');
   const userInitials = fullName
     .split(' ')
     .map(word => word.charAt(0))
@@ -339,11 +339,11 @@ const Sidebar = ({ onClose, isCollapsed, onToggleCollapse }) => {
   const rawFiltered = navGroups.filter(item => {
     if (item.adminOnly) return isSuperAdmin;
     if (item.type === 'button') {
-      return isSuperAdmin || canRead(item.module);
+      return isSuperAdmin || (item.module ? canRead(item.module) : true);
     }
     if (item.type === 'group') {
       const visibleChildren = item.items.filter(sub =>
-        sub.module === null || isSuperAdmin || canRead(sub.module)
+        sub.module === null || isSuperAdmin || (sub.module ? canRead(sub.module) : true)
       );
       return visibleChildren.length > 0;
     }

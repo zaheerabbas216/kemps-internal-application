@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import TablePagination from '../components/common/TablePagination';
 import { useAuth } from '../context/AuthContext';
 
@@ -1273,28 +1274,20 @@ const Loading = () => {
                           </span>
                         )}
                       </div>
-                      <SearchableSelect
-                        options={finishedProducts.map(fp => {
-                          const stockVal = goodsLedgerStock[fp.id];
-                          const hasStock = stockVal !== undefined;
-                          return {
-                            value: fp.id,
-                            label: `${fp.name}${hasStock ? ` (${stockVal} in stock)` : ''}`,
-                            rawName: fp.name,
-                            stock: hasStock ? stockVal : null,
-                            badge: hasStock ? `${stockVal} in stock` : null,
-                            badgeClassName: (stockVal > 0)
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : (stockVal === 0 
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200' 
-                                  : 'bg-rose-50 text-rose-600 border border-rose-200')
-                          };
-                        })}
+                      <ProductSelectWithCode
+                        products={finishedProducts}
                         value={row.finishedProductId}
+                        stockMap={goodsLedgerStock}
                         onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                        onNextFocus={() => {
+                          const nextEl = document.getElementById(`loading-qty-${row.id}`);
+                          if (nextEl) {
+                            nextEl.focus();
+                            nextEl.select();
+                          }
+                        }}
                         placeholder="-- Select Product --"
-                        searchPlaceholder="Type product name or stock..."
-                        className="!h-11 font-semibold text-slate-750"
+                        searchPlaceholder="Search product or code..."
                       />
                     </div>
 
@@ -1304,6 +1297,7 @@ const Loading = () => {
                         Qty (Boxes)
                       </label>
                       <input 
+                        id={`loading-qty-${row.id}`}
                         type="number"
                         min="0"
                         value={row.quantity}
@@ -2038,10 +2032,14 @@ const Loading = () => {
       {/* RENDER MODALS USING PORTALS */}
       {isSessionModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div 
+            className="modal-box w-11/12 max-w-6xl !max-w-6xl bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 relative shadow-2xl z-10 max-h-[92vh] overflow-y-auto"
+            style={{ maxWidth: '1280px', width: '95vw' }}
+          >
             <button 
               onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}
-              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
+              className="absolute top-5 right-5 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-all cursor-pointer z-20"
+              title="Close modal"
             >
               ✕
             </button>
@@ -2051,249 +2049,348 @@ const Loading = () => {
                 <span className="loading loading-spinner text-primary"></span>
                 <p className="text-slate-400 mt-2 text-xs font-bold uppercase tracking-wider">Loading detailed sheet...</p>
               </div>
-            ) : sessionDetail ? (
-              <div className="space-y-6">
-                
-                {/* Modal Header */}
-                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
-                  <div>
-                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">
-                      Loading Sheet: {sessionDetail.session.id}
-                    </h3>
-                    <p className="text-slate-500 text-xs font-bold mt-0.5">
-                      Session Date: {formatDateDDMMYYYY(sessionDetail.session.loading_date)} | Godown(s): <span className="font-extrabold text-primary">{[...new Set(sessionDetail.trips.map(t => t.godown))].join(', ')}</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    {sessionDetail.session.status === 'BILLED' ? (
-                      <div className="space-y-1">
-                        <span className="px-3 py-1 rounded bg-blue-50 border border-blue-100 text-blue-600 text-xs font-extrabold uppercase">
-                          BILLED
-                        </span>
-                        <div className="text-[11px] font-bold text-slate-450 mt-1">Invoice: <span className="font-mono text-primary font-black">{sessionDetail.session.bill_id}</span></div>
-                      </div>
-                    ) : sessionDetail.session.status === 'COMPLETED' ? (
-                      <span className="px-3 py-1 rounded bg-slate-100 border border-slate-200 text-slate-600 text-xs font-extrabold uppercase">
-                        COMPLETED
-                      </span>
-                    ) : (
-                      <span className="px-3 py-1 rounded bg-emerald-50 border border-emerald-100 text-emerald-600 text-xs font-extrabold uppercase">
-                        ACTIVE
-                      </span>
-                    )}
-                  </div>
-                </div>
+            ) : sessionDetail ? (() => {
+              const totalLoadedSum = (sessionDetail.consolidatedItems || []).reduce((acc, item) => acc + (Number(item.quantity) || 0), 0);
+              const totalReturnedSum = (sessionDetail.consolidatedItems || []).reduce((acc, item) => acc + (Number(item.returnQty) || 0), 0);
+              const totalNetLoadingSum = (sessionDetail.consolidatedItems || []).reduce((acc, item) => acc + (Number(item.netLoadingQty) || 0), 0);
+              const totalTripsCount = (sessionDetail.trips || []).length;
+              const godownsList = [...new Set((sessionDetail.trips || []).map(t => t.godown))].filter(Boolean).join(', ') || '—';
 
-                {/* Customer Details info box */}
-                <div className="bg-slate-50 border border-slate-150/60 p-4 rounded-2xl grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-655">
-                  <div>
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Customer Info</div>
-                    <div className="text-slate-800 font-extrabold text-sm mt-1">{sessionDetail.session.customer_name}</div>
-                    <div className="mt-0.5">Phone: {sessionDetail.session.customer_phone}</div>
-                    {sessionDetail.session.customer_address && <div className="mt-1">Address: {sessionDetail.session.customer_address}</div>}
-                  </div>
-                  <div>
-                    <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider">Session Details</div>
-                    <div className="mt-1">Created At: {new Date(sessionDetail.session.created_at).toLocaleString()}</div>
-                    {sessionDetail.session.customer_gstin && <div className="mt-0.5">GSTIN: {sessionDetail.session.customer_gstin}</div>}
-                  </div>
-                </div>
-
-                {/* Grid: Consolidated Left, Trips Right */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              return (
+                <div className="space-y-6">
                   
-                  {/* Consolidated quantities */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                      📊 Consolidated Loading Total
-                    </h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Product Name</th>
-                            <th className="py-2.5 px-3 text-center">Total Qty</th>
-                            <th className="py-2.5 px-3 text-center">Return</th>
-                            <th className="py-2.5 px-3 text-right">Net Loading</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
-                          {sessionDetail.consolidatedItems.map((item, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/20">
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{item.productName}</td>
-                              <td className="py-2.5 px-3 text-center text-slate-500">{item.quantity}</td>
-                              <td className="py-2.5 px-3 text-center text-rose-500">{item.returnQty}</td>
-                              <td className="py-2.5 px-3 text-right text-primary font-black">{item.netLoadingQty}</td>
-                            </tr>
-                          ))}
-                          {sessionDetail.consolidatedItems.length === 0 && (
-                            <tr>
-                              <td colSpan="4" className="py-6 text-center text-slate-400 italic">No products loaded</td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
+                  {/* Modal Header */}
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3 pr-10">
+                    <div>
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                          Loading Sheet: {sessionDetail.session.id}
+                        </h3>
+                        {sessionDetail.session.status === 'BILLED' ? (
+                          <span className="px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-blue-700 text-xs font-bold uppercase">
+                            BILLED
+                          </span>
+                        ) : sessionDetail.session.status === 'COMPLETED' ? (
+                          <span className="px-3 py-1 rounded-full bg-slate-100 border border-slate-300 text-slate-700 text-xs font-bold uppercase">
+                            COMPLETED
+                          </span>
+                        ) : (
+                          <span className="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-xs font-bold uppercase">
+                            ACTIVE
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-500 text-xs font-medium mt-1">
+                        Session Date: <span className="font-semibold text-slate-800">{formatDateDDMMYYYY(sessionDetail.session.loading_date)}</span> | Godown(s): <span className="font-semibold text-[#135846]">{godownsList}</span>
+                        {sessionDetail.session.bill_id && (
+                          <span className="ml-3">Invoice: <span className="font-mono font-bold text-primary">{sessionDetail.session.bill_id}</span></span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
-                  {/* Individual Trips */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                      ⏱ Individual Trip Logs
-                    </h4>
-                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                      {sessionDetail.trips.map((trip, idx) => (
-                        <div key={trip.id} className="border border-slate-200/80 rounded-xl p-3.5 space-y-2 bg-slate-50/20 hover:bg-slate-50/50 transition-colors">
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <span className="bg-indigo-50 border border-indigo-100 text-indigo-600 rounded px-2 py-0.5 text-[10px] font-black uppercase">
-                                Trip #{trip.tripNumber}
-                              </span>
-                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${trip.godown === 'KI' ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-amber-50 border-amber-100 text-amber-600'}`}>
-                                {trip.godown}
-                              </span>
-                            </div>
-                            <span className="text-[10px] font-semibold text-slate-400">
-                              {new Date(trip.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
+                  {/* Customer Info & Summary Stats Box */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    {/* Customer Info Card */}
+                    <div className="md:col-span-2 bg-slate-50/80 border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-between">
+                      <div>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Info</span>
+                        <div className="text-slate-900 font-bold text-base mt-0.5">{sessionDetail.session.customer_name}</div>
+                        <div className="text-xs text-slate-600 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                          {sessionDetail.session.customer_phone && <span>📞 {sessionDetail.session.customer_phone}</span>}
+                          {sessionDetail.session.customer_gstin && <span>🏛️ GSTIN: {sessionDetail.session.customer_gstin}</span>}
+                        </div>
+                        {sessionDetail.session.customer_address && (
+                          <div className="text-xs text-slate-500 mt-1">📍 {sessionDetail.session.customer_address}</div>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-2 pt-2 border-t border-slate-200/60">
+                        Created At: {new Date(sessionDetail.session.created_at).toLocaleString('en-GB')}
+                      </div>
+                    </div>
 
-                          <div className="text-[11px] text-slate-605 space-y-1">
-                            {trip.items && trip.items.map((ti, tiIdx) => (
-                              <div key={tiIdx} className="flex justify-between font-bold">
-                                <span>{ti.productName}</span>
-                                <span className="font-extrabold text-slate-700">
-                                  {ti.quantity < 0 ? (
-                                    <span className="text-rose-500">{Math.abs(ti.quantity)} returned</span>
-                                  ) : (
-                                    <>{ti.quantity} loaded {ti.returnQty > 0 && <span className="text-rose-500">(-{ti.returnQty} ret)</span>}</>
-                                  )}
+                    {/* Summary Stats: Net Loaded Qty */}
+                    <div className="bg-[#eaf7f2] border border-[#d1ede2] p-4 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-[#135846] uppercase tracking-wider">Net Loading Qty</span>
+                      <div className="text-3xl font-extrabold text-[#059669] my-1">
+                        {totalNetLoadingSum}
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-medium">
+                        Loaded: {totalLoadedSum} · Returns: {totalReturnedSum}
+                      </p>
+                    </div>
+
+                    {/* Summary Stats: Total Trips */}
+                    <div className="bg-indigo-50/60 border border-indigo-200/80 p-4 rounded-2xl flex flex-col justify-between">
+                      <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider">Total Trips</span>
+                      <div className="text-3xl font-extrabold text-indigo-700 my-1">
+                        {totalTripsCount}
+                      </div>
+                      <p className="text-[11px] text-indigo-600 font-medium truncate" title={godownsList}>
+                        Godown: {godownsList}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Grid: Consolidated Left, Trips Right */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    
+                    {/* Left Column (7 cols): Consolidated Loading Total */}
+                    <div className="lg:col-span-7 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                          <span>📊</span> Consolidated Loading Total
+                        </h4>
+                        <span className="text-xs font-semibold text-slate-400">
+                          {sessionDetail.consolidatedItems.length} Products
+                        </span>
+                      </div>
+                      <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left border-collapse text-xs">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
+                                <th className="py-3 px-4">Product Name</th>
+                                <th className="py-3 px-3 text-center">Total Loaded</th>
+                                <th className="py-3 px-3 text-center">Returned Qty</th>
+                                <th className="py-3 px-4 text-right">Net Loading Qty</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-slate-700">
+                              {sessionDetail.consolidatedItems.map((item, idx) => (
+                                <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="py-3 px-4 text-slate-900 font-bold text-sm">
+                                    {item.productName}
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-bold text-slate-700 text-sm">
+                                    <span className="px-2.5 py-1 bg-slate-100 rounded-lg">
+                                      {item.quantity}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-3 text-center font-bold text-rose-600 text-sm">
+                                    {item.returnQty > 0 ? (
+                                      <span className="px-2.5 py-1 bg-rose-50 border border-rose-100 rounded-lg text-rose-600 font-extrabold">
+                                        −{item.returnQty}
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">0</span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-4 text-right font-extrabold text-[#135846] text-base">
+                                    {item.netLoadingQty}
+                                  </td>
+                                </tr>
+                              ))}
+                              {sessionDetail.consolidatedItems.length === 0 && (
+                                <tr>
+                                  <td colSpan="4" className="py-10 text-center text-slate-400 italic">
+                                    No products loaded for this session
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                            {sessionDetail.consolidatedItems.length > 0 && (
+                              <tfoot>
+                                <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900 text-xs">
+                                  <td className="py-3 px-4 uppercase tracking-wider">Total</td>
+                                  <td className="py-3 px-3 text-center text-sm font-extrabold">{totalLoadedSum}</td>
+                                  <td className="py-3 px-3 text-center text-sm text-rose-600 font-extrabold">
+                                    {totalReturnedSum > 0 ? `−${totalReturnedSum}` : '0'}
+                                  </td>
+                                  <td className="py-3 px-4 text-right text-base text-[#135846] font-extrabold">{totalNetLoadingSum}</td>
+                                </tr>
+                              </tfoot>
+                            )}
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Column (5 cols): Individual Trip Logs */}
+                    <div className="lg:col-span-5 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                          <span>⏱️</span> Individual Trip Logs
+                        </h4>
+                        <span className="text-xs font-semibold text-slate-400">
+                          {sessionDetail.trips.length} Trips
+                        </span>
+                      </div>
+                      <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                        {sessionDetail.trips.map((trip) => (
+                          <div key={trip.id} className="border border-slate-200 rounded-2xl p-4 bg-slate-50/40 hover:bg-slate-50 transition-colors space-y-2.5">
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <span className="bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-lg px-2.5 py-0.5 text-xs font-bold">
+                                  Trip #{trip.tripNumber}
+                                </span>
+                                <span className={`px-2 py-0.5 rounded-lg text-xs font-bold border ${
+                                  trip.godown === 'KI' 
+                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700' 
+                                    : 'bg-amber-50 border-amber-200 text-amber-700'
+                                }`}>
+                                  {trip.godown}
                                 </span>
                               </div>
-                            ))}
+                              <span className="text-xs font-medium text-slate-400">
+                                {new Date(trip.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+
+                            <div className="text-xs text-slate-700 divide-y divide-slate-100">
+                              {trip.items && trip.items.map((ti, tiIdx) => (
+                                <div key={tiIdx} className="flex justify-between items-center py-1.5 font-medium">
+                                  <span className="text-slate-800 font-semibold">{ti.productName}</span>
+                                  <span className="font-bold text-slate-800">
+                                    {ti.quantity < 0 ? (
+                                      <span className="text-rose-600 font-bold px-2 py-0.5 bg-rose-50 rounded">{Math.abs(ti.quantity)} returned</span>
+                                    ) : (
+                                      <span>
+                                        <span className="text-slate-900">{ti.quantity} loaded</span>
+                                        {ti.returnQty > 0 && <span className="text-rose-500 ml-1 font-semibold">(-{ti.returnQty} ret)</span>}
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+
+                            {trip.remarks && (
+                              <div className="text-xs bg-white border border-slate-200 rounded-xl px-3 py-1.5 italic text-slate-600 font-medium">
+                                Note: {trip.remarks}
+                              </div>
+                            )}
+
+                            {!trip.remarks?.startsWith('Active Return') && (
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleTriggerPrint(trip.id)}
+                                  className="px-3 py-1.5 rounded-xl bg-white hover:bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-xs"
+                                >
+                                  🖨️ Print POS Slip
+                                </button>
+                              </div>
+                            )}
                           </div>
-
-                          {trip.remarks && (
-                            <div className="text-[10px] bg-white border border-slate-100 rounded px-2 py-1.5 italic text-slate-500 font-medium">
-                              Note: {trip.remarks}
-                            </div>
-                          )}
-
-                          {!trip.remarks?.startsWith('Active Return') && (
-                            <div className="flex justify-end pt-1">
-                              <button
-                                onClick={() => handleTriggerPrint(trip.id)}
-                                className="px-2 py-1 rounded bg-white hover:bg-indigo-50 border border-indigo-150 text-indigo-600 font-extrabold text-[10px] transition-all flex items-center gap-1"
-                              >
-                                🖨 Print POS Slip
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
+
                   </div>
 
-                </div>
-
-                {/* Active Loading Returns History (Audit Trail) */}
-                {sessionDetail.returns && sessionDetail.returns.length > 0 && (
-                  <div className="space-y-3 mt-6 border-t border-slate-100 pt-6">
-                    <h4 className="text-xs font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-100 pb-1.5">
-                      🔄 Active Loading Returns (Audit Trail)
-                    </h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white max-h-48 overflow-y-auto">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Date & Time</th>
-                            <th className="py-2.5 px-3">Product Name</th>
-                            <th className="py-2.5 px-3 text-center">Returned Qty</th>
-                            <th className="py-2.5 px-3">Reason</th>
-                            <th className="py-2.5 px-3 text-right">User Name</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
-                          {sessionDetail.returns.map((ret, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50/30 transition-colors">
-                              <td className="py-2.5 px-3 text-slate-500">
-                                {new Date(ret.createdAt).toLocaleString()}
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{ret.productName}</td>
-                              <td className="py-2.5 px-3 text-center text-rose-600 font-black">{ret.quantity}</td>
-                              <td className="py-2.5 px-3 text-slate-650 font-semibold">{ret.reason}</td>
-                              <td className="py-2.5 px-3 text-right text-slate-500">{ret.userName}</td>
+                  {/* Active Loading Returns History (Audit Trail) */}
+                  {sessionDetail.returns && sessionDetail.returns.length > 0 && (
+                    <div className="space-y-3 mt-4 border-t border-slate-100 pt-5">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                        <h4 className="text-xs font-bold text-rose-600 uppercase tracking-wider flex items-center gap-2">
+                          <span>🔄</span> Active Loading Returns (Audit Trail)
+                        </h4>
+                        <span className="text-xs font-semibold text-rose-500 bg-rose-50 px-2 py-0.5 rounded-full border border-rose-100">
+                          {sessionDetail.returns.length} Return Entries
+                        </span>
+                      </div>
+                      <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs max-h-52 overflow-y-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                              <th className="py-2.5 px-3.5">Date & Time</th>
+                              <th className="py-2.5 px-3.5">Product Name</th>
+                              <th className="py-2.5 px-3.5 text-center">Returned Qty</th>
+                              <th className="py-2.5 px-3.5">Reason</th>
+                              <th className="py-2.5 px-3.5 text-right">User Name</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                            {sessionDetail.returns.map((ret, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="py-2.5 px-3.5 text-slate-500 whitespace-nowrap">
+                                  {new Date(ret.createdAt).toLocaleString('en-GB')}
+                                </td>
+                                <td className="py-2.5 px-3.5 text-slate-900 font-bold">{ret.productName}</td>
+                                <td className="py-2.5 px-3.5 text-center text-rose-600 font-extrabold">{ret.quantity}</td>
+                                <td className="py-2.5 px-3.5 text-slate-600 font-medium">{ret.reason}</td>
+                                <td className="py-2.5 px-3.5 text-right text-slate-500">{ret.userName}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Remarks updater text box */}
+                  <div className="border-t border-slate-100 pt-4 space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                      Update Session Notes / Remarks
+                    </label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text"
+                        value={sessionRemarks}
+                        onChange={(e) => setSessionRemarks(e.target.value)}
+                        placeholder="Enter session notes here..."
+                        className="w-full h-11 px-4 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm font-medium focus:border-slate-800 outline-none transition-all flex-1"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleUpdateRemarks}
+                        disabled={isUpdatingRemarks}
+                        className="px-5 h-11 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow-xs transition-all duration-200 shrink-0 cursor-pointer disabled:opacity-50"
+                      >
+                        {isUpdatingRemarks ? 'Saving...' : 'Update Remarks'}
+                      </button>
                     </div>
                   </div>
-                )}
 
-              {/* Remarks updater text box */}
-              <div className="border-t border-slate-100 pt-4 space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase block">Update Session Notes/Remarks</label>
-                <div className="flex gap-2">
-                  <input 
-                    type="text"
-                    value={sessionRemarks}
-                    onChange={(e) => setSessionRemarks(e.target.value)}
-                    placeholder="Enter session notes here..."
-                    className="input-premium flex-1 h-10 text-xs"
-                  />
-                  <button
-                    onClick={handleUpdateRemarks}
-                    disabled={isUpdatingRemarks}
-                    className="px-4 h-10 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl shadow transition-all duration-200 shrink-0"
-                  >
-                    {isUpdatingRemarks ? 'Saving...' : 'Update Remarks'}
-                  </button>
+                  {/* Footer buttons */}
+                  <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
+                    {sessionDetail.session.status !== 'BILLED' && (
+                      <>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            handleOpenReturnModal(sessionDetail.session);
+                          }}
+                          className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs rounded-xl shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>🔄</span> Return Goods
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            setIsSessionModalOpen(false);
+                            handleGenerateBill(sessionDetail.session);
+                          }}
+                          className="px-5 py-2.5 bg-[#135846] hover:bg-[#0f4637] text-white font-bold text-xs rounded-xl shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <span>🧾</span> Generate Consolidated Bill
+                        </button>
+                      </>
+                    )}
+                    {sessionDetail.session.status === 'ACTIVE' && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          handleMarkCompleted(sessionDetail.session);
+                        }}
+                        className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-1.5"
+                      >
+                        <span>✅</span> Completed
+                      </button>
+                    )}
+                    <button 
+                      type="button"
+                      onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}
+                      className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+                    >
+                      Close Sheet
+                    </button>
+                  </div>
+
                 </div>
-              </div>
-
-              {/* Footer buttons */}
-              <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-                {sessionDetail.session.status !== 'BILLED' && (
-                  <>
-                    <button 
-                      onClick={() => {
-                        handleOpenReturnModal(sessionDetail.session);
-                      }}
-                      className="px-5 py-2.5 bg-rose-500 hover:bg-rose-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all duration-200"
-                    >
-                      🔄 Return Goods
-                    </button>
-                    <button 
-                      onClick={() => {
-                        setIsSessionModalOpen(false);
-                        handleGenerateBill(sessionDetail.session);
-                      }}
-                      className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all duration-200"
-                    >
-                      🧾 Generate Consolidated Bill
-                    </button>
-                  </>
-                )}
-                {sessionDetail.session.status === 'ACTIVE' && (
-                  <button 
-                    onClick={() => {
-                      handleMarkCompleted(sessionDetail.session);
-                    }}
-                    className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-extrabold text-xs rounded-xl shadow-md transition-all duration-200"
-                  >
-                    ✅ Completed
-                  </button>
-                )}
-                <button 
-                  onClick={() => { setIsSessionModalOpen(false); setSessionDetail(null); }}
-                  className="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-655 font-bold text-xs rounded-xl transition-all"
-                >
-                  Close Sheet
-                </button>
-              </div>
-            </div>
-            ) : null}
+              );
+            })() : null}
 
           </div>
           <div 
@@ -2428,7 +2525,7 @@ const Loading = () => {
       {/* RETURN GOODS MODAL USING PORTAL */}
       {isReturnModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-[60]">
-          <div className="modal-box max-w-2xl bg-white border border-slate-200/80 rounded-3xl p-6 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div className="modal-box w-11/12 max-w-3xl !max-w-3xl bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto" style={{ maxWidth: "800px", width: "95vw" }}>
             <button 
               onClick={() => { setIsReturnModalOpen(false); setReturnSession(null); }}
               className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
@@ -2468,18 +2565,30 @@ const Loading = () => {
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                             Product #{index + 1}
                           </label>
-                          <SearchableSelect
-                            options={(returnSession?.items || returnSession?.consolidatedItems || [])
+                          <ProductSelectWithCode
+                            customOptions={(returnSession?.items || returnSession?.consolidatedItems || [])
                               .filter(loadedItem => loadedItem.quantity > 0)
-                              .map(loadedItem => ({
-                                value: loadedItem.finishedProductId,
-                                label: loadedItem.productName
-                              }))}
+                              .map(loadedItem => {
+                                const fp = finishedProducts.find(p => p.id === loadedItem.finishedProductId);
+                                return {
+                                  value: loadedItem.finishedProductId,
+                                  label: fp?.code ? `[${fp.code}] ${loadedItem.productName}` : loadedItem.productName,
+                                  rawName: loadedItem.productName,
+                                  code: fp?.code || null,
+                                  product: fp || { id: loadedItem.finishedProductId, name: loadedItem.productName }
+                                };
+                              })}
                             value={item.finishedProductId}
                             onChange={(val) => handleReturnItemRowChange(item.id, 'finishedProductId', val)}
+                            onNextFocus={() => {
+                              const nextEl = document.getElementById(`return-qty-${item.id}`);
+                              if (nextEl) {
+                                nextEl.focus();
+                                nextEl.select();
+                              }
+                            }}
                             placeholder="-- Choose Product --"
-                            searchPlaceholder="Type product name or number..."
-                            className="!h-11 font-semibold text-slate-755"
+                            searchPlaceholder="Type product name or code..."
                           />
                         </div>
 

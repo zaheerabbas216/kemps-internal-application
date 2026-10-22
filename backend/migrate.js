@@ -2410,6 +2410,22 @@ export async function runMigration(shouldExit = false) {
         AND sr.quantity != bi.qty_in_pcs
     `);
 
+    // Ensure finished_products.code column and unique index exist
+    const [codeCol] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'finished_products' AND COLUMN_NAME = 'code'
+    `);
+    if (codeCol.length === 0) {
+      await connection.query(`ALTER TABLE finished_products ADD COLUMN code VARCHAR(50) NULL DEFAULT NULL AFTER name`);
+    }
+    const [codeIdx] = await connection.query(`
+      SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'finished_products' AND INDEX_NAME = 'idx_finished_products_code'
+    `);
+    if (codeIdx.length === 0) {
+      await connection.query(`CREATE UNIQUE INDEX idx_finished_products_code ON finished_products (code)`);
+    }
+
     console.log('Migration complete!');
     await connection.end();
     if (shouldExit) {

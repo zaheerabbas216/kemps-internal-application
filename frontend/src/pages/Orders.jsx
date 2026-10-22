@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import api from '../api/axios';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import { useAuth } from '../context/AuthContext';
 import { useSSE } from '../context/SSEContext';
 
@@ -876,18 +877,26 @@ const Orders = () => {
                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/40 border border-slate-100 p-4 rounded-2xl relative group">
                   <div className="md:col-span-5 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Product Name *</label>
-                    <SearchableSelect
-                      options={finishedProducts.map(fp => ({ value: String(fp.id), label: fp.name }))}
+                    <ProductSelectWithCode
+                      products={finishedProducts}
                       value={String(row.finishedProductId || '')}
                       onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                      onNextFocus={() => {
+                        const nextEl = document.getElementById(`order-qty-${row.id}`);
+                        if (nextEl) {
+                          nextEl.focus();
+                          nextEl.select();
+                        }
+                      }}
                       placeholder="-- Choose Product --"
-                      searchPlaceholder="Search product..."
+                      searchPlaceholder="Search product or code..."
                     />
                   </div>
 
                   <div className="md:col-span-2 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Quantity (Boxes) *</label>
                     <input 
+                      id={`order-qty-${row.id}`}
                       type="number"
                       min="1"
                       placeholder="0"
@@ -1139,7 +1148,7 @@ const Orders = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Calculated demand across all matching orders for <span className="font-semibold text-slate-700">{statusFilterTab === 'ALL' ? 'All Orders' : statusFilterTab === 'PENDING' ? 'Pending / Active' : statusFilterTab}</span> (Order Management)
+                    Calculated demand across all matching orders for <span className="font-semibold text-slate-700">{statusFilterTab === 'ALL' ? 'All Orders' : statusFilterTab === 'PENDING' ? 'Pending / Active' : statusFilterTab}</span> (Function Order)
                   </p>
                 </div>
               </div>
@@ -1444,10 +1453,14 @@ const Orders = () => {
       {/* ORDER DETAILS MODAL USING PORTAL */}
       {isDetailModalOpen && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-4xl bg-white border border-slate-200/80 rounded-3xl p-8 relative shadow-2xl z-10 max-h-[90vh] overflow-y-auto">
+          <div 
+            className="modal-box w-11/12 max-w-6xl !max-w-6xl bg-white border border-slate-200/80 rounded-3xl p-6 sm:p-8 relative shadow-2xl z-10 max-h-[92vh] overflow-y-auto"
+            style={{ maxWidth: '1280px', width: '95vw' }}
+          >
             <button 
               onClick={() => { setIsDetailModalOpen(false); setOrderDetail(null); }}
-              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-550 hover:bg-slate-100 hover:text-slate-850 flex items-center justify-center font-bold transition-all"
+              className="absolute top-5 right-5 w-9 h-9 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold transition-all cursor-pointer z-20"
+              title="Close modal"
             >
               ✕
             </button>
@@ -1461,106 +1474,161 @@ const Orders = () => {
               <div className="space-y-6">
                 
                 {/* Modal Header */}
-                <div className="flex justify-between items-start border-b border-slate-100 pb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-100 pb-4 gap-3 pr-10">
                   <div>
-                    <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Order Details: {orderDetail.order.id}</h3>
-                    <p className="text-slate-500 text-xs font-bold mt-0.5">
-                      Supply Schedule: <span className="font-extrabold text-blue-600">{formatDateDDMMYYYY(orderDetail.order.supply_date)}</span> at <span className="font-extrabold text-blue-600">{formatTime12Hour(orderDetail.order.supply_time)}</span>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-xl font-bold text-slate-900 tracking-tight">
+                        Order Details: {orderDetail.order.id}
+                      </h3>
+                      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${
+                        orderDetail.order.status === 'PENDING' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                        orderDetail.order.status === 'SUPPLIED' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                        'bg-rose-50 border-rose-200 text-rose-700'
+                      }`}>
+                        {orderDetail.order.status}
+                      </span>
+                    </div>
+                    <p className="text-slate-500 text-xs font-medium mt-1">
+                      Supply Schedule: <span className="font-semibold text-blue-600">{formatDateDDMMYYYY(orderDetail.order.supply_date)}</span> at <span className="font-semibold text-blue-600">{formatTime12Hour(orderDetail.order.supply_time)}</span>
                     </p>
                   </div>
-                  <span className={`px-3 py-1 rounded text-xs font-extrabold uppercase border ${
-                    orderDetail.order.status === 'PENDING' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                    orderDetail.order.status === 'SUPPLIED' ? 'bg-emerald-50 border-emerald-100 text-emerald-600' :
-                    'bg-rose-50 border-rose-100 text-rose-600'
-                  }`}>
-                    {orderDetail.order.status}
-                  </span>
                 </div>
 
                 {/* Info grids: Customer details, delivery details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-slate-50 border border-slate-150/60 p-5 rounded-2xl text-xs font-semibold text-slate-655">
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider">👤 Customer details</div>
-                    <div className="text-slate-800 font-black text-sm">{orderDetail.order.customer_name}</div>
-                    <div>Phone: {orderDetail.order.customer_phone}</div>
-                    {orderDetail.order.customer_type && <div>Type: {orderDetail.order.customer_type}</div>}
-                    {orderDetail.order.customer_gstin && <div>GSTIN: {orderDetail.order.customer_gstin}</div>}
-                    {orderDetail.order.customer_address && <div className="mt-1">Billing: {orderDetail.order.customer_address}</div>}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Customer details */}
+                  <div className="bg-slate-50/80 border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">👤 Customer Details</span>
+                      <div className="text-slate-900 font-bold text-base mt-1">{orderDetail.order.customer_name}</div>
+                      <div className="text-xs text-slate-600 mt-1 space-y-0.5">
+                        <div>Phone: <span className="font-semibold text-slate-800">{orderDetail.order.customer_phone || '—'}</span></div>
+                        {orderDetail.order.customer_type && <div>Type: <span className="font-semibold text-slate-700">{orderDetail.order.customer_type}</span></div>}
+                        {orderDetail.order.customer_gstin && <div>GSTIN: <span className="font-semibold text-slate-700">{orderDetail.order.customer_gstin}</span></div>}
+                        {orderDetail.order.customer_address && <div>Billing Address: <span className="text-slate-700">{orderDetail.order.customer_address}</span></div>}
+                      </div>
+                    </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <div className="text-[10px] font-black text-slate-450 uppercase tracking-wider">🚚 Delivery Details</div>
-                    <div className="mt-1"><span className="text-slate-400">Alternate Phone:</span> {orderDetail.order.alternate_phone || '—'}</div>
-                    <div><span className="text-slate-400">Delivery Address:</span> <span className="text-slate-800 font-bold">{orderDetail.order.delivery_address || '—'}</span></div>
-                    {orderDetail.order.delivery_instructions && <div className="mt-1 bg-white border border-slate-150 rounded p-2 text-[11px] italic text-slate-500">Instructions: {orderDetail.order.delivery_instructions}</div>}
+                  {/* Delivery details */}
+                  <div className="bg-slate-50/80 border border-slate-200/80 p-4 rounded-2xl flex flex-col justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">🚚 Delivery Details</span>
+                      <div className="text-xs text-slate-600 mt-1 space-y-1">
+                        <div>Alternate Phone: <span className="font-semibold text-slate-800">{orderDetail.order.alternate_phone || '—'}</span></div>
+                        <div>Delivery Address: <span className="text-slate-900 font-bold">{orderDetail.order.delivery_address || '—'}</span></div>
+                        {orderDetail.order.delivery_instructions && (
+                          <div className="mt-2 bg-white border border-slate-200/80 rounded-xl p-2.5 text-xs text-slate-600 italic">
+                            Instructions: {orderDetail.order.delivery_instructions}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
                 {/* Items & Payment values */}
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                   {/* Products table */}
-                  <div className="md:col-span-7 space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest border-b border-slate-100 pb-1.5">📦 Order Products List</h4>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                            <th className="py-2.5 px-3">Product</th>
-                            <th className="py-2.5 px-3 text-center">Quantity</th>
-                            <th className="py-2.5 px-3 text-right">Rate</th>
-                            <th className="py-2.5 px-3 text-right">Total Amt</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
-                          {orderDetail.items.map((item, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2.5 px-3 text-slate-800 font-extrabold">{item.productName}</td>
-                              <td className="py-2.5 px-3 text-center">{item.quantity}</td>
-                              <td className="py-2.5 px-3 text-right">₹{(parseFloat(item.rate) || 0).toFixed(2)}</td>
-                              <td className="py-2.5 px-3 text-right text-slate-800">₹{(parseFloat(item.amount) || 0).toFixed(2)}</td>
+                  <div className="lg:col-span-7 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <span>📦</span> Order Products List
+                      </h4>
+                      <span className="text-xs font-semibold text-slate-400">
+                        {(orderDetail.items || []).length} Products
+                      </span>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
+                              <th className="py-3 px-4">Product Name</th>
+                              <th className="py-3 px-3 text-center">Quantity</th>
+                              <th className="py-3 px-3 text-right">Rate</th>
+                              <th className="py-3 px-4 text-right">Total Amount</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-slate-700">
+                            {orderDetail.items.map((item, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                <td className="py-3 px-4 text-slate-900 font-bold text-sm">
+                                  {item.productName}
+                                </td>
+                                <td className="py-3 px-3 text-center font-bold text-slate-700 text-sm">
+                                  <span className="px-2.5 py-1 bg-slate-100 rounded-lg">
+                                    {item.quantity}
+                                  </span>
+                                </td>
+                                <td className="py-3 px-3 text-right font-medium text-slate-600">
+                                  ₹{(parseFloat(item.rate) || 0).toFixed(2)}
+                                </td>
+                                <td className="py-3 px-4 text-right font-bold text-slate-900 text-sm">
+                                  ₹{(parseFloat(item.amount) || 0).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold text-slate-900 text-xs">
+                              <td className="py-3 px-4 uppercase tracking-wider">Total</td>
+                              <td className="py-3 px-3 text-center text-sm font-extrabold">
+                                {(orderDetail.items || []).reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)}
+                              </td>
+                              <td className="py-3 px-3 text-right text-slate-400">—</td>
+                              <td className="py-3 px-4 text-right text-sm font-extrabold text-[#135846]">
+                                ₹{(parseFloat(orderDetail.order.sub_total) || 0).toFixed(2)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
                     </div>
                   </div>
 
                   {/* Payment Breakdown totals */}
-                  <div className="md:col-span-5 space-y-3">
-                    <h4 className="text-xs font-black text-slate-450 uppercase tracking-widest border-b border-slate-100 pb-1.5">💵 Pricing & Payment</h4>
-                    <div className="bg-slate-50/50 border border-slate-200 p-4 rounded-xl space-y-3 text-xs font-semibold text-slate-600">
-                      <div className="flex justify-between">
+                  <div className="lg:col-span-5 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                        <span>💵</span> Pricing & Payment
+                      </h4>
+                    </div>
+
+                    <div className="bg-slate-50/70 border border-slate-200 p-4 rounded-2xl space-y-3 text-xs font-semibold text-slate-600 shadow-xs">
+                      <div className="flex justify-between items-center">
                         <span>Sub Total:</span>
-                        <span className="text-slate-800 font-bold">₹{(parseFloat(orderDetail.order.sub_total) || 0).toFixed(2)}</span>
+                        <span className="text-slate-800 font-bold text-sm">₹{(parseFloat(orderDetail.order.sub_total) || 0).toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <span>Discount:</span>
                         <span className="text-rose-500 font-bold">- ₹{(parseFloat(orderDetail.order.discount) || 0).toFixed(2)}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <span>Tax Percent:</span>
                         <span className="text-slate-800 font-bold">{orderDetail.order.tax}%</span>
                       </div>
-                      <div className="border-t border-slate-200 pt-2 flex justify-between text-xs font-black text-slate-800">
+                      <div className="border-t border-slate-200 pt-2 flex justify-between items-center text-sm font-extrabold text-slate-900">
                         <span>Grand Total:</span>
-                        <span className="text-primary font-black">₹{(parseFloat(orderDetail.order.grand_total) || 0).toFixed(2)}</span>
+                        <span className="text-blue-600 text-base font-black">₹{(parseFloat(orderDetail.order.grand_total) || 0).toFixed(2)}</span>
                       </div>
-                      <div className="border-t border-slate-200/60 pt-2 flex justify-between">
+                      <div className="border-t border-slate-200/60 pt-2 flex justify-between items-center">
                         <span>Payment Mode:</span>
-                        <span className="text-slate-800 font-extrabold">{orderDetail.order.payment_mode}</span>
+                        <span className="px-2.5 py-0.5 rounded-full bg-slate-200/70 text-slate-800 font-bold text-xs">{orderDetail.order.payment_mode}</span>
                       </div>
-                      <div className="flex justify-between">
+                      <div className="flex justify-between items-center">
                         <span>Advance Paid:</span>
-                        <span className="text-emerald-600 font-extrabold">₹{(parseFloat(orderDetail.order.advance_amount) || 0).toFixed(2)}</span>
+                        <span className="text-emerald-600 font-extrabold text-sm">₹{(parseFloat(orderDetail.order.advance_amount) || 0).toFixed(2)}</span>
                       </div>
                       <div className="border-t border-slate-200 pt-2 flex justify-between items-center">
-                        <span className="font-bold">Pending Amount:</span>
+                        <span className="font-bold text-slate-700">Pending Amount:</span>
                         <div className="flex flex-col items-end">
-                          <span className="text-slate-800 font-black">₹{(parseFloat(orderDetail.order.pending_amount) || 0).toFixed(2)}</span>
+                          <span className="text-slate-900 font-black text-sm">₹{(parseFloat(orderDetail.order.pending_amount) || 0).toFixed(2)}</span>
                           {(parseFloat(orderDetail.order.pending_amount) || 0) === 0 ? (
-                            <span className="bg-emerald-50 text-emerald-600 text-[8px] font-black uppercase px-1 py-0.5 rounded mt-0.5">Cleared</span>
+                            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-0.5">Cleared</span>
                           ) : (
-                            <span className="bg-amber-50 text-amber-600 text-[8px] font-black uppercase px-1 py-0.5 rounded mt-0.5">Due Balance</span>
+                            <span className="bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded mt-0.5">Due Balance</span>
                           )}
                         </div>
                       </div>
@@ -1569,25 +1637,31 @@ const Orders = () => {
                 </div>
 
                 {/* Notes & Audit logs */}
-                <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-550">
-                  {orderDetail.order.notes && (
-                    <div className="bg-slate-50 border border-slate-200/50 p-3.5 rounded-xl">
-                      <span className="font-black text-slate-400 block text-[9px] uppercase tracking-wide">Internal Notes</span>
+                <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-semibold text-slate-500">
+                  {orderDetail.order.notes ? (
+                    <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl">
+                      <span className="font-bold text-slate-400 block text-[10px] uppercase tracking-wider">Internal Notes</span>
                       <p className="mt-1 text-slate-700 italic break-words">{orderDetail.order.notes}</p>
                     </div>
+                  ) : (
+                    <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl">
+                      <span className="font-bold text-slate-400 block text-[10px] uppercase tracking-wider">Internal Notes</span>
+                      <p className="mt-1 text-slate-400 italic">No notes provided</p>
+                    </div>
                   )}
-                  <div className="bg-slate-50 border border-slate-200/50 p-3.5 rounded-xl space-y-1">
-                    <span className="font-black text-slate-450 block text-[9px] uppercase tracking-wide">📝 AUDIT LOGS</span>
-                    <div>Created By: <span className="text-slate-800 font-bold">{orderDetail.order.created_by}</span> at {new Date(orderDetail.order.created_at).toLocaleString()}</div>
+
+                  <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-2xl space-y-1">
+                    <span className="font-bold text-slate-400 block text-[10px] uppercase tracking-wider">📝 Audit Logs</span>
+                    <div className="text-slate-600">Created By: <span className="text-slate-800 font-bold">{orderDetail.order.created_by}</span> at {new Date(orderDetail.order.created_at).toLocaleString('en-GB')}</div>
                     {orderDetail.order.edited_by && (
-                      <div>Edited By: <span className="text-slate-800 font-bold">{orderDetail.order.edited_by}</span> at {new Date(orderDetail.order.edited_at).toLocaleString()}</div>
+                      <div className="text-slate-600">Edited By: <span className="text-slate-800 font-bold">{orderDetail.order.edited_by}</span> at {new Date(orderDetail.order.edited_at).toLocaleString('en-GB')}</div>
                     )}
                     {orderDetail.order.status === 'SUPPLIED' && (
-                      <div>Supplied By: <span className="text-emerald-600 font-bold">{orderDetail.order.supplied_by}</span> at {new Date(orderDetail.order.supplied_at).toLocaleString()}</div>
+                      <div className="text-emerald-700">Supplied By: <span className="font-bold">{orderDetail.order.supplied_by}</span> at {new Date(orderDetail.order.supplied_at).toLocaleString('en-GB')}</div>
                     )}
                     {orderDetail.order.status === 'CANCELLED' && (
                       <div className="text-rose-600">
-                        <div>Cancelled By: <span className="font-bold">{orderDetail.order.cancelled_by}</span> at {new Date(orderDetail.order.cancelled_at).toLocaleString()}</div>
+                        <div>Cancelled By: <span className="font-bold">{orderDetail.order.cancelled_by}</span> at {new Date(orderDetail.order.cancelled_at).toLocaleString('en-GB')}</div>
                         <div className="italic mt-0.5">Reason: "{orderDetail.order.cancellation_reason}"</div>
                       </div>
                     )}
@@ -1595,44 +1669,49 @@ const Orders = () => {
                 </div>
 
                 {/* Footer buttons / actions */}
-                <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 pt-4">
+                <div className="flex flex-wrap items-center justify-end gap-3 border-t border-slate-100 pt-4">
                   {orderDetail.order.status === 'PENDING' && (
                     <>
                       {canUpdate('orders') && (
                         <button 
+                          type="button"
                           onClick={handleTriggerEdit}
-                          className="px-4 py-2 bg-indigo-50 border border-indigo-150 hover:bg-indigo-100 text-indigo-600 font-bold text-xs rounded-xl shadow-sm transition-all"
+                          className="px-4 py-2 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                         >
                           ✏️ Edit Order
                         </button>
                       )}
                       {(canDelete('orders') || canUpdate('orders')) && (
                         <button 
+                          type="button"
                           onClick={handleTriggerCancelModal}
-                          className="px-4 py-2 bg-rose-50 border border-rose-150 hover:bg-rose-100 text-rose-600 font-bold text-xs rounded-xl shadow-sm transition-all"
+                          className="px-4 py-2 bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
                         >
                           ❌ Cancel Order
                         </button>
                       )}
                       {canUpdate('orders') && (
                         <button 
+                          type="button"
                           onClick={handleMarkAsSupplied}
-                          className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white font-black text-xs rounded-xl shadow transition-all duration-200"
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all duration-200 cursor-pointer flex items-center gap-1.5"
                         >
                           ✅ Mark as Supplied
                         </button>
                       )}
                       <button 
+                        type="button"
                         onClick={handleGenerateLoading}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
                       >
                         🚛 Generate Loading
                       </button>
                     </>
                   )}
                   <button 
+                    type="button"
                     onClick={() => { setIsDetailModalOpen(false); setOrderDetail(null); }}
-                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-650 font-bold text-xs rounded-xl transition-all"
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
                   >
                     Close View
                   </button>

@@ -14,44 +14,12 @@ const initTable = async () => {
         upi_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         bank_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
         remarks VARCHAR(255) NULL,
-        source_type ENUM('MANUAL','CARRY_FORWARD') NOT NULL DEFAULT 'MANUAL',
-        carried_from_date DATE NULL,
         created_by VARCHAR(100) NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY idx_entry_date (entry_date)
       )
     `);
-
-    // Reconcile the legacy production schema without dropping or recreating
-    // the table. CHANGE COLUMN preserves every existing value and index.
-    const [openingColumnRows] = await pool.query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'cash_ledger_opening'
-    `);
-    const openingColumns = new Set(openingColumnRows.map(row => row.COLUMN_NAME));
-
-    const renameLegacyOpeningColumn = async (legacyName, currentName, definition) => {
-      if (!openingColumns.has(currentName) && openingColumns.has(legacyName)) {
-        await pool.query(
-          `ALTER TABLE cash_ledger_opening CHANGE COLUMN \`${legacyName}\` \`${currentName}\` ${definition}`
-        );
-        openingColumns.delete(legacyName);
-        openingColumns.add(currentName);
-      }
-    };
-
-    await renameLegacyOpeningColumn('business_date', 'entry_date', 'DATE NOT NULL');
-    await renameLegacyOpeningColumn('opening_cash', 'cash_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
-    await renameLegacyOpeningColumn('opening_upi', 'upi_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
-    await renameLegacyOpeningColumn('opening_bank', 'bank_amount', "DECIMAL(12, 2) NOT NULL DEFAULT 0.00");
-
-    if (!openingColumns.has('remarks')) {
-      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN remarks VARCHAR(255) NULL AFTER bank_amount`);
-      openingColumns.add('remarks');
-    }
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS daily_cash_ledger_history (
@@ -95,65 +63,6 @@ const initTable = async () => {
       )
     `);
 
-    // Reconcile legacy daily history columns and derive the aggregate fields
-    // from the preserved component balances.
-    const [historyColumnRows] = await pool.query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'daily_cash_ledger_history'
-    `);
-    const historyColumns = new Set(historyColumnRows.map(row => row.COLUMN_NAME));
-    if (!historyColumns.has('ledger_date') && historyColumns.has('business_date')) {
-      await pool.query(`ALTER TABLE daily_cash_ledger_history CHANGE COLUMN business_date ledger_date DATE NOT NULL`);
-      historyColumns.delete('business_date');
-      historyColumns.add('ledger_date');
-    }
-
-    const historyAggregateColumns = [
-      ['total_opening', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
-      ['total_in', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
-      ['total_out', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
-      ['net_closing', 'DECIMAL(12, 2) NOT NULL DEFAULT 0.00'],
-      ['total_transactions', 'INT NOT NULL DEFAULT 0']
-    ];
-    let historyAggregatesAdded = false;
-    for (const [columnName, definition] of historyAggregateColumns) {
-      if (!historyColumns.has(columnName)) {
-        await pool.query(`ALTER TABLE daily_cash_ledger_history ADD COLUMN \`${columnName}\` ${definition}`);
-        historyColumns.add(columnName);
-        historyAggregatesAdded = true;
-      }
-    }
-    if (historyAggregatesAdded) {
-      await pool.query(`
-        UPDATE daily_cash_ledger_history
-        SET total_opening = COALESCE(opening_cash, 0) + COALESCE(opening_upi, 0) + COALESCE(opening_bank, 0),
-            total_in = COALESCE(cash_in, 0) + COALESCE(upi_in, 0) + COALESCE(bank_in, 0),
-            total_out = COALESCE(cash_out, 0) + COALESCE(upi_out, 0) + COALESCE(bank_out, 0),
-            net_closing = COALESCE(closing_cash, 0) + COALESCE(closing_upi, 0) + COALESCE(closing_bank, 0)
-      `);
-    }
-
-    // Preserve legacy cash submissions while adopting the current names.
-    const [submittedColumnRows] = await pool.query(`
-      SELECT COLUMN_NAME
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = DATABASE()
-        AND TABLE_NAME = 'cash_submitted_records'
-    `);
-    const submittedColumns = new Set(submittedColumnRows.map(row => row.COLUMN_NAME));
-    if (!submittedColumns.has('ledger_date') && submittedColumns.has('business_date')) {
-      await pool.query(`ALTER TABLE cash_submitted_records CHANGE COLUMN business_date ledger_date DATE NOT NULL`);
-      submittedColumns.delete('business_date');
-      submittedColumns.add('ledger_date');
-    }
-    if (!submittedColumns.has('cash_submitted') && submittedColumns.has('cash_amount')) {
-      await pool.query(`ALTER TABLE cash_submitted_records CHANGE COLUMN cash_amount cash_submitted DECIMAL(12, 2) NOT NULL DEFAULT 0.00`);
-      submittedColumns.delete('cash_amount');
-      submittedColumns.add('cash_submitted');
-    }
-
     // Drop unique index on ledger_date if exists so multiple submissions per day can be recorded individually
     try {
       await pool.query(`ALTER TABLE cash_submitted_records DROP INDEX ledger_date`);
@@ -171,12 +80,6 @@ const initTable = async () => {
     } catch (e) { /* ignore if column exists */ }
     try {
       await pool.query(`ALTER TABLE daily_cash_ledger_history ADD COLUMN credit_adjusted DECIMAL(12, 2) NOT NULL DEFAULT 0.00`);
-    } catch (e) { /* ignore if column exists */ }
-    try {
-      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN source_type ENUM('MANUAL','CARRY_FORWARD') NOT NULL DEFAULT 'MANUAL' AFTER remarks`);
-    } catch (e) { /* ignore if column exists */ }
-    try {
-      await pool.query(`ALTER TABLE cash_ledger_opening ADD COLUMN carried_from_date DATE NULL AFTER source_type`);
     } catch (e) { /* ignore if column exists */ }
 
     // Ensure customer_id column exists on customer_payments
@@ -196,29 +99,42 @@ const initTable = async () => {
         SET cp.customer_id = cb.customer_id
         WHERE cp.customer_id IS NULL
       `);
+      // Safe historical reconciliation: ensure customer_bills.cash_paid only contains initial counter cash
+      await pool.query(`
+        UPDATE customer_bills cb
+        JOIN (
+          SELECT bill_id,
+                 SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                 SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                 SUM(COALESCE(bank_paid, 0)) AS sub_bank
+          FROM customer_payments
+          WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
+          GROUP BY bill_id
+        ) sub ON cb.id = sub.bill_id
+        SET cb.cash_paid = GREATEST(0, cb.cash_paid - sub.sub_cash),
+            cb.upi_paid = GREATEST(0, cb.upi_paid - sub.sub_upi),
+            cb.bank_paid = GREATEST(0, cb.bank_paid - sub.sub_bank)
+        WHERE (cb.cash_paid >= sub.sub_cash AND sub.sub_cash > 0)
+           OR (cb.upi_paid >= sub.sub_upi AND sub.sub_upi > 0)
+           OR (cb.bank_paid >= sub.sub_bank AND sub.sub_bank > 0)
+      `);
     } catch (e) { /* ignore */ }
   } catch (err) {
     console.error('Failed to init cash ledger tables:', err);
   }
 };
-const initTablePromise = initTable();
-
-// Do not serve ledger requests until compatibility migrations are complete.
-router.use(async (req, res, next) => {
-  await initTablePromise;
-  next();
-});
+initTable();
 
 // Helper to compute itemized daily ledger summary for any target date
-export const computeDailyLedger = async (targetDate) => {
+const computeDailyLedger = async (targetDate) => {
   // 1. Opening balance
   const [opRows] = await pool.query(
     `SELECT cash_amount, upi_amount, bank_amount, remarks FROM cash_ledger_opening WHERE entry_date = ?`,
     [targetDate]
   );
-  let openingCash  = opRows.length ? parseFloat(opRows[0].cash_amount || 0) : 0;
-  let openingUpi   = opRows.length ? parseFloat(opRows[0].upi_amount  || 0) : 0;
-  let openingBank  = opRows.length ? parseFloat(opRows[0].bank_amount || 0) : 0;
+  let openingCash = opRows.length ? parseFloat(opRows[0].cash_amount || 0) : 0;
+  let openingUpi = opRows.length ? parseFloat(opRows[0].upi_amount || 0) : 0;
+  let openingBank = opRows.length ? parseFloat(opRows[0].bank_amount || 0) : 0;
   let totalOpening = openingCash + openingUpi + openingBank;
 
   // Total Credit Balance Adjusted on targetDate across all bills on targetDate
@@ -234,20 +150,21 @@ export const computeDailyLedger = async (targetDate) => {
      FROM customer_bills cb
      LEFT JOIN (
        SELECT bill_id,
-               0 AS sub_cash,
-               0 AS sub_upi,
-               0 AS sub_bank,
+              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
               SUM(COALESCE(amount_received, 0)) AS sub_total
        FROM customer_payments
        WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
        GROUP BY bill_id
      ) sub ON cb.id = sub.bill_id
-     WHERE cb.billing_date = ?`,
+     WHERE cb.billing_date = ?
+       AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`,
     [targetDate]
   );
   const totalCreditAdjusted = parseFloat(creditAdjRows[0]?.total_credit_adjusted || 0);
 
-  // 2. Billing — actual cash/UPI/Bank collected at billing counter at invoice creation time, or credit balance adjusted
+  // 2. Billing — ONLY actual cash/UPI/Bank collected at billing counter at invoice creation time
   const [bRows] = await pool.query(
     `SELECT
        cb.id AS ref_id,
@@ -261,11 +178,6 @@ export const computeDailyLedger = async (targetDate) => {
          WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
          WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
          WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
-         WHEN GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-         )) > 0 THEN 'Credit Adjustment'
          ELSE cb.payment_mode
        END AS method,
        GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
@@ -278,12 +190,7 @@ export const computeDailyLedger = async (targetDate) => {
        )) AS credit_adjusted_amt,
        (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
         GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-        GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) +
-        GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-        ))) AS amount,
+        GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
        'in' AS flow,
        'Billing' AS source_module,
        CONCAT('Sales Invoice — ', cb.customer_name, 
@@ -299,9 +206,9 @@ export const computeDailyLedger = async (targetDate) => {
      FROM customer_bills cb
      LEFT JOIN (
        SELECT bill_id,
-               0 AS sub_cash,
-               0 AS sub_upi,
-               0 AS sub_bank,
+              SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+              SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+              SUM(COALESCE(bank_paid, 0)) AS sub_bank,
               SUM(COALESCE(amount_received, 0)) AS sub_total
        FROM customer_payments
        WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -311,14 +218,10 @@ export const computeDailyLedger = async (targetDate) => {
        AND (
          GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
          GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
-         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR
-         GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-           GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-           GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-         )) > 0
+         GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0
        )
        AND cb.payment_mode != 'Credit'
+       AND cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))
      ORDER BY cb.created_at DESC`,
     [targetDate]
   );
@@ -404,10 +307,8 @@ export const computeDailyLedger = async (targetDate) => {
        id AS ref_id,
        DATE_FORMAT(expense_date,'%Y-%m-%d') AS txn_date,
        entered_by AS party,
-       CASE WHEN particulars LIKE '%Inventory Purchase Expense%' THEN 'Cash' ELSE payment_method END AS method,
-       CASE WHEN payment_method LIKE '%Cash%' OR particulars LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS cash_amt,
-       CASE WHEN payment_method LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS upi_amt,
-       CASE WHEN payment_method NOT LIKE '%Cash%' AND payment_method NOT LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS bank_amt,
+       payment_method AS method,
+       0 AS cash_amt, 0 AS upi_amt, 0 AS bank_amt,
        0 AS credit_adjusted_amt,
        amount AS amount,
        'out' AS flow,
@@ -486,16 +387,16 @@ export const computeDailyLedger = async (targetDate) => {
     const amt = r.amount;
     const meth = String(r.method || '').toLowerCase();
     const rCash = parseFloat(r.cash_amt || 0);
-    const rUpi  = parseFloat(r.upi_amt  || 0);
+    const rUpi = parseFloat(r.upi_amt || 0);
     const rBank = parseFloat(r.bank_amt || 0);
 
     let cash = 0, upi = 0, bank = 0;
 
     if (rCash > 0 || rUpi > 0 || rBank > 0) {
       cash = rCash;
-      upi  = rUpi;
+      upi = rUpi;
       bank = rBank;
-    } else if (!meth.includes('credit') && amt > 0) {
+    } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
       if (meth.includes('cash')) {
         cash = amt;
       } else if (meth.includes('upi')) {
@@ -582,7 +483,7 @@ router.post('/cash-submitted', async (req, res) => {
   try {
     const { ledgerDate, cashSubmitted } = req.body;
     const loggedInUser = (req.admin?.username || req.body.submittedBy || 'admin').trim();
-    const isAdminUser = req.admin?.isSuperAdmin === true;
+    const isAdminUser = loggedInUser.toLowerCase() === 'admin';
 
     if (!ledgerDate) {
       return res.status(400).json({ ok: false, error: 'Ledger Date is required.' });
@@ -634,8 +535,8 @@ router.post('/cash-submitted', async (req, res) => {
 router.put('/cash-submitted/:id/approve', async (req, res) => {
   try {
     const loggedInUser = (req.admin?.username || req.body.approvedBy || '').trim();
-    if (req.admin?.isSuperAdmin !== true) {
-      return res.status(403).json({ ok: false, error: 'Access denied. Only Superadmin can approve cash deposits.' });
+    if (loggedInUser.toLowerCase() !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Access denied. Only Admin can approve cash deposits.' });
     }
 
     const { id } = req.params;
@@ -660,7 +561,7 @@ router.put('/cash-submitted/:id/approve', async (req, res) => {
 
     await pool.query(
       `UPDATE cash_submitted_records SET status = 'Approved', submitted_by = ? WHERE id = ?`,
-      [loggedInUser, id]
+      ['admin', id]
     );
 
     res.json({ ok: true, message: 'Cash deposit approved successfully!' });
@@ -674,8 +575,9 @@ router.put('/cash-submitted/:id/approve', async (req, res) => {
 // Delete an individual cash submitted entry (Admin action ONLY)
 router.delete('/cash-submitted/:id', async (req, res) => {
   try {
-    if (req.admin?.isSuperAdmin !== true) {
-      return res.status(403).json({ ok: false, error: 'Access denied. Only Superadmin can delete cash submission entries.' });
+    const loggedInUser = (req.admin?.username || '').trim();
+    if (loggedInUser.toLowerCase() !== 'admin') {
+      return res.status(403).json({ ok: false, error: 'Access denied. Only Admin can delete cash submission entries.' });
     }
 
     const { id } = req.params;
@@ -697,19 +599,17 @@ router.post('/opening', async (req, res) => {
     }
 
     const cashVal = Math.max(0, parseFloat(cashAmount) || 0);
-    const upiVal  = Math.max(0, parseFloat(upiAmount)  || 0);
+    const upiVal = Math.max(0, parseFloat(upiAmount) || 0);
     const bankVal = Math.max(0, parseFloat(bankAmount) || 0);
 
     await pool.query(
-      `INSERT INTO cash_ledger_opening (entry_date, cash_amount, upi_amount, bank_amount, remarks, source_type, carried_from_date, created_by)
-       VALUES (?, ?, ?, ?, ?, 'MANUAL', NULL, ?)
+      `INSERT INTO cash_ledger_opening (entry_date, cash_amount, upi_amount, bank_amount, remarks, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          cash_amount = VALUES(cash_amount),
          upi_amount  = VALUES(upi_amount),
          bank_amount = VALUES(bank_amount),
          remarks     = VALUES(remarks),
-         source_type = 'MANUAL',
-         carried_from_date = NULL,
          created_by  = VALUES(created_by)`,
       [entryDate, cashVal, upiVal, bankVal, String(remarks || '').trim(), String(createdBy || 'admin').trim()]
     );
@@ -808,26 +708,6 @@ const autoCloseDay = async (ledgerDate, closedBy = 'System (Auto-Close)') => {
       ]
     );
 
-    // Only unsubmitted physical cash remains at the counter. Carry that amount
-    // into the next day's opening; manual openings always take precedence.
-    const [nextDateRows] = await pool.query(`SELECT DATE_FORMAT(DATE_ADD(?, INTERVAL 1 DAY), '%Y-%m-%d') AS next_date`, [ledgerDate]);
-    const nextDate = nextDateRows[0]?.next_date;
-    if (nextDate) {
-      await pool.query(
-        `INSERT INTO cash_ledger_opening
-           (entry_date, cash_amount, upi_amount, bank_amount, remarks, source_type, carried_from_date, created_by)
-         VALUES (?, ?, 0, 0, ?, 'CARRY_FORWARD', ?, ?)
-         ON DUPLICATE KEY UPDATE
-           cash_amount = IF(source_type = 'CARRY_FORWARD', VALUES(cash_amount), cash_amount),
-           upi_amount = IF(source_type = 'CARRY_FORWARD', 0, upi_amount),
-           bank_amount = IF(source_type = 'CARRY_FORWARD', 0, bank_amount),
-           remarks = IF(source_type = 'CARRY_FORWARD', VALUES(remarks), remarks),
-           carried_from_date = IF(source_type = 'CARRY_FORWARD', VALUES(carried_from_date), carried_from_date),
-           created_by = IF(source_type = 'CARRY_FORWARD', VALUES(created_by), created_by)`,
-        [nextDate, report.counterCash, `Counter cash carried forward from ${ledgerDate}`, ledgerDate, String(closedBy || 'System (Auto-Close)').trim()]
-      );
-    }
-
     return report;
   } catch (err) {
     console.error(`Auto-close failed for ${ledgerDate}:`, err);
@@ -838,16 +718,15 @@ const autoCloseDay = async (ledgerDate, closedBy = 'System (Auto-Close)') => {
 // Automatic Day-Reset & History Auto-Save Runner
 const checkAndAutoClosePastDays = async () => {
   try {
-    const todayStr = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
-    }).format(new Date());
+    const todayStr = new Date().toISOString().split('T')[0];
 
     // Auto-save yesterday
-    const yesterday = new Date(`${todayStr}T00:00:00Z`);
-    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
-    // Close older missing dates first so each day's remaining counter cash is
-    // available as the following day's opening before that day is calculated.
+    await autoCloseDay(yesterdayStr, 'System (Auto-Close)');
+
+    // Also auto-close any past unclosed dates
     const [pastDates] = await pool.query(`
       SELECT DISTINCT d FROM (
         SELECT DATE_FORMAT(payment_date, '%Y-%m-%d') AS d FROM customer_payments WHERE payment_status = 'Approved' AND payment_date < ?
@@ -867,7 +746,6 @@ const checkAndAutoClosePastDays = async () => {
         await autoCloseDay(row.d, 'System (Auto-Close)');
       }
     }
-    await autoCloseDay(yesterdayStr, 'System (Auto-Close)');
   } catch (e) {
     console.error('Error in checkAndAutoClosePastDays:', e);
   }
@@ -906,7 +784,7 @@ router.get('/daily-history', async (req, res) => {
     let p = [];
 
     if (startDate) { w.push('ledger_date >= ?'); p.push(startDate); }
-    if (endDate)   { w.push('ledger_date <= ?'); p.push(endDate); }
+    if (endDate) { w.push('ledger_date <= ?'); p.push(endDate); }
     if (search.trim()) {
       const s = `%${search.trim()}%`;
       w.push('(ledger_date LIKE ? OR closed_by LIKE ? OR status LIKE ?)');
@@ -994,7 +872,7 @@ router.get('/', async (req, res) => {
       type = 'all'      // in | out | all
     } = req.query;
 
-    page  = Math.max(1, parseInt(page, 10)  || 1);
+    page = Math.max(1, parseInt(page, 10) || 1);
     limit = Math.max(1, parseInt(limit, 10) || 20);
 
     const methodFilter = (col) => {
@@ -1019,7 +897,7 @@ router.get('/', async (req, res) => {
       if (opRows.length > 0) {
         openingRow = opRows[0];
         openingCash = parseFloat(opRows[0].cash_amount || 0);
-        openingUpi  = parseFloat(opRows[0].upi_amount  || 0);
+        openingUpi = parseFloat(opRows[0].upi_amount || 0);
         openingBank = parseFloat(opRows[0].bank_amount || 0);
         totalOpening = openingCash + openingUpi + openingBank;
       }
@@ -1032,7 +910,7 @@ router.get('/', async (req, res) => {
       let w = [];
       let p = [];
       if (startDate) { w.push('ledger_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('ledger_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('ledger_date <= ?'); p.push(endDate); }
       if (search.trim()) {
         const s = `%${search.trim()}%`;
         w.push('(submitted_by LIKE ? OR remarks LIKE ? OR id LIKE ?)');
@@ -1088,10 +966,10 @@ router.get('/', async (req, res) => {
     // ── Total Credit Adjusted across all bills in date range ──
     let totalCreditAdjusted = 0;
     {
-      let w = [];
+      let w = [`cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`];
       let p = [];
       if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('cb.billing_date <= ?'); p.push(endDate); }
       const whereStr = w.length ? `WHERE ${w.join(' AND ')}` : '';
       const [creditAdjRows] = await pool.query(
         `SELECT
@@ -1105,9 +983,9 @@ router.get('/', async (req, res) => {
          FROM customer_bills cb
          LEFT JOIN (
            SELECT bill_id,
-                  0 AS sub_cash,
-                  0 AS sub_upi,
-                  0 AS sub_bank,
+                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
                   SUM(COALESCE(amount_received, 0)) AS sub_total
            FROM customer_payments
            WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -1125,23 +1003,19 @@ router.get('/', async (req, res) => {
       let w = [
         `(GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 OR
           GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 OR
-          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 OR
-          GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-            GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-            GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-          )) > 0)`,
-          `cb.payment_mode != 'Credit'`
+          GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0)`,
+        `cb.payment_mode != 'Credit'`,
+        `cb.id NOT IN (SELECT DISTINCT bill_id FROM customer_bill_items WHERE finished_product_id IN (SELECT id FROM finished_products WHERE name = 'Can Deposit'))`
       ];
       let p = [];
       if (startDate) { w.push('cb.billing_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('cb.billing_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('cb.billing_date <= ?'); p.push(endDate); }
       if (search.trim()) {
         const s = `%${search.trim()}%`;
         w.push('(cb.customer_name LIKE ? OR cb.id LIKE ? OR cb.company LIKE ?)');
         p.push(s, s, s);
       }
-      
+
       if (method && method !== 'All') {
         if (method === 'Cash') {
           w.push('GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0');
@@ -1149,7 +1023,7 @@ router.get('/', async (req, res) => {
           w.push('GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0');
         } else if (method === 'Bank') {
           w.push('GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0');
-        } else if (method === 'Credit Balance' || method === 'Credit Adjustment') {
+        } else if (method === 'Credit Balance') {
           w.push(`GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
             GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
@@ -1171,11 +1045,6 @@ router.get('/', async (req, res) => {
              WHEN GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) > 0 THEN 'Cash'
              WHEN GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) > 0 THEN 'UPI'
              WHEN GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) > 0 THEN 'Bank'
-             WHEN GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-               GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-               GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-               GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-             )) > 0 THEN 'Credit Adjustment'
              ELSE cb.payment_mode
            END AS method,
            GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) AS cash_amt,
@@ -1188,12 +1057,7 @@ router.get('/', async (req, res) => {
            )) AS credit_adjusted_amt,
            (GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
             GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0)) +
-            GREATEST(0, (cb.amount_paid - COALESCE(sub.sub_total, 0)) - (
-              GREATEST(0, cb.cash_paid - COALESCE(sub.sub_cash, 0)) +
-              GREATEST(0, cb.upi_paid - COALESCE(sub.sub_upi, 0)) +
-              GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))
-            ))) AS amount,
+            GREATEST(0, cb.bank_paid - COALESCE(sub.sub_bank, 0))) AS amount,
            'in'             AS flow,
            'Billing'        AS source_module,
            CONCAT('Sales Invoice — ', cb.customer_name,
@@ -1209,9 +1073,9 @@ router.get('/', async (req, res) => {
          FROM customer_bills cb
          LEFT JOIN (
            SELECT bill_id,
-                  0 AS sub_cash,
-                  0 AS sub_upi,
-                  0 AS sub_bank,
+                  SUM(COALESCE(cash_paid, 0)) AS sub_cash,
+                  SUM(COALESCE(upi_paid, 0)) AS sub_upi,
+                  SUM(COALESCE(bank_paid, 0)) AS sub_bank,
                   SUM(COALESCE(amount_received, 0)) AS sub_total
            FROM customer_payments
            WHERE payment_status = 'Approved' AND bill_id IS NOT NULL AND bill_id != ''
@@ -1234,7 +1098,7 @@ router.get('/', async (req, res) => {
       ];
       let p = [];
       if (startDate) { w.push('cp.payment_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('cp.payment_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('cp.payment_date <= ?'); p.push(endDate); }
       if (search.trim()) {
         const s = `%${search.trim()}%`;
         w.push('(cb.customer_name LIKE ? OR cust.name LIKE ? OR cp.bill_id LIKE ? OR cp.id LIKE ?)');
@@ -1290,7 +1154,7 @@ router.get('/', async (req, res) => {
       let w = ["cp.payment_status = 'Approved'"];
       let p = [];
       if (startDate) { w.push('cp.payment_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('cp.payment_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('cp.payment_date <= ?'); p.push(endDate); }
       if (search.trim()) {
         const s = `%${search.trim()}%`;
         w.push('(cb.customer_name LIKE ? OR cp.payment_no LIKE ? OR cp.bill_id LIKE ?)');
@@ -1325,7 +1189,7 @@ router.get('/', async (req, res) => {
     const canDepInRows = [];
     if (type !== 'out') {
       let w = ["(transaction_type LIKE '%Deposit%' AND transaction_type NOT LIKE '%Return%')",
-               "(payment_status IS NULL OR payment_status != 'Rejected')"];
+        "(payment_status IS NULL OR payment_status != 'Rejected')"];
       let p = [];
       if (startDate) {
         w.push("DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+05:30'), '%Y-%m-%d') >= ?");
@@ -1370,7 +1234,7 @@ router.get('/', async (req, res) => {
       let w = ["payment_status = 'Approved'"];
       let p = [];
       if (startDate) { w.push('expense_date >= ?'); p.push(startDate); }
-      if (endDate)   { w.push('expense_date <= ?'); p.push(endDate); }
+      if (endDate) { w.push('expense_date <= ?'); p.push(endDate); }
       if (search.trim()) {
         const s = `%${search.trim()}%`;
         w.push('(particulars LIKE ? OR id LIKE ? OR entered_by LIKE ?)');
@@ -1384,10 +1248,10 @@ router.get('/', async (req, res) => {
            DATE_FORMAT(expense_date,'%Y-%m-%d')     AS txn_date,
            entered_by                               AS party,
            ''                                       AS branch,
-           CASE WHEN particulars LIKE '%Inventory Purchase Expense%' THEN 'Cash' ELSE payment_method END AS method,
-           CASE WHEN payment_method LIKE '%Cash%' OR particulars LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS cash_amt,
-           CASE WHEN payment_method LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS upi_amt,
-           CASE WHEN payment_method NOT LIKE '%Cash%' AND payment_method NOT LIKE '%UPI%' AND particulars NOT LIKE '%Inventory Purchase Expense%' THEN amount ELSE 0 END AS bank_amt,
+           payment_method                           AS method,
+           0                                        AS cash_amt,
+           0                                        AS upi_amt,
+           0                                        AS bank_amt,
            amount                                   AS amount,
            'out'                                    AS flow,
            'Expense'                                AS source_module,
@@ -1404,7 +1268,7 @@ router.get('/', async (req, res) => {
     const canDepOutRows = [];
     if (type !== 'in') {
       let w = ["transaction_type LIKE '%Return%'",
-               "(payment_status IS NULL OR payment_status != 'Rejected')"];
+        "(payment_status IS NULL OR payment_status != 'Rejected')"];
       let p = [];
       if (startDate) {
         w.push("DATE_FORMAT(CONVERT_TZ(created_at, '+00:00', '+05:30'), '%Y-%m-%d') >= ?");
@@ -1453,9 +1317,9 @@ router.get('/', async (req, res) => {
       ...canDepOutRows
     ].map(r => ({
       ...r,
-      amount:   parseFloat(r.amount   || 0),
+      amount: parseFloat(r.amount || 0),
       cash_amt: parseFloat(r.cash_amt || 0),
-      upi_amt:  parseFloat(r.upi_amt  || 0),
+      upi_amt: parseFloat(r.upi_amt || 0),
       bank_amt: parseFloat(r.bank_amt || 0),
     }));
 
@@ -1506,23 +1370,23 @@ router.get('/', async (req, res) => {
     finalAll.push(...all);
 
     // ── Summary totals ─────────────────────────────────────────────────────────
-    let totalCashIn  = 0, totalUpiIn  = 0, totalBankIn  = 0;
+    let totalCashIn = 0, totalUpiIn = 0, totalBankIn = 0;
     let totalCashOut = 0, totalUpiOut = 0, totalBankOut = 0;
 
     for (const r of all) {
-      const amt   = r.amount;
-      const meth  = String(r.method || '').toLowerCase();
+      const amt = r.amount;
+      const meth = String(r.method || '').toLowerCase();
       const rCash = parseFloat(r.cash_amt || 0);
-      const rUpi  = parseFloat(r.upi_amt  || 0);
+      const rUpi = parseFloat(r.upi_amt || 0);
       const rBank = parseFloat(r.bank_amt || 0);
 
       let cash = 0, upi = 0, bank = 0;
 
       if (rCash > 0 || rUpi > 0 || rBank > 0) {
         cash = rCash;
-        upi  = rUpi;
+        upi = rUpi;
         bank = rBank;
-      } else if (!meth.includes('credit') && amt > 0) {
+      } else if (meth !== 'credit balance' && meth !== 'credit adjust' && amt > 0) {
         if (meth.includes('cash')) {
           cash = amt;
         } else if (meth.includes('upi')) {
@@ -1533,26 +1397,26 @@ router.get('/', async (req, res) => {
       }
 
       if (r.flow === 'in') {
-        totalCashIn  += cash;
-        totalUpiIn   += upi;
-        totalBankIn  += bank;
+        totalCashIn += cash;
+        totalUpiIn += upi;
+        totalBankIn += bank;
       } else {
         totalCashOut += cash;
-        totalUpiOut  += upi;
+        totalUpiOut += upi;
         totalBankOut += bank;
       }
     }
 
-    const netCash  = (openingCash + totalCashIn) - totalCashOut;
-    const netUpi   = (openingUpi + totalUpiIn) - totalUpiOut;
-    const netBank  = (openingBank + totalBankIn) - totalBankOut;
+    const netCash = (openingCash + totalCashIn) - totalCashOut;
+    const netUpi = (openingUpi + totalUpiIn) - totalUpiOut;
+    const netBank = (openingBank + totalBankIn) - totalBankOut;
     const netTotal = (totalOpening + totalCashIn + totalUpiIn + totalBankIn) - (totalCashOut + totalUpiOut + totalBankOut);
 
     const counterCash = Math.max(0, netCash - totalSubmitted);
 
-    const total  = finalAll.length;
+    const total = finalAll.length;
     const offset = (page - 1) * limit;
-    const paged  = finalAll.slice(offset, offset + limit);
+    const paged = finalAll.slice(offset, offset + limit);
 
     res.json({
       ok: true,
@@ -1565,11 +1429,11 @@ router.get('/', async (req, res) => {
         openingUpi,
         openingBank,
         totalOpening,
-        cashIn:  totalCashIn,
-        upiIn:   totalUpiIn,
-        bankIn:  totalBankIn,
+        cashIn: totalCashIn,
+        upiIn: totalUpiIn,
+        bankIn: totalBankIn,
         cashOut: totalCashOut,
-        upiOut:  totalUpiOut,
+        upiOut: totalUpiOut,
         bankOut: totalBankOut,
         netCash,
         netUpi,

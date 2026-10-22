@@ -1,3 +1,4 @@
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createPortal } from 'react-dom';
@@ -738,22 +739,26 @@ const DistributionOrder = () => {
                 <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end bg-slate-50/40 border border-slate-100 p-4 rounded-2xl relative group">
                   <div className="md:col-span-5 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Product *</label>
-                    <select
+                    <ProductSelectWithCode
+                      products={finishedProducts}
                       value={row.finishedProductId}
-                      onChange={(e) => handleItemRowChange(row.id, 'finishedProductId', e.target.value)}
-                      className="w-full h-11 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-750 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-semibold"
-                      required
-                    >
-                      <option value="">-- Choose finished product --</option>
-                      {finishedProducts.map(fp => (
-                        <option key={fp.id} value={fp.id}>{fp.name}</option>
-                      ))}
-                    </select>
+                      onChange={(val) => handleItemRowChange(row.id, 'finishedProductId', val)}
+                      onNextFocus={() => {
+                        const nextEl = document.getElementById(`dist-qty-${row.id}`);
+                        if (nextEl) {
+                          nextEl.focus();
+                          nextEl.select();
+                        }
+                      }}
+                      placeholder="-- Choose finished product --"
+                      searchPlaceholder="Search product or code..."
+                    />
                   </div>
 
                   <div className="md:col-span-2 space-y-1.5">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Qty (Boxes/Units) *</label>
                     <input 
+                      id={`dist-qty-${row.id}`}
                       type="number"
                       min="1"
                       placeholder="0"

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import TablePagination, { getDensityClass } from '../components/common/TablePagination';
 import { useAuth } from '../context/AuthContext';
 
@@ -753,11 +754,11 @@ const SundayLoading = () => {
                 <div key={index} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label>
-                    <SearchableSelect options={productOptions} value={item.productId || item.productName} onChange={(val, opt) => handleProductSelect(index, val, opt)} placeholder={loadingDropdowns ? 'Loading products...' : 'Select Finished Product...'} searchPlaceholder="Search product or stock..." />
+                    <ProductSelectWithCode products={finishedProducts} value={item.productId || item.productName} onChange={(val, opt) => handleProductSelect(index, val, opt)} onNextFocus={() => { const el = document.getElementById(`sunday-dispatch-qty-${index}`); if (el) { el.focus(); el.select(); } }} placeholder={loadingDropdowns ? 'Loading products...' : 'Select Finished Product...'} searchPlaceholder="Search product or code..." />
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label>
-                    <input type="number" step="any" min="0.01" required value={item.quantity} onWheel={(e) => e.target.blur()} onChange={(e) => updateProductItem(index, 'quantity', e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+                    <input id={`sunday-dispatch-qty-${index}`} type="number" step="any" min="0.01" required value={item.quantity} onWheel={(e) => e.target.blur()} onChange={(e) => updateProductItem(index, 'quantity', e.target.value)} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Rate (₹)</label>
@@ -1230,11 +1231,11 @@ const SundayLoading = () => {
               <div key={index} className="grid grid-cols-1 md:grid-cols-[2fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label>
-                  <SearchableSelect options={productOptions} value={item.productId} onChange={(val, opt) => handleLoadingProduct(index, val, opt)} placeholder="Select Product from Master..." searchPlaceholder="Search product or stock..." />
+                  <ProductSelectWithCode products={finishedProducts} value={item.productId} onChange={(val, opt) => handleLoadingProduct(index, val, opt)} onNextFocus={() => { const el = document.getElementById(`sunday-loading-qty-${index}`); if (el) { el.focus(); el.select(); } }} placeholder="Select Product from Master..." searchPlaceholder="Search product or code..." />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label>
-                  <input type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setLoadingItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
+                  <input id={`sunday-loading-qty-${index}`} type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setLoadingItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" />
                 </div>
                 <button type="button" disabled={loadingItems.length === 1} onClick={() => setLoadingItems(prev => prev.length === 1 ? prev : prev.filter((_, rowIndex) => rowIndex !== index))} className="h-11 w-11 rounded-xl border border-red-200 text-red-600 disabled:opacity-30">✕</button>
               </div>
@@ -1322,8 +1323,8 @@ const SundayLoading = () => {
               const basicRate = taxPercent === null || !Number.isFinite(taxPercent) ? 0 : rateWithTax / (1 + taxPercent / 100);
               const lineTotal = (parseFloat(item.quantity) || 0) * rateWithTax;
               return <div key={index} className="grid grid-cols-1 md:grid-cols-[2fr_0.7fr_1fr_0.75fr_1fr_1fr_auto] gap-3 p-4 rounded-2xl border border-slate-200 bg-slate-50/60 items-end">
-                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label><SearchableSelect options={productOptions} value={item.productId} onChange={(val, opt) => handleSaleProduct(index, val, opt)} placeholder="Select Product from Master..." searchPlaceholder="Search product or stock..." /></div>
-                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label><input type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Product #{index + 1}</label><ProductSelectWithCode products={finishedProducts} value={item.productId} onChange={(val, opt) => handleSaleProduct(index, val, opt)} onNextFocus={() => { const el = document.getElementById(`sunday-sale-qty-${index}`); if (el) { el.focus(); el.select(); } }} placeholder="Select Product from Master..." searchPlaceholder="Search product or code..." /></div>
+                <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Quantity</label><input id={`sunday-sale-qty-${index}`} type="number" step="any" min="0.01" required value={item.quantity} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
                 <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Rate With Tax (₹)</label><input type="number" step="0.01" min="0" required value={item.rateWithTax} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, rateWithTax: e.target.value } : row))} className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-sm font-bold" /></div>
                 <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Tax (%) *</label><select required value={item.taxPercent} onChange={(e) => setSaleItems(prev => prev.map((row, rowIndex) => rowIndex === index ? { ...row, taxPercent: e.target.value } : row))} className="w-full h-11 px-2 rounded-xl border border-slate-200 bg-white text-sm font-bold"><option value="">-- Tax % --</option>{TAX_OPTIONS.map(tax => <option key={tax} value={tax}>{tax}%</option>)}</select><div className="text-[9px] text-center font-bold text-slate-400 mt-1">{taxPercent !== null && taxPercent > 0 ? `${taxPercent / 2}% + ${taxPercent / 2}%` : taxPercent === 0 ? '0%' : 'Required'}</div></div>
                 <div><label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Basic Rate (No Tax)</label><div className="h-11 px-3 rounded-xl border border-slate-200 bg-slate-100 flex items-center font-black text-slate-600">{formatINR(basicRate)}</div></div>

@@ -30,6 +30,16 @@ const formatINR = (val) =>
     minimumFractionDigits: 2, maximumFractionDigits: 2,
   })}`;
 
+const fmtDisplayDate = (dateStr) => {
+  if (!dateStr) return '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const parts = String(dateStr).split('T')[0].split('-');
+  if (parts.length < 3) return dateStr;
+  const [y, m, d] = parts;
+  const monthName = months[parseInt(m, 10) - 1] || m;
+  return `${parseInt(d, 10)} ${monthName} ${y}`;
+};
+
 const fmt = (dateStr) => {
   if (!dateStr) return '—';
   const [y, m, d] = String(dateStr).split('T')[0].split('-');
@@ -385,54 +395,58 @@ const CashLedger = () => {
     <div className="space-y-6 animate-fade-in w-full pb-12">
 
       {/* ── HEADER ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
-            <span>💰</span> Cash Ledger
+          <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
+            Cash Ledger
           </h1>
           <p className="text-slate-500 text-sm font-medium mt-1">
-            Daily cash ledger, opening management &amp; history reports
+            Daily cash, opening balance and history {startDate ? `· ${fmtDisplayDate(startDate)}` : ''}
           </p>
         </div>
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={activeTab === 'ledger' ? fetchLedger : fetchHistory}
+            className="px-4 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-sm font-medium rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+          >
+            Refresh
+          </button>
           {activeTab === 'ledger' && (
             <button
+              type="button"
               onClick={handleOpenOpeningModal}
-              className="btn-premium bg-amber-500 text-white hover:bg-amber-600 border border-amber-600 text-xs px-4 h-11 font-black flex items-center gap-1.5 shadow-sm"
+              className="px-4 py-2 bg-[#135846] hover:bg-[#0f4637] text-white text-sm font-medium rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
             >
-              <span>💵</span> Set Opening Cash
+              Set opening cash
             </button>
           )}
-          <button
-            onClick={activeTab === 'ledger' ? fetchLedger : fetchHistory}
-            className="btn-premium bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs px-4 h-11 font-bold"
-          >
-            🔄 Refresh
-          </button>
         </div>
       </div>
 
       {/* ── TAB SWITCHER ──────────────────────────────────────────────────── */}
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+      <div className="flex items-center gap-2">
         <button
+          type="button"
           onClick={() => setActiveTab('ledger')}
-          className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'ledger'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'bg-[#d8f1e5] text-[#135846]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          📋 Daily Cash Ledger
+          Daily ledger
         </button>
         <button
+          type="button"
           onClick={() => setActiveTab('history')}
-          className={`px-5 py-2.5 rounded-lg text-xs font-black transition-all ${
+          className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all cursor-pointer ${
             activeTab === 'history'
-              ? 'bg-white text-slate-800 shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'bg-[#d8f1e5] text-[#135846]'
+              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
           }`}
         >
-          📜 Saved History Reports ({historyTotal})
+          Saved reports ({historyTotal})
         </button>
       </div>
 
@@ -444,283 +458,278 @@ const CashLedger = () => {
               Cash Ledger could not be loaded: {ledgerError}
             </div>
           )}
-          {/* TOP 5 SUMMARY CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
 
-            {/* 1. Opening Balance */}
-            <div className="card-premium relative overflow-hidden bg-gradient-to-br from-amber-50/50 to-orange-50/30 border-amber-200">
-              <span className="absolute top-3 right-3 text-xl opacity-20">🏦</span>
-              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
-                <span>Opening Balance</span>
+          {/* ROW 1: 2 TOP HERO CARDS */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* 1. Net closing balance (Dark Forest Green Hero Card) */}
+            <div className="bg-[#135846] text-white rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+              <div>
+                <p className="text-emerald-100 text-sm font-medium">Net closing balance</p>
+                <div className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight my-2">
+                  {loading ? '—' : formatINR(netTotal)}
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5 mt-4">
+                <div className="bg-[#0e4436] rounded-xl py-2.5 px-3.5">
+                  <span className="text-xs text-emerald-200/90 font-medium block">Cash</span>
+                  <span className="text-sm sm:text-base font-bold text-white mt-0.5 block truncate">
+                    {loading ? '—' : formatINR(summary?.netCash || 0)}
+                  </span>
+                </div>
+                <div className="bg-[#0e4436] rounded-xl py-2.5 px-3.5">
+                  <span className="text-xs text-emerald-200/90 font-medium block">UPI</span>
+                  <span className="text-sm sm:text-base font-bold text-white mt-0.5 block truncate">
+                    {loading ? '—' : formatINR(summary?.netUpi || 0)}
+                  </span>
+                </div>
+                <div className="bg-[#0e4436] rounded-xl py-2.5 px-3.5">
+                  <span className="text-xs text-emerald-200/90 font-medium block">Bank</span>
+                  <span className="text-sm sm:text-base font-bold text-white mt-0.5 block truncate">
+                    {loading ? '—' : formatINR(summary?.netBank || 0)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. Credit balance adjusted (White card with purple amount) */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-sm flex flex-col justify-between">
+              <div>
+                <p className="text-slate-500 text-sm font-medium">Credit balance (adjusted from customer credit)</p>
+                <div className="text-3xl sm:text-4xl font-extrabold text-[#5b50f6] tracking-tight my-2">
+                  {loading ? '—' : formatINR(summary?.creditAdjusted || 0)}
+                </div>
+              </div>
+              <p className="text-xs sm:text-sm text-slate-500 mt-4 leading-relaxed">
+                This is not cash on hand. It is credit owed to customers, already adjusted in billing.
+              </p>
+            </div>
+          </div>
+
+          {/* ROW 2: 3 SUMMARY CARDS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Opening Balance */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-sm font-medium text-slate-600">Opening balance</span>
                 <button
+                  type="button"
                   onClick={handleOpenOpeningModal}
-                  className="text-[10px] text-amber-600 underline font-bold hover:text-amber-800 ml-1"
+                  className="text-xs font-semibold text-amber-600 hover:text-amber-700 underline cursor-pointer"
                   title="Edit opening balance"
                 >
-                  (Edit)
+                  Edit
                 </button>
-              </p>
-              <p className="text-2xl font-black text-amber-700 mt-1">
-                {loading ? '—' : formatINR(totalOpening)}
-              </p>
-              {summary && (
-                <div className="mt-2 space-y-0.5">
-                  <p className="text-[10px] text-slate-500 font-semibold">Cash: <span className="text-amber-700 font-bold">{formatINR(summary.openingCash)}</span></p>
-                  <p className="text-[10px] text-slate-500 font-semibold">UPI: <span className="text-indigo-600 font-bold">{formatINR(summary.openingUpi)}</span></p>
-                  <p className="text-[10px] text-slate-500 font-semibold">Bank: <span className="text-sky-600 font-bold">{formatINR(summary.openingBank)}</span></p>
-                </div>
-              )}
-            </div>
-
-            {/* 2. Total Cash In */}
-            <div className="card-premium relative overflow-hidden">
-              <span className="absolute top-3 right-3 text-xl opacity-10">⬆️</span>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Cash In</p>
-              <p className="text-2xl font-black text-emerald-600 mt-1">
-                {loading ? '—' : formatINR(totalIn)}
-              </p>
-              {summary && (
-                <div className="mt-2 space-y-0.5">
-                  <p className="text-[10px] text-slate-400 font-semibold">Cash: <span className="text-emerald-600 font-bold">{formatINR(summary.cashIn)}</span></p>
-                  <p className="text-[10px] text-slate-400 font-semibold">UPI: <span className="text-indigo-600 font-bold">{formatINR(summary.upiIn)}</span></p>
-                  <p className="text-[10px] text-slate-400 font-semibold">Bank: <span className="text-sky-600 font-bold">{formatINR(summary.bankIn)}</span></p>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Total Cash Out */}
-            <div className="card-premium relative overflow-hidden">
-              <span className="absolute top-3 right-3 text-xl opacity-10">⬇️</span>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Cash Out</p>
-              <p className="text-2xl font-black text-red-500 mt-1">
-                {loading ? '—' : formatINR(totalOut)}
-              </p>
-              {summary && (
-                <div className="mt-2 space-y-0.5">
-                  <p className="text-[10px] text-slate-400 font-semibold">Cash: <span className="text-red-500 font-bold">{formatINR(summary.cashOut)}</span></p>
-                  <p className="text-[10px] text-slate-400 font-semibold">UPI: <span className="text-red-400 font-bold">{formatINR(summary.upiOut)}</span></p>
-                  <p className="text-[10px] text-slate-400 font-semibold">Bank: <span className="text-red-400 font-bold">{formatINR(summary.bankOut)}</span></p>
-                </div>
-              )}
-            </div>
-
-            {/* 4. Net Closing Balance */}
-            <div className="card-premium relative overflow-hidden border-primary/20 bg-blue-50/20">
-              <span className="absolute top-3 right-3 text-2xl opacity-10">⚖️</span>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Net Closing Balance</p>
-              <p className={`text-2xl font-black mt-1 ${netTotal >= 0 ? 'text-primary' : 'text-red-500'}`}>
-                {loading ? '—' : formatINR(netTotal)}
-              </p>
-              {summary && (
-                <div className="mt-2 space-y-0.5">
-                  <p className="text-[10px] text-slate-500 font-semibold">Net Cash: <span className={`font-bold ${summary.netCash >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>{formatINR(summary.netCash)}</span></p>
-                  <p className="text-[10px] text-slate-500 font-semibold">Net UPI: <span className={`font-bold ${summary.netUpi >= 0 ? 'text-indigo-600' : 'text-red-500'}`}>{formatINR(summary.netUpi)}</span></p>
-                  <p className="text-[10px] text-slate-500 font-semibold">Bank: <span className={`font-bold ${summary.netBank >= 0 ? 'text-sky-600' : 'text-red-500'}`}>{formatINR(summary.netBank)}</span></p>
-                </div>
-              )}
-            </div>
-
-            {/* 5. Credit Balance Adjusted */}
-            <div className="card-premium relative overflow-hidden border-violet-200 bg-violet-50/30">
-              <span className="absolute top-3 right-3 text-2xl opacity-20">💳</span>
-              <p className="text-[10px] font-black text-violet-700 uppercase tracking-widest">Credit Balance Adjusted</p>
-              <p className="text-2xl font-black text-violet-700 mt-1">
-                {loading ? '—' : formatINR(summary?.creditAdjusted || 0)}
-              </p>
-              <div className="mt-2 space-y-0.5">
-                <p className="text-[10px] text-slate-500 font-semibold">
-                  Adjusted from customer credit balance
-                </p>
               </div>
+              <div className="text-2xl sm:text-3xl font-bold text-slate-800 my-1">
+                {loading ? '—' : formatINR(totalOpening)}
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                Cash {formatINR(summary?.openingCash || 0)} · UPI {formatINR(summary?.openingUpi || 0)} · Bank {formatINR(summary?.openingBank || 0)}
+              </p>
             </div>
 
+            {/* Total Cash In */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+              <p className="text-sm font-medium text-slate-600">Total cash in</p>
+              <div className="text-2xl sm:text-3xl font-bold text-[#059669] my-1">
+                {loading ? '—' : `+ ${formatINR(totalIn)}`}
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                Cash {formatINR(summary?.cashIn || 0)} · UPI {formatINR(summary?.upiIn || 0)} · Bank {formatINR(summary?.bankIn || 0)}
+              </p>
+            </div>
+
+            {/* Total Cash Out */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm">
+              <p className="text-sm font-medium text-slate-600">Total cash out</p>
+              <div className="text-2xl sm:text-3xl font-bold text-red-500 my-1">
+                {loading ? '—' : `- ${formatINR(totalOut)}`}
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                Cash {formatINR(summary?.cashOut || 0)} · UPI {formatINR(summary?.upiOut || 0)} · Bank {formatINR(summary?.bankOut || 0)}
+              </p>
+            </div>
           </div>
 
-          {/* FULL-WIDTH RECTANGULAR COUNTER CASH CARD BELOW */}
-          <div className="card-premium relative overflow-hidden bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-emerald-500/10 border-2 border-emerald-500/30 p-5 shadow-sm rounded-2xl">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-              
-              {/* Left: Counter Cash Info */}
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-white flex items-center justify-center text-2xl shadow-md shrink-0">
-                  🏧
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-emerald-800 uppercase tracking-widest bg-emerald-100/80 px-2.5 py-0.5 rounded-md">
-                      COUNTER CASH
-                    </span>
-                    {summary?.cashSubmitted > 0 && (
-                      <span className="text-xs font-black text-emerald-700 bg-emerald-200/60 px-2 py-0.5 rounded-md flex items-center gap-1">
-                        ✓ Submitted: {formatINR(summary.cashSubmitted)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-3xl md:text-4xl font-black text-emerald-700 mt-1 tracking-tight">
-                    {loading ? '—' : formatINR(counterCash)}
-                  </div>
-                  <p className="text-xs text-slate-500 font-medium mt-0.5">
-                    Counter Cash = Available Net Cash ({formatINR(summary?.netCash || 0)}) − Cash Submitted ({formatINR(summary?.cashSubmitted || 0)})
-                  </p>
-                </div>
-              </div>
-
-              {/* Right: Cash Submitted Input Box */}
-              <div className="w-full md:w-auto min-w-[320px] bg-white/90 backdrop-blur-sm p-4 rounded-xl border border-emerald-200 shadow-sm space-y-2">
-                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-                  Cash Submitted / Deposited
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={summary?.netCash || 0}
-                      placeholder="0"
-                      value={cashSubmittedInput}
-                      onWheel={(e) => e.target.blur()}
-                      onChange={(e) => {
-                        setCashSubmittedInput(e.target.value);
-                        setSubmitFeedback({ type: '', message: '' });
-                      }}
-                      className="w-full h-10 pl-7 pr-3 rounded-lg border border-slate-300 bg-white text-slate-900 text-sm font-bold focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
-
-                  <button
-                    type="button"
-                    disabled={submittingCash}
-                    onClick={handleApproveCashSubmitted}
-                    className={`h-10 px-5 rounded-lg text-white font-black text-xs uppercase tracking-wider transition-all disabled:opacity-50 shrink-0 shadow-md flex items-center gap-1.5 ${
-                      isAdmin
-                        ? 'bg-emerald-600 hover:bg-emerald-700 active:scale-95'
-                        : 'bg-blue-600 hover:bg-blue-700 active:scale-95'
-                    }`}
-                  >
-                    {submittingCash ? (
-                      <span className="loading loading-spinner loading-xs"></span>
-                    ) : isAdmin ? (
-                      'APPROVED'
-                    ) : (
-                      'SUBMIT CASH'
-                    )}
-                  </button>
-                </div>
-
-                {submitFeedback.message && (
-                  <p className={`text-xs font-bold ${
-                    submitFeedback.type === 'success' ? 'text-emerald-700' : 'text-red-500'
-                  }`}>
-                    {submitFeedback.message}
-                  </p>
+          {/* COUNTER CASH CARD (MINT CONTAINER) */}
+          <div className="bg-[#eaf7f2] border border-[#d1ede2] rounded-2xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-5">
+            {/* Left: Counter Cash Info */}
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-600">
+                  Counter cash (in your drawer)
+                </span>
+                {summary?.cashSubmitted > 0 && (
+                  <span className="text-xs font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md">
+                    Submitted: {formatINR(summary.cashSubmitted)}
+                  </span>
                 )}
               </div>
+              <div className="text-3xl sm:text-4xl font-extrabold text-[#059669] tracking-tight my-1">
+                {loading ? '—' : formatINR(counterCash)}
+              </div>
+              <p className="text-xs text-slate-500">
+                Available net cash {formatINR(summary?.netCash || 0)} − cash submitted {formatINR(summary?.cashSubmitted || 0)}
+              </p>
+            </div>
 
+            {/* Right: Cash Submitted Input Box */}
+            <div className="flex flex-col items-start md:items-end gap-1.5">
+              <span className="text-xs font-medium text-slate-600">
+                Cash submitted / deposited
+              </span>
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-bold">₹</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max={summary?.netCash || 0}
+                    placeholder="0"
+                    value={cashSubmittedInput}
+                    onWheel={(e) => e.target.blur()}
+                    onChange={(e) => {
+                      setCashSubmittedInput(e.target.value);
+                      setSubmitFeedback({ type: '', message: '' });
+                    }}
+                    className="w-36 sm:w-44 h-10 pl-7 pr-3 rounded-xl border border-slate-200 bg-white text-slate-800 text-sm font-semibold focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <button
+                  type="button"
+                  disabled={submittingCash}
+                  onClick={handleApproveCashSubmitted}
+                  className="h-10 px-5 rounded-xl bg-[#135846] hover:bg-[#0f4637] text-white font-semibold text-sm transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {submittingCash ? (
+                    <span className="loading loading-spinner loading-xs"></span>
+                  ) : isAdmin ? (
+                    'Approve'
+                  ) : (
+                    'Submit cash'
+                  )}
+                </button>
+              </div>
+              {submitFeedback.message && (
+                <p className={`text-xs font-semibold ${
+                  submitFeedback.type === 'success' ? 'text-emerald-700' : 'text-red-500'
+                }`}>
+                  {submitFeedback.message}
+                </p>
+              )}
             </div>
           </div>
 
-
-          {/* FILTERS + TABLE CARD */}
-          <div className="card-premium">
-
-            {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-5">
-
-              {/* Search */}
-              <div className="md:col-span-2 relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
+          {/* SEARCH & FILTERS CARD */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+            {/* Top row: Search, Dates, Selects */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+              {/* Search input */}
+              <div className="lg:col-span-2 relative">
                 <input
                   type="text"
-                  placeholder="Search party, ref, description…"
+                  placeholder="Search party, reference or description"
                   value={search}
                   onChange={handleFilterChange(setSearch)}
-                  className="input-premium !pl-10 h-11 w-full text-sm"
+                  className="w-full h-10 px-3.5 rounded-xl border border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all text-sm font-medium"
                 />
               </div>
 
-              {/* From date */}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase shrink-0">From</span>
+              {/* From Date */}
+              <div>
                 <input
                   type="date"
                   value={startDate}
                   onChange={handleFilterChange(setStartDate)}
-                  className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all text-sm font-medium"
                 />
               </div>
 
-              {/* To date */}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] font-bold text-slate-400 uppercase shrink-0">To</span>
+              {/* To Date */}
+              <div>
                 <input
                   type="date"
                   value={endDate}
                   onChange={handleFilterChange(setEndDate)}
-                  className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-medium"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all text-sm font-medium"
                 />
               </div>
 
-              {/* Method */}
+              {/* All Methods */}
               <div>
                 <select
                   value={method}
                   onChange={handleFilterChange(setMethod)}
-                  className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-bold"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all text-sm font-medium cursor-pointer"
                 >
-                  <option value="All">All Methods</option>
-                  <option value="Cash">💵 Cash</option>
-                  <option value="UPI">📱 UPI</option>
-                  <option value="Bank">🏦 Bank</option>
-                  <option value="Credit Balance">💳 Credit Balance</option>
+                  <option value="All">All methods</option>
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Bank">Bank</option>
+                  <option value="Credit Balance">Credit Balance</option>
                 </select>
               </div>
 
-              {/* Flow type */}
+              {/* All Transactions */}
               <div>
                 <select
                   value={flowType}
                   onChange={handleFilterChange(setFlowType)}
-                  className="w-full h-11 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none text-sm font-bold"
+                  className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white text-slate-700 focus:border-[#135846] focus:ring-2 focus:ring-[#135846]/10 outline-none transition-all text-sm font-medium cursor-pointer"
                 >
-                  <option value="all">All Transactions</option>
-                  <option value="in">⬆️ Cash In Only</option>
-                  <option value="out">⬇️ Cash Out Only</option>
+                  <option value="all">All transactions</option>
+                  <option value="in">Cash In Only</option>
+                  <option value="out">Cash Out Only</option>
                 </select>
               </div>
             </div>
 
-            {/* Module filter pills */}
-            <div className="flex items-center gap-2 mb-5 flex-wrap">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Sources:</span>
+            {/* Bottom row: Source filter pills */}
+            <div className="flex items-center gap-2 flex-wrap pt-1">
+              <span className="text-xs font-medium text-slate-400 mr-1">Source</span>
               {Object.keys(MODULE_BADGE).map(mod => (
-                <span key={mod} className={`text-[10px] font-bold px-2.5 py-1 rounded-full border ${MODULE_BADGE[mod]}`}>
+                <button
+                  key={mod}
+                  type="button"
+                  onClick={() => {
+                    if (search === mod) setSearch('');
+                    else setSearch(mod);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-all cursor-pointer ${
+                    search === mod
+                      ? 'bg-[#135846] text-white border-[#135846] shadow-xs'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
                   {mod}
-                </span>
+                </button>
               ))}
             </div>
+          </div>
 
-            {/* Record count */}
-            <div className="flex justify-end mb-3">
-              <div className="text-[12px] font-bold text-slate-400 uppercase tracking-widest bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+          {/* TABLE CARD */}
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+            {/* Table Header: Record count */}
+            <div className="flex items-center justify-end">
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
                 {total} Records
-              </div>
+              </span>
             </div>
 
             {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-slate-100">
               <table className="table table-zebra w-full">
-                <thead className="bg-slate-50 border-b border-slate-100">
-                  <tr className="text-slate-500 text-[11px] font-black uppercase tracking-wider">
+                <thead className="bg-slate-50/70 border-b border-slate-100">
+                  <tr className="text-slate-500 text-xs font-semibold">
                     <th className={`${headerCellPadding} text-left`}>Date</th>
-                    <th className={`${headerCellPadding} text-left`}>Ref</th>
+                    <th className={`${headerCellPadding} text-left`}>Reference</th>
                     <th className={`${headerCellPadding} text-left`}>Source</th>
-                    <th className={`${headerCellPadding} text-left`}>Party / Description</th>
+                    <th className={`${headerCellPadding} text-left`}>Party</th>
                     <th className={`${headerCellPadding} text-left`}>Method</th>
                     <th className={`${headerCellPadding} text-center`}>Type</th>
-                    <th className={`${headerCellPadding} text-right`}>Amount (₹)</th>
+                    <th className={`${headerCellPadding} text-right`}>Amount</th>
                     <th className={`${headerCellPadding} text-center`}>Actions</th>
                   </tr>
                 </thead>
@@ -729,7 +738,7 @@ const CashLedger = () => {
                     <tr>
                       <td colSpan="8" className="py-20 text-center">
                         <div className="flex flex-col items-center gap-3">
-                          <span className="loading loading-spinner text-primary"></span>
+                          <span className="loading loading-spinner text-[#135846]"></span>
                           <span className="text-slate-400 text-sm font-medium">Aggregating cash flows…</span>
                         </div>
                       </td>
@@ -763,58 +772,58 @@ const CashLedger = () => {
                               ? 'bg-amber-50/40 border-b border-amber-100 font-semibold'
                               : isSubmitted
                               ? 'bg-emerald-50/40 border-b border-emerald-100 font-semibold'
-                              : 'hover:bg-blue-50/20 transition-colors'
+                              : 'hover:bg-slate-50/50 transition-colors'
                           }
                         >
-                          <td className={`${cellPadding} font-semibold text-slate-600 whitespace-nowrap`}>
+                          <td className={`${cellPadding} font-medium text-slate-600 whitespace-nowrap`}>
                             {fmt(e.txn_date)}
                           </td>
-                          <td className={`${cellPadding} font-mono font-bold ${
-                            isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700 font-black' : 'text-primary'
+                          <td className={`${cellPadding} font-mono font-semibold ${
+                            isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700 font-bold' : 'text-slate-800'
                           } max-w-[130px] truncate`} title={e.ref_id}>
                             {e.ref_id}
                           </td>
                           <td className={cellPadding}>
-                            <span className={`text-[10px] font-black px-2.5 py-1 rounded-full border ${modBg}`}>
+                            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${modBg}`}>
                               {e.source_module}
                             </span>
                           </td>
-                          <td className={`${cellPadding} font-medium text-slate-700 max-w-[260px]`}>
-                            <p className="font-bold text-slate-800 truncate">{e.party || '—'}</p>
+                          <td className={`${cellPadding} text-slate-700 max-w-[260px]`}>
+                            <p className="font-semibold text-slate-800 truncate">{e.party || '—'}</p>
                             <p className="text-[11px] text-slate-400 truncate">{e.description}</p>
                           </td>
                           <td className={cellPadding}>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${methBg}`}>
+                            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${methBg}`}>
                               {e.method || '—'}
                             </span>
                           </td>
                           <td className={`${cellPadding} text-center`}>
-                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
                               isOpening
                                 ? 'bg-amber-100 text-amber-800 border-amber-300'
                                 : isSubmitted
-                                ? (e.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-300 font-bold' : 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold')
+                                ? (e.status === 'Pending' ? 'bg-amber-100 text-amber-800 border-amber-300' : 'bg-emerald-100 text-emerald-800 border-emerald-300')
                                 : isIn
-                                ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
-                                : 'bg-red-50 text-red-500 border-red-100'
+                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                : 'bg-red-50 text-red-600 border-red-200'
                             }`}>
                               {isOpening
-                                ? '⚡ OPENING'
+                                ? 'Opening'
                                 : isSubmitted
-                                ? (e.status === 'Pending' ? '⏳ PENDING APPROVAL' : '✓ APPROVED')
+                                ? (e.status === 'Pending' ? 'Pending' : 'Approved')
                                 : isIn ? '▲ IN' : '▼ OUT'}
                             </span>
                           </td>
-                          <td className={`${cellPadding} text-right font-black whitespace-nowrap ${
-                            isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700' : isIn ? 'text-emerald-600' : 'text-red-500'
+                          <td className={`${cellPadding} text-right font-bold whitespace-nowrap ${
+                            isOpening ? 'text-amber-700' : isSubmitted ? 'text-emerald-700' : isIn ? 'text-[#059669]' : 'text-red-500'
                           }`}>
                             <div className="flex items-center justify-end gap-2">
-                              <span>{isOpening ? '' : isSubmitted ? '−' : isIn ? '+' : '−'}{formatINR(Math.abs(e.amount))}</span>
+                              <span>{isOpening ? '' : isSubmitted ? '− ' : isIn ? '+ ' : '− '}{formatINR(Math.abs(e.amount))}</span>
                               {isSubmitted && e.status === 'Pending' && isAdmin && (
                                 <button
                                   type="button"
                                   onClick={() => handleApprovePendingSubmission(e.id)}
-                                  className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-black text-[10px] uppercase tracking-wider transition-all shadow-xs"
+                                  className="px-2 py-0.5 rounded bg-[#135846] hover:bg-[#0f4637] text-white font-semibold text-[10px] uppercase tracking-wider transition-all shadow-xs cursor-pointer"
                                   title="Approve this cash deposit"
                                 >
                                   ✓ Approve
@@ -824,7 +833,7 @@ const CashLedger = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleDeleteCashSubmitted(e.id)}
-                                  className="text-slate-400 hover:text-red-500 text-xs transition-colors p-1 rounded hover:bg-red-50"
+                                  className="text-slate-400 hover:text-red-500 text-xs transition-colors p-1 rounded hover:bg-red-50 cursor-pointer"
                                   title="Delete this cash submission entry"
                                 >
                                   🗑️
@@ -836,10 +845,10 @@ const CashLedger = () => {
                             <button
                               type="button"
                               onClick={() => handleViewTxnDetails(e)}
-                              className="px-2.5 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all font-bold text-xs flex items-center justify-center gap-1 mx-auto shadow-xs"
+                              className="px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-[#135846] hover:text-white transition-all font-semibold text-xs flex items-center justify-center gap-1 mx-auto shadow-xs cursor-pointer"
                               title="View entry details"
                             >
-                              👁️ View
+                              View
                             </button>
                           </td>
                         </tr>

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import SearchInput from '../components/common/SearchInput';
 import { useAuth } from '../context/AuthContext';
 
@@ -2054,12 +2055,19 @@ const CanSupply = () => {
                           <div key={index} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-slate-50/50 p-3 border border-slate-100 rounded-xl">
                             {/* Product Select */}
                             <div className="flex-1">
-                              <SearchableSelect
-                                options={availableProducts.map(p => ({ value: p.name, label: p.name }))}
+                              <ProductSelectWithCode
+                                products={availableProducts.map(p => ({ ...p, value: p.name }))}
                                 value={item.product || ''}
-                                onChange={(val) => handleItemChange(index, 'product', val)}
+                                onChange={(val, opt) => handleItemChange(index, 'product', opt?.name || val)}
+                                onNextFocus={() => {
+                                  const nextEl = document.getElementById(`can-supply-qty-${index}`);
+                                  if (nextEl) {
+                                    nextEl.focus();
+                                    nextEl.select();
+                                  }
+                                }}
                                 placeholder={availableProducts.length === 0 ? "No Active Cans/Dispensers" : "-- Select Product --"}
-                                searchPlaceholder="Search product..."
+                                searchPlaceholder="Search product or code..."
                                 disabled={availableProducts.length === 0}
                               />
                             </div>
@@ -2067,6 +2075,7 @@ const CanSupply = () => {
                             {/* Quantity supplied */}
                             <div className="w-full sm:w-28">
                               <input
+                                id={`can-supply-qty-${index}`}
                                 type="number"
                                 placeholder="Qty"
                                 value={item.quantity}
@@ -3589,12 +3598,19 @@ const CanSupply = () => {
 
                     <div className="space-y-1.5">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">Product *</label>
-                      <SearchableSelect
-                        options={availableProducts.map(p => ({ value: p.name, label: p.name }))}
+                      <ProductSelectWithCode
+                        products={availableProducts.map(p => ({ ...p, value: p.name }))}
                         value={modalSupplyForm.product || ''}
-                        onChange={(val) => setModalSupplyForm(prev => ({ ...prev, product: val }))}
+                        onChange={(val, opt) => setModalSupplyForm(prev => ({ ...prev, product: opt?.name || val }))}
+                        onNextFocus={() => {
+                          const nextEl = document.getElementById('can-modal-qty-input');
+                          if (nextEl) {
+                            nextEl.focus();
+                            nextEl.select();
+                          }
+                        }}
                         placeholder={availableProducts.length === 0 ? "No Active Cans/Dispensers" : "-- Select Product --"}
-                        searchPlaceholder="Search product..."
+                        searchPlaceholder="Search product or code..."
                         disabled={availableProducts.length === 0}
                       />
                     </div>

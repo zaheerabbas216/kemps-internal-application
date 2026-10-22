@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/axios';
 import TablePagination from '../components/common/TablePagination';
 import SearchableSelect from '../components/SearchableSelect';
+import ProductSelectWithCode from '../components/ProductSelectWithCode';
 import SearchInput from '../components/common/SearchInput';
 import { useAuth } from '../context/AuthContext';
 import { useSSE } from '../context/SSEContext';
@@ -624,12 +625,19 @@ const Production = () => {
                   <label className="text-[12px] font-bold text-slate-500 block uppercase tracking-wider">
                     Product *
                   </label>
-                  <SearchableSelect
-                    options={finishedProducts.map(fp => ({ value: fp.id, label: fp.name }))}
+                  <ProductSelectWithCode
+                    products={finishedProducts}
                     value={batchInfo.productId}
                     onChange={(val) => setBatchInfo(prev => ({ ...prev, productId: val }))}
+                    onNextFocus={() => {
+                      const nextEl = document.getElementById('production-boxes-input');
+                      if (nextEl) {
+                        nextEl.focus();
+                        nextEl.select();
+                      }
+                    }}
                     placeholder="Select Product"
-                    searchPlaceholder="Search product..."
+                    searchPlaceholder="Search product or code..."
                   />
                 </div>
 
@@ -639,6 +647,7 @@ const Production = () => {
                     Production Boxes *
                   </label>
                   <input 
+                    id="production-boxes-input"
                     type="number"
                     name="productionBoxes"
                     value={batchInfo.productionBoxes}

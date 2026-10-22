@@ -909,179 +909,351 @@ const CreditBalance = () => {
       {/* VIEW DETAILS & PAYMENT TIMELINE MODAL */}
       {isTimelineModalOpen && selectedBill && createPortal(
         <div className="modal modal-open animate-fade-in z-50">
-          <div className="modal-box max-w-5xl bg-white border border-slate-200/80 rounded-3xl p-8 shadow-2xl relative flex flex-col md:flex-row gap-6 max-h-[85vh] overflow-y-auto z-10">
-            <button 
-              onClick={() => setIsTimelineModalOpen(false)}
-              className="absolute top-4 right-4 w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-450 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
-            >
-              ✕
-            </button>
-
-            {loadingTimeline ? (
-              <div className="flex items-center justify-center w-full py-24">
-                <span className="loading loading-spinner text-primary"></span>
-              </div>
-            ) : (
-              <>
-                {/* Left side: Invoice Details Mockup */}
-                <div className="flex-1 space-y-4 min-w-0">
-                  <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-2">
-                    📄 INVOICE DETAILS
-                  </h3>
-                  
+          <div 
+            className="modal-box w-11/12 max-w-6xl !max-w-6xl bg-white border border-slate-200/90 rounded-3xl p-6 sm:p-8 shadow-2xl relative flex flex-col max-h-[92vh] overflow-y-auto z-10"
+            style={{ maxWidth: '1150px', width: '95vw' }}
+          >
+            {/* Modal Header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-5 border-b border-slate-150 gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-100/80 flex items-center justify-center text-blue-600 text-xl shadow-sm shrink-0">
+                  📄
+                </div>
+                <div>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <h2 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                      Invoice Details & Payment History
+                    </h2>
+                    {timelineBill && (
+                      <span className="font-mono text-xs font-black bg-blue-50 text-blue-700 border border-blue-200 px-2.5 py-0.5 rounded-lg">
+                        {timelineBill.id}
+                      </span>
+                    )}
+                    {timelineBill && (
+                      <span className={`text-[11px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
+                        parseFloat(timelineBill.due_amount) === 0
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          : 'bg-rose-50 text-rose-600 border-rose-200'
+                      }`}>
+                        {parseFloat(timelineBill.due_amount) === 0 ? '✓ Paid & Settled' : '● Due Pending'}
+                      </span>
+                    )}
+                  </div>
                   {timelineBill && (
-                    <div className="border border-slate-200 p-5 rounded-2xl bg-slate-50/25 space-y-4 text-xs font-semibold text-slate-700">
-                      <div className="flex justify-between border-b border-slate-200 pb-2.5">
-                        <div>
-                          <div className="font-extrabold text-slate-800 uppercase">{timelineBill.company}</div>
-                          <div className="text-[10px] text-slate-450 mt-0.5">Billed context: {timelineBill.customer_type}</div>
-                        </div>
-                        <div className="text-right">
-                          <div className="font-black text-primary font-mono">{timelineBill.id}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{formatDateDDMMYYYY(timelineBill.billing_date)}</div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div className="text-[10px] text-slate-400 uppercase font-black">Customer Details:</div>
-                        <div className="font-extrabold text-slate-800 text-sm">{timelineBill.customer_name}</div>
-                        <div>Phone: {timelineBill.customer_phone}</div>
-                      </div>
-
-                      {/* Products list */}
-                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-white mt-4">
-                        <table className="w-full text-left border-collapse text-[11px]">
-                          <thead>
-                            <tr className="bg-slate-100 border-b border-slate-200 text-[9px] font-black text-slate-500 uppercase tracking-wider">
-                              <th className="py-2 px-2.5">Product</th>
-                              <th className="py-2 px-2.5 text-center">Qty</th>
-                              <th className="py-2 px-2.5 text-right">Rate</th>
-                              <th className="py-2 px-2.5 text-right">Total</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-150 font-bold text-slate-700">
-                            {invoiceItems.map(item => (
-                              <tr key={item.id}>
-                                <td className="py-1.5 px-2.5 text-slate-850 font-extrabold">{item.product_name}</td>
-                                <td className="py-1.5 px-2.5 text-center">{item.quantity}</td>
-                                <td className="py-1.5 px-2.5 text-right">₹ {parseFloat(item.rate_with_tax).toFixed(2)}</td>
-                                <td className="py-1.5 px-2.5 text-right text-slate-800">₹ {parseFloat(item.total_amount).toFixed(2)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {/* Financial summary */}
-                      <div className="border-t border-slate-200 pt-3 flex flex-col items-end gap-1">
-                        <div>Invoice Total: <span className="font-extrabold">₹ {parseFloat(timelineBill.grand_total).toFixed(2)}</span></div>
-                        <div className="text-emerald-600">Total Paid: <span className="font-extrabold">₹ {parseFloat(timelineBill.amount_paid).toFixed(2)}</span></div>
-                        <div className="text-rose-500 font-black border-t border-dashed border-slate-200 pt-1 mt-1 w-44 text-right">
-                          Remaining Due: ₹ {parseFloat(timelineBill.due_amount).toFixed(2)}
-                        </div>
-                      </div>
-
-                    </div>
+                    <p className="text-xs text-slate-400 font-semibold mt-0.5">
+                      Billed on {formatDateDDMMYYYY(timelineBill.billing_date)} • {timelineBill.company}
+                    </p>
                   )}
                 </div>
+              </div>
 
-                {/* Right side: Payment Timeline */}
-                <div className="flex-1 space-y-4 min-w-0 border-t md:border-t-0 md:border-l border-slate-200 pt-4 md:pt-0 md:pl-6">
-                  <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest border-b border-slate-100 pb-2">
-                    ⏳ PAYMENT TIMELINE
-                  </h3>
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                {timelineBill && parseFloat(timelineBill.due_amount) > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTimelineModalOpen(false);
+                      handleOpenPay(timelineBill);
+                    }}
+                    className="h-9 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-bold text-xs shadow-md shadow-emerald-100 flex items-center gap-1.5 transition-all"
+                  >
+                    <span>💳</span>
+                    <span>Receive Payment</span>
+                  </button>
+                )}
+                <button 
+                  onClick={() => setIsTimelineModalOpen(false)}
+                  className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200 text-slate-400 hover:bg-slate-100 hover:text-slate-800 flex items-center justify-center font-bold transition-all"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
 
+            {loadingTimeline ? (
+              <div className="flex flex-col items-center justify-center w-full py-28 gap-3">
+                <span className="loading loading-spinner text-primary loading-lg"></span>
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Loading invoice & payment timeline...</span>
+              </div>
+            ) : (
+              <div className="flex flex-col lg:flex-row gap-8 pt-6">
+                {/* Left side: Invoice Details (Spacious 60%) */}
+                <div className="flex-1 lg:w-7/12 space-y-6 min-w-0">
                   {timelineBill && (
-                    <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-200">
-                      
-                      {/* 1. Invoice Created Node */}
-                      <div className="relative">
-                        {/* Node circle */}
-                        <div className="absolute -left-6 top-1 w-4.5 h-4.5 bg-blue-500 border-4 border-white rounded-full shadow-sm"></div>
-                        <div className="text-xs">
-                          <div className="font-extrabold text-slate-800">Invoice Created</div>
-                          <div className="text-[10px] text-slate-400 font-bold mt-0.5">{formatDateDDMMYYYY(timelineBill.billing_date)}</div>
-                          <div className="text-slate-500 mt-1 font-bold">
-                            Total invoice amount generated on credit: <span className="text-slate-800 font-extrabold">₹ {parseFloat(timelineBill.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                    <>
+                      {/* Customer & Company Details Header Box */}
+                      <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Customer Details</span>
+                            <div className="text-base font-extrabold text-slate-800 flex items-center gap-1.5">
+                              <span>👤</span> {timelineBill.customer_name}
+                            </div>
+                            <div className="text-xs font-semibold text-slate-600 flex items-center gap-1.5 pt-0.5">
+                              <span>📞</span> {timelineBill.customer_phone || 'No phone recorded'}
+                            </div>
+                          </div>
+                          <div className="space-y-1 sm:text-right">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Billing Context</span>
+                            <div className="text-sm font-extrabold text-slate-800 uppercase">{timelineBill.company}</div>
+                            <div className="inline-flex items-center px-2.5 py-0.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-bold border border-blue-100 mt-0.5">
+                              {timelineBill.customer_type || 'General Customer'}
+                            </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* 2. Timeline Events (Payments & Returns) */}
-                      {(() => {
-                        const mergedEvents = getMergedTimelineEvents();
-                        return (
-                          <>
-                            {mergedEvents.map((evt, idx) => (
-                              <div key={evt.id} className="relative">
-                                {/* Node circle: emerald for payment, orange for return */}
-                                <div className={`absolute -left-6 top-1 w-4.5 h-4.5 border-4 border-white rounded-full shadow-sm ${
-                                  evt.type === 'payment' ? 'bg-emerald-500' : 'bg-orange-500'
-                                }`}></div>
-                                <div className="text-xs">
-                                  <div className="font-extrabold text-slate-800">
-                                    {evt.type === 'payment' 
-                                      ? `Partial Payment received (Receipt #${idx + 1})` 
-                                      : 'Sales Return / Credit Note'
-                                    }
-                                  </div>
-                                  <div className="text-[10px] text-slate-400 font-bold mt-0.5">{formatDateDDMMYYYY(evt.date)}</div>
-                                  <div className={`p-2.5 rounded-xl border mt-1.5 space-y-1 font-medium text-[11px] ${
-                                    evt.type === 'payment' 
-                                      ? 'bg-emerald-50/50 border-emerald-100/60 text-slate-650' 
-                                      : 'bg-orange-50/50 border-orange-100/60 text-slate-650'
-                                  }`}>
-                                    <div className="flex justify-between">
-                                      <span>{evt.type === 'payment' ? 'Receipt No:' : 'Credit Note No:'}</span>
-                                      <span className="font-mono font-bold text-slate-800">{evt.id}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                      <span>{evt.type === 'payment' ? 'Received Amount:' : 'Adjusted Value:'}</span>
-                                      <span className={`font-black ${evt.type === 'payment' ? 'text-emerald-600' : 'text-orange-600'}`}>
-                                        ₹ {evt.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                      {/* Products list table */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                            📦 Billed Products ({invoiceItems.length})
+                          </span>
+                        </div>
+                        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
+                          <table className="w-full text-left border-collapse">
+                            <thead>
+                              <tr className="bg-slate-100/90 border-b border-slate-200 text-[11px] font-black text-slate-600 uppercase tracking-wider">
+                                <th className="py-3 px-4 w-12 text-center">#</th>
+                                <th className="py-3 px-4">Product Name</th>
+                                <th className="py-3 px-3 text-center w-20">Qty</th>
+                                <th className="py-3 px-4 text-right w-28">Rate</th>
+                                <th className="py-3 px-4 text-right w-32">Total Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 text-sm">
+                              {invoiceItems.length === 0 ? (
+                                <tr>
+                                  <td colSpan="5" className="py-10 text-center text-slate-400 font-medium italic">
+                                    No item line details available.
+                                  </td>
+                                </tr>
+                              ) : (
+                                invoiceItems.map((item, idx) => (
+                                  <tr key={item.id || idx} className="hover:bg-blue-50/20 transition-colors">
+                                    <td className="py-3 px-4 text-center font-mono text-xs font-bold text-slate-400">{idx + 1}</td>
+                                    <td className="py-3 px-4">
+                                      <div className="font-extrabold text-slate-800">{item.product_name}</div>
+                                      {parseFloat(item.tax_percent) > 0 && (
+                                        <span className="text-[10px] text-slate-400 font-semibold">Includes {item.tax_percent}% GST</span>
+                                      )}
+                                    </td>
+                                    <td className="py-3 px-3 text-center">
+                                      <span className="inline-block px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-800 font-mono font-black text-xs">
+                                        {item.quantity}
                                       </span>
-                                    </div>
-                                    {evt.type === 'payment' && (
-                                      <div className="flex justify-between">
-                                        <span>Payment Mode:</span>
-                                        <span className="font-bold text-slate-800">{evt.method}</span>
-                                      </div>
-                                    )}
-                                    {evt.remarks && (
-                                      <div className={`text-[10px] border-t pt-1 text-slate-400 italic ${
-                                        evt.type === 'payment' ? 'border-emerald-100' : 'border-orange-100'
-                                      }`}>
-                                        {evt.type === 'payment' ? `Notes: "${evt.remarks}"` : evt.remarks}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-semibold text-slate-600">
+                                      ₹ {parseFloat(item.rate_with_tax || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="py-3 px-4 text-right font-mono font-black text-slate-900">
+                                      ₹ {parseFloat(item.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                ))
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
 
-                            {/* 3. Fully Cleared node */}
-                            {parseFloat(timelineBill.due_amount) === 0 && (
-                              <div className="relative">
-                                <div className="absolute -left-6 top-1 w-4.5 h-4.5 bg-indigo-600 border-4 border-white rounded-full shadow-sm"></div>
-                                <div className="text-xs">
-                                  <div className="font-black text-indigo-600 uppercase tracking-wider text-[11px]">Fully Paid & Settle Completed</div>
-                                  <div className="text-[10px] text-slate-400 font-bold mt-0.5">
-                                    {mergedEvents.length > 0 ? formatDateDDMMYYYY(mergedEvents[mergedEvents.length - 1].date) : formatDateDDMMYYYY(timelineBill.billing_date)}
-                                  </div>
-                                  <p className="text-slate-500 mt-1">Outstanding balance is fully cleared (₹ 0.00). Invoice is fully settled.</p>
-                                </div>
-                              </div>
-                            )}
-                          </>
+                      {/* Financial summary tiles */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 flex flex-col justify-between">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Invoice Total</span>
+                          <div className="text-lg font-black text-slate-900 font-mono mt-1">
+                            ₹ {parseFloat(timelineBill.grand_total || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <span className="text-[10px] text-slate-450 font-semibold mt-1">Gross billed amount</span>
+                        </div>
+
+                        <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-4 flex flex-col justify-between">
+                          <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Total Collected</span>
+                          <div className="text-lg font-black text-emerald-700 font-mono mt-1">
+                            ₹ {parseFloat(timelineBill.amount_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </div>
+                          <span className="text-[10px] text-emerald-600/80 font-semibold mt-1">Paid to date</span>
+                        </div>
+
+                        <div className={`rounded-2xl p-4 flex flex-col justify-between border ${
+                          parseFloat(timelineBill.due_amount) === 0 
+                            ? 'bg-blue-50/60 border-blue-100 text-blue-700' 
+                            : 'bg-rose-50/70 border-rose-100 text-rose-600'
+                        }`}>
+                          <span className="text-[10px] font-black uppercase tracking-widest">
+                            {parseFloat(timelineBill.due_amount) === 0 ? 'Settlement Status' : 'Remaining Due'}
+                          </span>
+                          <div className="text-lg font-black font-mono mt-1">
+                            {parseFloat(timelineBill.due_amount) === 0 ? '₹ 0.00' : `₹ ${parseFloat(timelineBill.due_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                          </div>
+                          <span className="text-[10px] font-semibold mt-1">
+                            {parseFloat(timelineBill.due_amount) === 0 ? 'Fully Cleared' : 'Pending Payment'}
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Right side: Payment Timeline (Spacious 40%) */}
+                <div className="flex-1 lg:w-5/12 space-y-4 min-w-0 border-t lg:border-t-0 lg:border-l border-slate-200/80 pt-6 lg:pt-0 lg:pl-8">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-150">
+                    <h3 className="text-xs font-black text-slate-500 uppercase tracking-wider">
+                      ⏳ PAYMENT TIMELINE & ACTIVITY
+                    </h3>
+                    <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-2.5 py-0.5 rounded-lg">
+                      {getMergedTimelineEvents().length} Event{getMergedTimelineEvents().length === 1 ? '' : 's'}
+                    </span>
+                  </div>
+
+                  {timelineBill && (
+                    <>
+                      {/* Settlement progress meter */}
+                      {(() => {
+                        const grandTotal = parseFloat(timelineBill.grand_total) || 1;
+                        const paidTotal = parseFloat(timelineBill.amount_paid) || 0;
+                        const pct = Math.min(100, Math.max(0, Math.round((paidTotal / grandTotal) * 100)));
+                        return (
+                          <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 space-y-2">
+                            <div className="flex justify-between text-xs font-bold text-slate-700">
+                              <span>Settlement Progress</span>
+                              <span className={pct === 100 ? 'text-emerald-600 font-black' : 'text-slate-600 font-mono font-bold'}>
+                                {pct}% Cleared
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 h-2.5 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  pct === 100 ? 'bg-emerald-500' : 'bg-primary'
+                                }`}
+                                style={{ width: `${pct}%` }}
+                              ></div>
+                            </div>
+                          </div>
                         );
                       })()}
 
-                    </div>
+                      {/* Timeline stream */}
+                      <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-[2px] before:bg-slate-200 mt-4">
+                        {/* 1. Invoice Created Node */}
+                        <div className="relative">
+                          <div className="absolute -left-6 top-1 w-4 h-4 bg-blue-500 border-4 border-white rounded-full shadow-sm"></div>
+                          <div className="text-xs">
+                            <div className="font-extrabold text-slate-800">Invoice Created on Credit</div>
+                            <div className="text-[10px] text-slate-400 font-bold mt-0.5">{formatDateDDMMYYYY(timelineBill.billing_date)}</div>
+                            <div className="bg-blue-50/50 border border-blue-100/70 p-3 rounded-xl mt-1.5 font-medium text-slate-650">
+                              Total invoice credit amount: <span className="text-slate-800 font-extrabold font-mono">₹ {parseFloat(timelineBill.grand_total).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Timeline Events (Payments & Returns) */}
+                        {(() => {
+                          const mergedEvents = getMergedTimelineEvents();
+                          return (
+                            <>
+                              {mergedEvents.map((evt, idx) => (
+                                <div key={evt.id} className="relative">
+                                  <div className={`absolute -left-6 top-1 w-4 h-4 border-4 border-white rounded-full shadow-sm ${
+                                    evt.type === 'payment' ? 'bg-emerald-500' : 'bg-orange-500'
+                                  }`}></div>
+                                  <div className="text-xs">
+                                    <div className="font-extrabold text-slate-800">
+                                      {evt.type === 'payment' 
+                                        ? `Partial Payment Received (Receipt #${idx + 1})` 
+                                        : 'Sales Return / Credit Note'
+                                      }
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-bold mt-0.5">{formatDateDDMMYYYY(evt.date)}</div>
+                                    <div className={`p-3 rounded-xl border mt-1.5 space-y-1.5 text-xs ${
+                                      evt.type === 'payment' 
+                                        ? 'bg-emerald-50/50 border-emerald-100 text-slate-700' 
+                                        : 'bg-orange-50/50 border-orange-100 text-slate-700'
+                                    }`}>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-[11px] font-semibold text-slate-500">
+                                          {evt.type === 'payment' ? 'Receipt No:' : 'Credit Note No:'}
+                                        </span>
+                                        <span className="font-mono font-bold text-slate-800 text-xs bg-white px-2 py-0.5 rounded border border-slate-200/60">
+                                          {evt.id}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between items-center">
+                                        <span className="text-[11px] font-semibold text-slate-500">
+                                          {evt.type === 'payment' ? 'Amount Received:' : 'Adjusted Value:'}
+                                        </span>
+                                        <span className={`font-mono font-black text-sm ${evt.type === 'payment' ? 'text-emerald-600' : 'text-orange-600'}`}>
+                                          ₹ {evt.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </span>
+                                      </div>
+                                      {evt.type === 'payment' && (
+                                        <div className="flex justify-between items-center">
+                                          <span className="text-[11px] font-semibold text-slate-500">Payment Mode:</span>
+                                          <span className="inline-block px-2 py-0.5 rounded bg-white text-slate-800 font-bold text-[11px] border border-slate-200/60">
+                                            {evt.method}
+                                          </span>
+                                        </div>
+                                      )}
+                                      {evt.remarks && (
+                                        <div className={`text-[11px] border-t pt-1.5 text-slate-500 italic ${
+                                          evt.type === 'payment' ? 'border-emerald-100' : 'border-orange-100'
+                                        }`}>
+                                          Note: "{evt.remarks}"
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {/* Empty state if no payments recorded */}
+                              {mergedEvents.length === 0 && parseFloat(timelineBill.due_amount) > 0 && (
+                                <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/70 text-amber-800 space-y-2.5">
+                                  <div className="flex items-center gap-1.5 text-xs font-black">
+                                    <span>⚠️</span> No Payments Recorded Yet
+                                  </div>
+                                  <p className="text-xs text-amber-700/90 leading-relaxed font-medium">
+                                    This invoice has a pending outstanding balance of <strong className="font-mono">₹ {parseFloat(timelineBill.due_amount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>.
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setIsTimelineModalOpen(false);
+                                      handleOpenPay(timelineBill);
+                                    }}
+                                    className="w-full py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 transition-all"
+                                  >
+                                    <span>💳</span> Collect Payment Now
+                                  </button>
+                                </div>
+                              )}
+
+                              {/* 3. Fully Cleared node */}
+                              {parseFloat(timelineBill.due_amount) === 0 && (
+                                <div className="relative">
+                                  <div className="absolute -left-6 top-1 w-4 h-4 bg-emerald-600 border-4 border-white rounded-full shadow-sm"></div>
+                                  <div className="text-xs">
+                                    <div className="font-black text-emerald-600 uppercase tracking-wider text-[11px]">
+                                      ✓ Fully Paid & Settled
+                                    </div>
+                                    <div className="text-[10px] text-slate-400 font-bold mt-0.5">
+                                      {mergedEvents.length > 0 ? formatDateDDMMYYYY(mergedEvents[mergedEvents.length - 1].date) : formatDateDDMMYYYY(timelineBill.billing_date)}
+                                    </div>
+                                    <div className="bg-emerald-50/60 border border-emerald-100 p-3 rounded-xl mt-1.5 text-slate-600 font-medium">
+                                      Outstanding balance is completely cleared (₹ 0.00). Invoice is fully settled.
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+                      </div>
+                    </>
                   )}
                 </div>
-              </>
+              </div>
             )}
-
           </div>
           <div className="modal-backdrop bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsTimelineModalOpen(false)}></div>
         </div>,

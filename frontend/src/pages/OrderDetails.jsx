@@ -422,7 +422,7 @@ const OrderDetails = () => {
               Order Details
             </h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Read-only overview for Distribution Orders and Order Management logs
+              Read-only overview for Distribution Orders and Function Orders logs
             </p>
           </div>
         </div>
@@ -516,7 +516,7 @@ const OrderDetails = () => {
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5">
-                Calculated demand across all matching orders for <span className="font-semibold text-slate-700">{activeTab === 'ALL' ? 'All Orders' : activeTab}</span> ({moduleFilter === 'DISTRIBUTION_ORDER' ? 'Distribution Order' : moduleFilter === 'ORDER_MANAGEMENT' ? 'Order Management' : 'All Entries'})
+                Calculated demand across all matching orders for <span className="font-semibold text-slate-700">{activeTab === 'ALL' ? 'All Orders' : activeTab}</span> ({moduleFilter === 'DISTRIBUTION_ORDER' ? 'Distribution Order' : moduleFilter === 'ORDER_MANAGEMENT' ? 'Function Order' : 'All Entries'})
               </p>
             </div>
           </div>
@@ -654,7 +654,7 @@ const OrderDetails = () => {
             })}
           </div>
 
-          {/* 2 Primary Filter Buttons: Distribution Order vs Order Management */}
+          {/* 2 Primary Filter Buttons: Distribution Order vs Function Order */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
               Filter By Entry:
@@ -895,7 +895,7 @@ const OrderDetails = () => {
                       <span className="text-4xl">📭</span>
                       <p className="font-bold text-slate-600">No orders match the selected filters</p>
                       <p className="text-[11px] text-slate-400">
-                        Try clearing From/To dates or switching between Distribution Order and Order Management.
+                        Try clearing From/To dates or switching between Distribution Order and Function Order.
                       </p>
                     </div>
                   </td>
@@ -1047,7 +1047,10 @@ const OrderDetails = () => {
       {/* ========================================================================= */}
       {isDetailOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div 
+            className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-11/12 max-w-6xl !max-w-6xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200" 
+            style={{ maxWidth: "1280px", width: "95vw" }}
+          >
             {/* Modal Header */}
             <div className="p-6 bg-slate-900 text-white flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">

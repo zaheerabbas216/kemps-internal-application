@@ -28,7 +28,7 @@ const MODULE_GROUPS = [
       { key: 'billing-history',           label: '  ↳ Billing History Page',         actions: ['read'] },
       { key: 'credit-balance',            label: 'Credit Balance (All)',              actions: ['read', 'create', 'update', 'delete'] },
       { key: 'credit-history',            label: '  ↳ Credit History Page',          actions: ['read'] },
-      { key: 'orders',                    label: 'Order Management (All)',            actions: ['read', 'create', 'update', 'delete'] },
+      { key: 'orders',                    label: 'Function Order (All)',            actions: ['read', 'create', 'update', 'delete'] },
       { key: 'orders-upcoming',           label: '  ↳ Upcoming Orders Tab',          actions: ['read'] },
       { key: 'orders-new',                label: '  ↳ New Order Tab',                actions: ['read', 'create'] },
       { key: 'orders-history',            label: '  ↳ Order History Tab',            actions: ['read'] },
